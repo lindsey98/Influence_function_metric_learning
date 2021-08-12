@@ -15,7 +15,8 @@ class CUBirds(BaseDatasetMod):
             if y in self.classes and fn[:2] != '._':
                 self.ys += [y]
                 self.I += [index]
-                self.im_paths.append(os.path.join(root, i[0]))
+                # self.im_paths.append(os.path.join(root, i[0]))
+                self.im_paths.append(i[0])
                 index += 1
 
 class CUBirds_hdf5(BaseDataset_hdf5):
@@ -77,7 +78,8 @@ class CUBirds_class(BaseDatasetMod):
             if y in self.classes and fn[:2] != '._':
                 self.ys += [y]
                 self.I += [index]
-                self.im_paths.append(os.path.join(root, i[0]))
+                # self.im_paths.append(os.path.join(root, i[0]))
+                self.im_paths.append(i[0])
                 index += 1
 
         cut_off = int(len(self.ys)*0.5)

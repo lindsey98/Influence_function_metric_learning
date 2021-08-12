@@ -10,7 +10,7 @@ def pairwise_distance(a, squared=False):
         torch.t(a).pow(2).sum(dim=0, keepdim=True).expand(a.size(0), -1)
     ) - 2 * (
         torch.mm(a, torch.t(a))
-    )
+    ) # compute euclidean distance in dot-product way
 
     # Deal with numerical inaccuracies. Set small negatives to zero.
     pairwise_distances_squared = torch.clamp(

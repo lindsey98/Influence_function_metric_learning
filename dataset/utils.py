@@ -5,7 +5,8 @@ import torchvision
 from torchvision import transforms
 import PIL.Image
 import torch
-from torch._six import int_classes as _int_classes
+# from torch._six import int_classes as _int_classes
+_int_classes = int
 import numpy as np
 import numbers
 

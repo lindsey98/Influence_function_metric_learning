@@ -38,14 +38,14 @@ class ProxyNCA_classic(torch.nn.Module):
                 [X, P]
             ),
             squared = True
-        )[:X.size()[0], X.size()[0]:]
+        )[:X.size()[0], X.size()[0]:] # only get distance between X and P, not self-distance within X or within P
 
         T = binarize_and_smooth_labels(
             T = T, nb_classes = len(P), smoothing_const = 0
-        )
+        ) # smoothing constant =0 means no smoothing, just one-hot label
         loss1 = torch.sum(T * torch.exp(-D), -1)
         loss2 = torch.sum((1-T) * torch.exp(-D), -1)
-        loss = -torch.log(loss1/loss2)
+        loss = -torch.log(loss1 / loss2)
         loss = loss.mean()
         return loss
 
@@ -73,7 +73,7 @@ class ProxyNCA_prob(torch.nn.Module):
 
         T = binarize_and_smooth_labels(
             T = T, nb_classes = len(P), smoothing_const = 0
-        )
+        ) # smooth one-hot label
 
         loss = torch.sum(- T * F.log_softmax(-D, -1), -1)
         loss = loss.mean()

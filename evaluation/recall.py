@@ -7,7 +7,7 @@ def assign_by_euclidian_at_k(X, T, k):
     X : [nb_samples x nb_features], e.g. 100 x 64 (embeddings)
     k : for each sample, assign target labels of k nearest points
     """
-    distances = sklearn.metrics.pairwise.pairwise_distances(X)
+    distances = sklearn.metrics.pairwise.pairwise_distances(X) # too slow
 
     # get nearest points
     indices   = np.argsort(distances, axis = 1)[:, 1 : k + 1] 
