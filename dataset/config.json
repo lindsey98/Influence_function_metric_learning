@@ -7,8 +7,8 @@
                 "trainval":"range(0,100)",
                 "eval": "range(100, 200)"
             },
-            "source": "str('/mnt/datasets/CUB_200_2011')",
-            "root":"str('/mnt/datasets/CUB_200_2011')"
+            "source": "str('mnt/datasets/CUB_200_2011')",
+            "root":"str('mnt/datasets/CUB_200_2011')"
         },
         "cub_h5": {
             "classes": {
@@ -27,8 +27,8 @@
                 "trainval": "range(0, 98)",
                 "eval": "range(98, 196)"
             },
-            "source": "str('/mnt/datasets/cars196_alt')",
-            "root": "str('/mnt/datasets/cars196_alt')"
+            "source": "str('mnt/datasets/CARS_196')",
+            "root": "str('mnt/datasets/CARS_196')"
         },
         "cars_h5": {
             "classes": {
