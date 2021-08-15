@@ -8,7 +8,7 @@
         }
     },
     "lr_scheduler": {
-        "type": "torch.optim.lr_scheduler.ReduceLROnPlateau",
+            "type": "torch.optim.lr_scheduler.ReduceLROnPlateau",
         "args": {
             "mode": "str('max')",
             "patience": "4*1"
