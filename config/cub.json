@@ -21,13 +21,13 @@
    
     "nb_epochs": "40*1",
     "sz_batch": "32*1",
-    "sz_embedding": "2048",
+    "sz_embedding": "512",
     "num_class_per_batch": "8",
     "num_gradcum": "1",
     "is_random_sampler":"False",
     "transform_key": "str('transform_parameters')",
     "model":{
-        "type": "networks.Feat_resnet50_max_n"
+        "type": "networks.bninception"
     },
     "opt": {
         "type": "torch.optim.Adam",
