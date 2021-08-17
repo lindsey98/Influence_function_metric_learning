@@ -126,6 +126,7 @@ if __name__ == '__main__':
     transform_key = 'transform_parameters'
     if 'transform_key' in config.keys():
         transform_key = config['transform_key']
+    print('Transformation: ', transform_key)
 
 
     args.log_filename = '%s_%s_%s_%d' % (args.dataset, curr_fn, args.mode, args.seed)

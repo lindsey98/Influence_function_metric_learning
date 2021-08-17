@@ -55,9 +55,10 @@ class ScaleIntensities():
         return tensor
 
 
-def make_transform(sz_resize = 256, sz_crop = 227, mean = [104, 117, 128],
-        std = [1, 1, 1], rgb_to_bgr = True, is_train = True,
-        intensity_scale = None, rotate = 0):
+def make_transform(sz_resize = 256, sz_crop = 227,
+                   mean = [104, 117, 128], std = [1, 1, 1],
+                   rgb_to_bgr = True, is_train = True,
+                   intensity_scale = None, rotate = 0):
     return transforms.Compose([
         RGBToBGR() if rgb_to_bgr else Identity(),
         transforms.RandomRotation(rotate) if is_train and (not isinstance(rotate, numbers.Number)) else Identity(),

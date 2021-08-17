@@ -86,7 +86,7 @@
     },
      "transform_parameters": {
         "rgb_to_bgr": "True",
-        "intensity_scale": "[[0, 1], [0, 1]]",
+        "intensity_scale": "[[0, 1], [0, 255]]",
         "mean": "[104., 117., 128.]",
          "std": "[1., 1., 1.]",
         "sz_crop": "256",
