@@ -515,9 +515,17 @@ if __name__ == '__main__':
             logging.info('Best val r1: %s', str(best_val_r1))
             logging.info(str(lr_steps))
 
+        #TODO: this is for dvi
+        os.makedirs('dvi_data/Model/Epoch_{}'.format(e+1), exist_ok=True)
+        with open('dvi_data/Model/Epoch_{}/index.json'.format(e + 1), 'wt') as handle:
+            handle.write(json.dumps(list(range(len(dl_tr.dataset)))))
+        torch.save(model.state_dict(),
+                   'dvi_data/Model/Epoch_{}/subject_model.pth'.format(e+1))
+        torch.save(criterion.proxies,
+                   'dvi_data/Model/Epoch_{}/proxy.pth'.format(e+1))
+
         if args.mode == 'trainval':
             scheduler.step(e)
-
 
     if args.mode == 'trainval':
         save_best_checkpoint(model)

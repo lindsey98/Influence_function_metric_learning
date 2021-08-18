@@ -13,3 +13,6 @@ log
 figs
 vis_results.py
 job_launcher.py
+dvi_data/
+dataset/
+

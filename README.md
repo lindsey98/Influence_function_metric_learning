@@ -12,7 +12,7 @@ To run the code
 ```
 # CUB
 CUDA_VISIBLE_DEVICES=0,1 python train.py --dataset cub  --config config/cub.json --mode train --apex --seed 0
-CUDA_VISIBLE_DEVICES=0,1 python train.py --dataset cub  --config config/cub.json --mode trainval --apex --seed 0
+`CUDA_VISIBLE_DEVICES=0,1 python train.py --dataset cub  --config config/cub.json --mode trainval --apex --seed 0`
 
 # CARS
 CUDA_VISIBLE_DEVICES=0,1 python train.py --dataset cars  --config config/cars.json --mode train --apex --seed 0
