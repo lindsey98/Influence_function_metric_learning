@@ -129,7 +129,7 @@ if __name__ == '__main__':
     print('Transformation: ', transform_key)
 
 
-    args.log_filename = '%s_%s_%s_%d' % (args.dataset, curr_fn, args.mode, args.seed)
+    args.log_filename = '%s_%s_%s_%d_%d' % (args.dataset, curr_fn, args.mode, args.sz_embedding,args.seed)
     if args.mode == 'test':
         args.log_filename = args.log_filename.replace('test', 'trainval')
 
@@ -137,7 +137,7 @@ if __name__ == '__main__':
 
     '''Dataloader'''
     if args.mode == 'trainval':
-        train_results_fn = "log/%s_%s_%s_%d.json" % (args.dataset, curr_fn, 'train', args.seed)
+        train_results_fn = "log/%s_%s_%s_%d_%d.json" % (args.dataset, curr_fn, 'train', args.sz_embedding, args.seed)
         if os.path.exists(train_results_fn):
             with open(train_results_fn, 'r') as f:
                 train_results = json.load(f)
@@ -401,11 +401,11 @@ if __name__ == '__main__':
     best_test_r8 = 0
     best_tnmi = 0
 
-
     prev_lr = opt.param_groups[0]['lr']
     lr_steps = []
 
-    print(len(dl_tr))
+    print('Number of training: ', len(dl_tr.dataset))
+    print('Number of testing: ', len(dl_ev.dataset))
 
     '''Warmup training'''
     if not args.no_warmup:
@@ -421,7 +421,7 @@ if __name__ == '__main__':
                 opt_warmup.step()
             logging.info('warm up ends in %d epochs' % (args.warmup_k-e))
 
-    '''Model training loop'''
+    '''BnInception_512 training loop'''
     for e in range(0, args.nb_epochs):
 
         if args.mode == 'train':
@@ -516,13 +516,13 @@ if __name__ == '__main__':
             logging.info(str(lr_steps))
 
         #TODO: this is for dvi
-        os.makedirs('dvi_data/Model/Epoch_{}'.format(e+1), exist_ok=True)
-        with open('dvi_data/Model/Epoch_{}/index.json'.format(e + 1), 'wt') as handle:
+        save_dir = 'dvi_data_logo2k/ResNet_64_Model'
+        os.makedirs('{}/Epoch_{}'.format(save_dir, e+1), exist_ok=True)
+        with open('{}/Epoch_{}/index.json'.format(save_dir, e + 1), 'wt') as handle:
             handle.write(json.dumps(list(range(len(dl_tr.dataset)))))
-        torch.save(model.state_dict(),
-                   'dvi_data/Model/Epoch_{}/subject_model.pth'.format(e+1))
-        torch.save(criterion.proxies,
-                   'dvi_data/Model/Epoch_{}/proxy.pth'.format(e+1))
+        torch.save(model.state_dict(), '{}/Epoch_{}/subject_model.pth'.format(save_dir, e+1))
+        torch.save(criterion.proxies, '{}/Epoch_{}/proxy.pth'.format(save_dir, e+1))
+        ######################################################################################
 
         if args.mode == 'trainval':
             scheduler.step(e)

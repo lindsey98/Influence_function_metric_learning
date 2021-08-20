@@ -82,13 +82,24 @@
                 "eval": "range(0, 3985)"
                
             }
+        },
+        "logo2k": {
+            "classes": {
+                "train": "range(0, 1171)",
+                "val": "range(1171, 2340)",
+                "trainval": "range(0, 1171)",
+                "eval": "range(1171, 2340)"
+            },
+            "source": "str('mnt/datasets/logo2k')",
+            "root":"str('mnt/datasets/logo2k')"
+
         }
     },
      "transform_parameters": {
-        "rgb_to_bgr": "True",
-        "intensity_scale": "[[0, 1], [0, 255]]",
-        "mean": "[104., 117., 128.]",
-         "std": "[1., 1., 1.]",
+        "rgb_to_bgr": "False",
+        "intensity_scale": "[[0, 1], [0, 1]]",
+        "mean": "[0.485, 0.456, 0.406]",
+        "std": "[0.229, 0.224, 0.225]",
         "sz_crop": "256",
         "sz_resize": "288"
     }

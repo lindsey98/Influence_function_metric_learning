@@ -6,8 +6,7 @@ class CUBirds(BaseDatasetMod):
     def __init__(self, root, source, classes, transform = None):
         BaseDatasetMod.__init__(self, root, source, classes, transform)
         index = 0
-        for i in torchvision.datasets.ImageFolder(root = 
-                os.path.join(root, 'images')).imgs:
+        for i in torchvision.datasets.ImageFolder(root = os.path.join(root, 'images')).imgs:
             # i[1]: label, i[0]: root
             y = i[1]
             # fn needed for removing non-images starting with `._`

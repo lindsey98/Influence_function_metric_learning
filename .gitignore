@@ -13,6 +13,6 @@ log
 figs
 vis_results.py
 job_launcher.py
-dvi_data/
+dvi_data_cub200/
 dataset/
 

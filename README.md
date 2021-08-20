@@ -25,6 +25,9 @@ CUDA_VISIBLE_DEVICES=0,1 python train.py --dataset sop  --config config/sop.json
 # INSHOP
 CUDA_VISIBLE_DEVICES=0,1 python train.py --dataset inshop  --config config/inshop.json --mode trainval --apex --seed 0
 
+# Logo2K
+CUDA_VISIBLE_DEVICES=0,1 python train.py --dataset logo2k  --config config/logo2k.json --mode trainval --apex --seed 0
+
 ```
 
 The following is the Bibtex of our paper:
