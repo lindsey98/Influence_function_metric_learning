@@ -77,7 +77,10 @@ def save_best_checkpoint(model):
     torch.save(model.state_dict(), 'results/' + args.log_filename + '.pt')
 
 def load_best_checkpoint(model):
-    model.load_state_dict(torch.load('results/' + args.log_filename + '.pt'))
+    try:
+        model.load_state_dict(torch.load('results/' + args.log_filename + '.pt'))
+    except FileNotFoundError:
+        model.load_state_dict(torch.load('results/' + args.log_filename + '.pth'))
     model = model.cuda()
     return model
 
@@ -520,7 +523,7 @@ if __name__ == '__main__':
         os.makedirs('{}/Epoch_{}'.format(save_dir, e+1), exist_ok=True)
         with open('{}/Epoch_{}/index.json'.format(save_dir, e + 1), 'wt') as handle:
             handle.write(json.dumps(list(range(len(dl_tr.dataset)))))
-        torch.save(model.state_dict(), '{}/Epoch_{}/subject_model.pth'.format(save_dir, e+1))
+        torch.save(model.state_dict(), '{}/Epoch_{}/logo2k_logo2k_trainval_2048_0.pth'.format(save_dir, e+1))
         torch.save(criterion.proxies, '{}/Epoch_{}/proxy.pth'.format(save_dir, e+1))
         ######################################################################################
 

@@ -53,7 +53,7 @@ def prepare_data(data_name='cub', root='dvi_data_cub200/', save=False):
         tr_dataset,
         batch_size=128,
         shuffle=False,
-        num_workers=1,
+        num_workers=0,
     )
 
     dl_ev = torch.utils.data.DataLoader(
@@ -69,14 +69,14 @@ def prepare_data(data_name='cub', root='dvi_data_cub200/', save=False):
         ),
         batch_size=128,
         shuffle=False,
-        num_workers=1,
+        num_workers=0,
     )
 
     if save:
         training_x = torch.tensor([])
         training_y = torch.tensor([])
 
-        for ct, (x,y,_) in tqdm(enumerate(dl_tr)):
+        for ct, (x,y,_) in tqdm(enumerate(dl_tr)): #FIXME: memory error
             training_x = torch.cat((training_x, x), dim=0)
             training_y = torch.cat((training_y, y), dim=0)
 
@@ -133,12 +133,12 @@ def encoder_decoder(size=512, n_components=2):
     return encoder, decoder
 
 if __name__ == '__main__':
-    model_dir = 'dvi_data_logo2k/ResNet_2048_Model'
-    plot_dir = 'dvi_data_logo2k/resnet_2048_umap_plots'
-    sz_embedding = 2048
+    model_dir = 'dvi_data_logo2k/ResNet_64_Model'
+    plot_dir = 'dvi_data_logo2k/resnet_64_umap_plots'
+    sz_embedding = 64
 
     os.makedirs(plot_dir, exist_ok=True)
-    dl_tr, dl_ev = prepare_data(data_name='logo2k', root='dvi_data_logo2k/', save=True)
+    dl_tr, dl_ev = prepare_data(data_name='logo2k', root='dvi_data_logo2k/', save=False)
     feat = Feat_resnet50_max_n()
     in_sz = feat(torch.rand(1, 3, 256, 256)).squeeze().size(0)
     feat.train()
@@ -147,10 +147,9 @@ if __name__ == '__main__':
     model = nn.DataParallel(model)
     model.cuda()
 
-
     for e in tqdm(range(40)):
 
-        model.load_state_dict(torch.load('{}/Epoch_{}/subject_model.pth'.format(model_dir, e+1)))
+        model.load_state_dict(torch.load('{}/Epoch_{}/logo2k_logo2k_trainval_2048_0.pth'.format(model_dir, e+1)))
         proxies = torch.load('{}/Epoch_{}/proxy.pth'.format(model_dir, e+1), map_location='cpu').detach().numpy()
         # print(proxies.shape)
 
