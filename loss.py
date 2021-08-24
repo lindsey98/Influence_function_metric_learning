@@ -5,6 +5,8 @@ import numpy as np
 import torch.nn as nn
 import copy
 import math
+from dataset.base import SubSampler
+from torch.utils.data import DataLoader
 
 def binarize_and_smooth_labels(T, nb_classes, smoothing_const = 0):
     import sklearn.preprocessing
@@ -50,12 +52,40 @@ class ProxyNCA_classic(torch.nn.Module):
         return loss
 
 class ProxyNCA_prob(torch.nn.Module):
-    def __init__(self, nb_classes, sz_embed, scale, **kwargs):
+    def __init__(self, nb_classes, sz_embed, scale, len_training, **kwargs):
         torch.nn.Module.__init__(self)
-        self.proxies = torch.nn.Parameter(torch.randn(nb_classes, sz_embed) / 8)
-        self.scale = scale
-     
-    def forward(self, X, T):
+        self.max_proxy_per_class = 10 # maximum number of proxies per class
+        self.current_proxy = [1]*nb_classes # start with single proxy per class
+        self.proxies = torch.nn.Parameter(torch.randn(nb_classes*self.max_proxy_per_class,  sz_embed) / 8)
+        self.mask = torch.zeros(nb_classes*self.max_proxy_per_class)
+        self.create_mask() # create initial mask
+        self.scale = scale # temperature
+        self.len_training = len_training # training
+        self.cached_sim = torch.zeros(len_training) # cache the similarity to ground-truth proxy
+        self.nb_classes = nb_classes # number of classes
+
+    def create_mask(self):
+        # create mask on proxies
+        for c in range(self.nb_classes):
+            proxy4cls = self.current_proxy[c]
+            self.mask[(self.max_proxy_per_class*c):(self.max_proxy_per_class*c + proxy4cls)] = 1
+
+    def reinitialize_cache_sim(self):
+        # initialze cached inner product list
+        self.cached_sim = np.zeros(self.len_training)
+
+    def inner_product_sim(self, X, P, T):
+        # get inner product to ground-truth proxy
+        IP = torch.mm(F.normalize(X, dim=-1, p=2),
+                      F.normalize(P, dim=-1, p=2).T)  # inner product between X and P of shape (N, maxP*C)
+        IP_reshape = torch.reshape(IP, (X.size(0), self.nb_classes, self.max_proxy_per_class)) # reshape inner product as shape of (N, C, maxP)
+        IP_gt = IP_reshape[torch.arange(len(IP_reshape)), T, :].view(len(IP_reshape), self.max_proxy_per_class) # only focus on the gt proxy as shape of (N, maxP)
+        L_IP, _ = torch.max(IP_gt, dim=-1) # of shape (N,)
+
+        return L_IP
+
+
+    def forward(self, X, indices, T):
         P = self.proxies
         #note: self.scale is equal to sqrt(1/T)
         # in the paper T = 1/9, therefore, scale = sart(1/(1/9)) = sqrt(9) = 3
@@ -65,19 +95,28 @@ class ProxyNCA_prob(torch.nn.Module):
         X = self.scale * F.normalize(X, p = 2, dim = -1)
         
         D = pairwise_distance(
-            torch.cat(
-                [X, P]
-            ),
+            torch.cat([X, P]),
             squared = True
-        )[:X.size()[0], X.size()[0]:]
+        )[:X.size()[0], X.size()[0]:] # of shape (N, maxP*C)
+
+        # TODO: take the weighted distance for each class as the anchor2class similarity
+        D_reshape = torch.reshape(D, (X.size()[0], self.nb_classes, self.max_proxy_per_class)) # of shape (N, C, maxP)
+        mask_reshape = torch.reshape(self.mask.clone(), (self.nb_classes, self.max_proxy_per_class)).unsqueeze(0) # of shape (1, C, maxP)
+        D_weighted = torch.sum(torch.mul(F.softmax(mask_reshape * (-D_reshape), dim=-1), # low distance proxy get higher weights
+                                         (mask_reshape*D_reshape)), dim=-1) # weighted distance, reduce to shape (N, C)
 
         T = binarize_and_smooth_labels(
             T = T, nb_classes = len(P), smoothing_const = 0
         ) # smooth one-hot label
 
-        loss = torch.sum(- T * F.log_softmax(-D, -1), -1)
-        loss = loss.mean()
-        return loss
+        # TODO: multiple proxies per class
+        loss = torch.sum(- T * F.log_softmax(-D_weighted, -1), -1)
+        loss_ = loss.mean()
+
+        L_IP = self.inner_product_sim(X, P, T)
+        self.cached_sim[indices] = np.asarray(L_IP) # cache losses for each training sample
+        return loss_
+
 
 
 

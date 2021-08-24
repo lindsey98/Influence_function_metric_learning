@@ -293,6 +293,7 @@ if __name__ == '__main__':
     criterion = config['criterion']['type'](
         nb_classes = dl_tr.dataset.nb_classes(),
         sz_embed = args.sz_embedding,
+        len_training = len(dl_tr.dataset),
         **config['criterion']['args']
     ).cuda()
 
@@ -424,8 +425,14 @@ if __name__ == '__main__':
                 opt_warmup.step()
             logging.info('warm up ends in %d epochs' % (args.warmup_k-e))
 
+
     '''BnInception_512 training loop'''
+    loss_recorder = {}
+    with open("{0}/{1}_loss.json".format('log', args.log_filename), 'w') as handle:
+        json.dump(loss_recorder, handle)
+
     for e in range(0, args.nb_epochs):
+        criterion.reinitialize_cache_loss()
 
         if args.mode == 'train':
             curr_lr = opt.param_groups[0]['lr']
@@ -439,12 +446,12 @@ if __name__ == '__main__':
         tnmi = []
 
         opt.zero_grad()
-        for ct, (x, y, _) in tqdm(enumerate(dl_tr)):
+        for ct, (x, y, indices) in tqdm(enumerate(dl_tr)):
             it += 1
 
             m = model(x.cuda())
 
-            loss1 = criterion(m, y.cuda())
+            loss1 = criterion(m, indices, y.cuda())
             loss = loss1
             loss.backward()
 
@@ -459,6 +466,15 @@ if __name__ == '__main__':
 
         time_per_epoch_2 = time.time()
         losses.append(np.mean(losses_per_epoch[-20:]))
+
+        with open("{0}/{1}_loss.json".format('log', args.log_filename), 'rt') as handle:
+            loss_recorder = json.load(handle)
+
+        loss_recorder[e] = criterion.cached_losses.numpy().tolist()
+
+        with open("{0}/{1}_loss.json".format('log', args.log_filename), 'wt') as handle:
+            json.dump(loss_recorder, handle)
+
         print('it: {}'.format(it))
         print(opt)
         logging.info(
@@ -468,6 +484,16 @@ if __name__ == '__main__':
                 time_per_epoch_2 - time_per_epoch_1
             )
         )
+
+
+        # TODO: add new proxy
+        # update, bad_indices = loss_potential()
+        # if update == True:
+        #     sampler = SubSampler(bad_indices)
+        #     tr_loader_temp = DataLoader(tr_set, batch_size=64, shuffle=False,
+        #                             sampler=sampler, drop_last=False)
+        #     feature_emb =  predict_batchwise(model, tr_loader_temp) # shape (N, nz_embedding)
+        #     centroid_emb = torch.mean(feature_emb, dim=0)
 
         model.losses = losses
         model.current_epoch = e

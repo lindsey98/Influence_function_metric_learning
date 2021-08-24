@@ -12,6 +12,24 @@ import io
 import h5py
 from shutil import copyfile
 import time
+
+import torch
+from torch.utils.data import DataLoader, Dataset
+from torch.utils.data.sampler import Sampler, SubsetRandomSampler
+
+class SubSampler(Sampler):
+    '''
+    Customized sampler to subsample data
+    '''
+    def __init__(self, idlist):
+        self.idlist = idlist
+
+    def __iter__(self):
+        return iter(self.idlist)
+
+    def __len__(self):
+        return len(self.idlist)
+
 '''
 class BaseDataset(torch.utils.data.Dataset):
     def __init__(self, root, classes, transform = None):
