@@ -20,15 +20,15 @@ from tqdm import tqdm
 from utils import JSONEncoder, json_dumps
 
 parser = argparse.ArgumentParser(description='Training ProxyNCA++') 
-parser.add_argument('--dataset', default='cub')
-parser.add_argument('--config', default='config.json')
-parser.add_argument('--embedding-size', default = 2048, type=int, dest = 'sz_embedding')
+parser.add_argument('--dataset', default='logo2k')
+parser.add_argument('--config', default='config/logo2k.json')
+parser.add_argument('--embedding-size', default = 512, type=int, dest = 'sz_embedding')
 parser.add_argument('--batch-size', default = 32, type=int, dest = 'sz_batch')
 parser.add_argument('--epochs', default = 40, type=int, dest = 'nb_epochs')
 parser.add_argument('--log-filename', default = 'example')
 parser.add_argument('--workers', default = 16, type=int, dest = 'nb_workers')
 parser.add_argument('--seed', default=0, type=int)
-parser.add_argument('--mode', default='train', choices=['train', 'trainval', 'test'], 
+parser.add_argument('--mode', default='trainval', choices=['train', 'trainval', 'test'],
     help='train with train data or train with trainval')
 parser.add_argument('--lr_steps', default=[1000], nargs='+', type=int)
 parser.add_argument('--source_dir', default='', type=str)
@@ -36,8 +36,8 @@ parser.add_argument('--root_dir', default='', type=str)
 parser.add_argument('--eval_nmi', default=False, action='store_true')
 parser.add_argument('--recall', default=[1,2,4,8], nargs='+', type=int)
 parser.add_argument('--init_eval', default=False, action='store_true')
-parser.add_argument('--no_warmup', default=False, action='store_true')
-parser.add_argument('--apex', default=False, action='store_true')
+parser.add_argument('--no_warmup', default=True, action='store_true')
+parser.add_argument('--apex', default=True, action='store_true')
 parser.add_argument('--warmup_k', default=5, type=int)
 
 args = parser.parse_args()
@@ -419,7 +419,7 @@ if __name__ == '__main__':
             for ct, (x,y,_) in tqdm(enumerate(dl_tr)):
                 opt_warmup.zero_grad()
                 m = model(x.cuda())
-                loss = criterion(m, y.cuda())
+                loss = criterion(m, None, y.cuda())
                 loss.backward()
                 torch.nn.utils.clip_grad_value_(model.parameters(), 10)
                 opt_warmup.step()
@@ -428,11 +428,14 @@ if __name__ == '__main__':
 
     '''BnInception_512 training loop'''
     loss_recorder = {}
-    with open("{0}/{1}_loss.json".format('log', args.log_filename), 'w') as handle:
+    with open("{0}/{1}_ip.json".format('log', args.log_filename), 'wt') as handle:
         json.dump(loss_recorder, handle)
+    label_recorder = {}
+    with open("{0}/{1}_cls.json".format('log', args.log_filename), 'wt') as handle:
+        json.dump(label_recorder, handle)
 
     for e in range(0, args.nb_epochs):
-        criterion.reinitialize_cache_loss()
+        criterion.reinitialize_cache_sim()
 
         if args.mode == 'train':
             curr_lr = opt.param_groups[0]['lr']
@@ -467,13 +470,17 @@ if __name__ == '__main__':
         time_per_epoch_2 = time.time()
         losses.append(np.mean(losses_per_epoch[-20:]))
 
-        with open("{0}/{1}_loss.json".format('log', args.log_filename), 'rt') as handle:
+        with open("{0}/{1}_ip.json".format('log', args.log_filename), 'rt') as handle:
             loss_recorder = json.load(handle)
-
-        loss_recorder[e] = criterion.cached_losses.numpy().tolist()
-
-        with open("{0}/{1}_loss.json".format('log', args.log_filename), 'wt') as handle:
+        loss_recorder[e] = criterion.cached_sim.tolist()
+        with open("{0}/{1}_ip.json".format('log', args.log_filename), 'wt') as handle:
             json.dump(loss_recorder, handle)
+
+        with open("{0}/{1}_cls.json".format('log', args.log_filename), 'rt') as handle:
+            label_recorder = json.load(handle)
+        label_recorder[e] = criterion.cached_cls.tolist()
+        with open("{0}/{1}_cls.json".format('log', args.log_filename), 'wt') as handle:
+            json.dump(label_recorder, handle)
 
         print('it: {}'.format(it))
         print(opt)
