@@ -431,15 +431,39 @@ if __name__ == '__main__':
 
 
     '''BnInception_512 training loop'''
-    loss_recorder = {}
-    with open("{0}/{1}_ip.json".format('log', args.log_filename), 'wt') as handle:
-        json.dump(loss_recorder, handle)
-    label_recorder = {}
-    with open("{0}/{1}_cls.json".format('log', args.log_filename), 'wt') as handle:
-        json.dump(label_recorder, handle)
 
     for e in range(0, args.nb_epochs):
+        if e == 0:
+            loss_recorder = {}
+            with open("{0}/{1}_ip.json".format('log', args.log_filename), 'wt') as handle:
+                json.dump(loss_recorder, handle)
+            label_recorder = {}
+            with open("{0}/{1}_cls.json".format('log', args.log_filename), 'wt') as handle:
+                json.dump(label_recorder, handle)
+
         criterion.reinitialize_cache_sim()
+        with open("{0}/{1}_ip.json".format('log', args.log_filename), 'rt') as handle:
+            loss_recorder = json.load(handle)
+        with open("{0}/{1}_cls.json".format('log', args.log_filename), 'rt') as handle:
+            label_recorder = json.load(handle)
+
+        # TODO: add new proxy
+        # print(criterion.proxies)
+        print(torch.sum(criterion.mask))
+        # print(loss_recorder)
+        if e >= 5:
+            update, bad_indices = loss_potential(loss_recorder, label_recorder, current_t=e, rolling_t=2, ts_ratio=[0.3, 1])
+            if update == True:
+                for k, v in bad_indices.items():
+                    sampler = SubSampler(v)
+                    tr_loader_temp = DataLoader(tr_dataset, batch_size=64, shuffle=False, sampler=sampler, drop_last=False)
+                    feature_emb =  predict_batchwise(model, tr_loader_temp)[0] # shape (N, nz_embedding)
+                    centroid_emb = torch.mean(feature_emb, dim=0)
+                    criterion.add_proxy(k, centroid_emb.to(criterion.proxies.device))
+                # print(criterion.proxies)
+                print(torch.sum(criterion.mask))
+
+        # exit()
 
         if args.mode == 'train':
             curr_lr = opt.param_groups[0]['lr']
@@ -458,9 +482,10 @@ if __name__ == '__main__':
 
             m = model(x.cuda())
 
-            loss1 = criterion(m, indices, y.cuda())
-            loss = loss1
+            loss = criterion(m, indices, y.cuda())
             loss.backward()
+            # print(m.grad.data)
+            # exit()
 
             torch.nn.utils.clip_grad_value_(model.parameters(), 10)
 
@@ -474,14 +499,10 @@ if __name__ == '__main__':
         time_per_epoch_2 = time.time()
         losses.append(np.mean(losses_per_epoch[-20:]))
 
-        with open("{0}/{1}_ip.json".format('log', args.log_filename), 'rt') as handle:
-            loss_recorder = json.load(handle)
+        # save proxy-similarity and class labels
         loss_recorder[e] = criterion.cached_sim.tolist()
         with open("{0}/{1}_ip.json".format('log', args.log_filename), 'wt') as handle:
             json.dump(loss_recorder, handle)
-
-        with open("{0}/{1}_cls.json".format('log', args.log_filename), 'rt') as handle:
-            label_recorder = json.load(handle)
         label_recorder[e] = criterion.cached_cls.tolist()
         with open("{0}/{1}_cls.json".format('log', args.log_filename), 'wt') as handle:
             json.dump(label_recorder, handle)
@@ -497,20 +518,7 @@ if __name__ == '__main__':
         )
 
 
-        # TODO: add new proxy
-        print(criterion.proxies)
-        print(criterion.mask)
-        update, bad_indices = loss_potential(loss_recorder, label_recorder, e)
-        if update == True:
-            for k, v in bad_indices.item():
-                sampler = SubSampler(v)
-                tr_loader_temp = DataLoader(tr_dataset, batch_size=64, shuffle=False,
-                                        sampler=sampler, drop_last=False)
-                feature_emb =  predict_batchwise(model, tr_loader_temp) # shape (N, nz_embedding)
-                centroid_emb = torch.mean(feature_emb, dim=0)
-                criterion.add_proxy(k, centroid_emb.to(criterion.device))
-            print(criterion.proxies)
-            print(criterion.mask)
+
 
         model.losses = losses
         model.current_epoch = e

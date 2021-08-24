@@ -57,7 +57,7 @@ class ProxyNCA_prob(torch.nn.Module):
         self.max_proxy_per_class = 5 # maximum number of proxies per class
         self.current_proxy = [1]*nb_classes # start with single proxy per class
         self.proxies = torch.nn.Parameter(torch.randn(nb_classes*self.max_proxy_per_class,  sz_embed) / 8)
-        self.mask = torch.zeros(nb_classes*self.max_proxy_per_class)
+        self.mask = torch.zeros((nb_classes, self.max_proxy_per_class), requires_grad=False).to('cuda')
         self.scale = scale # temperature
         self.len_training = len_training # training
         self.cached_sim = np.zeros(len_training) # cache the similarity to ground-truth proxy
@@ -70,7 +70,7 @@ class ProxyNCA_prob(torch.nn.Module):
         # create mask on proxies
         for c in range(self.nb_classes):
             proxy4cls = self.current_proxy[c]
-            self.mask[(self.max_proxy_per_class*c):(self.max_proxy_per_class*c + proxy4cls)] = 1
+            self.mask[c, :proxy4cls] = 1
 
     def reinitialize_cache_sim(self):
         # initialze cached inner product list
@@ -78,18 +78,24 @@ class ProxyNCA_prob(torch.nn.Module):
 
     def add_proxy(self, cls, new_proxy):
         cls = int(cls)
-        self.proxies[self.max_proxy_per_class*cls + self.current_proxy[cls], :] = new_proxy # initilaize new proxy there
-        self.current_proxy[cls] += 1 # update number of proxy for this class
-        self.mask[(self.max_proxy_per_class*cls):(self.max_proxy_per_class*cls + self.current_proxy[cls])] = 1 # unfreeze mask
+        if self.current_proxy[cls] == self.max_proxy_per_class:
+            pass
+        else:
+            self.proxies.data[self.max_proxy_per_class * cls + self.current_proxy[cls], :] = new_proxy.data  # initilaize new proxy there
+            self.current_proxy[cls] += 1 # update number of proxy for this class
+            self.mask[cls, self.current_proxy[cls]] = 1 # unfreeze mask
+        return
 
+    @torch.no_grad()
     def inner_product_sim(self, X, P, T):
-        # get inner product to ground-truth proxy
-        IP = torch.mm(F.normalize(X, dim=-1, p=2),
-                      (self.mask.unsqueeze(-1).to(P.device)*F.normalize(P, dim=-1, p=2)).T)  # inner product between X and P of shape (N, maxP*C)
+        # get maximum inner product to ground-truth proxy
+        input = F.normalize(X, dim=-1, p=2)
+        mask = self.mask.view(self.nb_classes * self.max_proxy_per_class, -1).to(P.device)
+        masked_P = F.normalize(P, dim=-1, p=2) * mask
+        IP = torch.mm(input, masked_P.T)  # inner product between X and P of shape (N, maxP*C)
         IP_reshape = torch.reshape(IP, (X.size(0), self.nb_classes, self.max_proxy_per_class)) # reshape inner product as shape of (N, C, maxP)
         cls_labels = T.nonzero()[:, 1]
         IP_gt = IP_reshape[torch.arange(len(X)), cls_labels.long(), :] # of shape (N, maxP)
-        # print(IP_gt)
         L_IP, _ = torch.max(IP_gt, dim=-1) # of shape (N,)
 
         return L_IP, cls_labels
@@ -109,11 +115,10 @@ class ProxyNCA_prob(torch.nn.Module):
             squared = True
         )[:X.size()[0], X.size()[0]:] # of shape (N, maxP*C)
 
-        # TODO: take the weighted distance for each class as the anchor2class similarity
-        D_reshape = torch.reshape(D, (X.size()[0], self.nb_classes, self.max_proxy_per_class)) # of shape (N, C, maxP)
-        mask_reshape = torch.reshape(self.mask.clone(), (self.nb_classes, self.max_proxy_per_class)).unsqueeze(0).to(D_reshape.device) # of shape (1, C, maxP)
-        D_weighted = torch.sum(torch.mul(F.softmax(mask_reshape * (-D_reshape), dim=-1), # low distance proxy get higher weights
-                                         (mask_reshape*D_reshape)), dim=-1) # weighted distance, reduce to shape (N, C)
+        # FIXME: no gradient to X, but has gradient to self.proxies
+        D_reshape = D.reshape((X.size()[0], self.nb_classes, self.max_proxy_per_class)) # of shape (N, C, maxP)
+        prob = F.softmax(self.mask * (-D_reshape), dim=-1)
+        D_weighted = torch.sum(prob * (self.mask * D_reshape), dim=-1) # # low distance proxy get higher weights weighted distance, reduce to shape (N, C)
 
         T = binarize_and_smooth_labels(
             T = T, nb_classes = self.nb_classes, smoothing_const = 0 # one-hot gt label
@@ -121,13 +126,13 @@ class ProxyNCA_prob(torch.nn.Module):
 
         # TODO: multiple proxies per class
         loss = torch.sum(- T * F.log_softmax(-D_weighted, -1), -1)
-        loss_ = loss.mean()
+        # print(loss)
 
         if indices is not None:
             L_IP, cls_labels = self.inner_product_sim(X, P, T)
             self.cached_sim[indices] = L_IP.detach().cpu().numpy() # cache losses for each training sample
             self.cached_cls[indices] = cls_labels.detach().cpu().numpy()
-        return loss_
+        return loss.mean()
 
 
 
