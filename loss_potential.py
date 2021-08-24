@@ -21,7 +21,6 @@ def loss_potential(sim_dict, cls_dict, current_t, rolling_t=5, ts_sim=0.5, ts_ra
     sim_prev = np.stack(sim_prev_list).T
 
     indices = np.where((sim_prev <= ts_sim).all(1) == True)[0] # get low similarity indices
-
     # rolling_diff = np.diff(sim_prev)
     # indices2 = np.where((np.abs(rolling_diff) <= ts_diff).all(1) == True)[0] # get slow convergence indices
 
@@ -46,3 +45,4 @@ if __name__ == '__main__':
         cls_dict = json.load(handle)
 
     update, indices = loss_potential(sim_dict=sim_dict, cls_dict=cls_dict, current_t=0, rolling_t=0, ts_sim=0.04)
+    print(indices)

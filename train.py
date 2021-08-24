@@ -18,6 +18,10 @@ import random
 from tqdm import tqdm
 # from apex import amp
 from utils import JSONEncoder, json_dumps
+from utils import predict_batchwise
+from dataset.base import SubSampler
+from loss_potential import loss_potential
+from torch.utils.data import Dataset, DataLoader
 
 parser = argparse.ArgumentParser(description='Training ProxyNCA++') 
 parser.add_argument('--dataset', default='logo2k')
@@ -494,15 +498,19 @@ if __name__ == '__main__':
 
 
         # TODO: add new proxy
-        # update, bad_indices = loss_potential()
-        # if update == True:
-        #     for k, v in bad_indices.item():
-            #     sampler = SubSampler(v)
-            #     tr_loader_temp = DataLoader(tr_set, batch_size=64, shuffle=False,
-            #                             sampler=sampler, drop_last=False)
-            #     feature_emb =  predict_batchwise(model, tr_loader_temp) # shape (N, nz_embedding)
-            #     centroid_emb = torch.mean(feature_emb, dim=0)
-            #     criterion.add_proxy(k, centroid_emb.to(criterion.device))
+        print(criterion.proxies)
+        print(criterion.mask)
+        update, bad_indices = loss_potential(loss_recorder, label_recorder, e)
+        if update == True:
+            for k, v in bad_indices.item():
+                sampler = SubSampler(v)
+                tr_loader_temp = DataLoader(tr_dataset, batch_size=64, shuffle=False,
+                                        sampler=sampler, drop_last=False)
+                feature_emb =  predict_batchwise(model, tr_loader_temp) # shape (N, nz_embedding)
+                centroid_emb = torch.mean(feature_emb, dim=0)
+                criterion.add_proxy(k, centroid_emb.to(criterion.device))
+            print(criterion.proxies)
+            print(criterion.mask)
 
         model.losses = losses
         model.current_epoch = e
