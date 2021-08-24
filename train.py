@@ -496,11 +496,13 @@ if __name__ == '__main__':
         # TODO: add new proxy
         # update, bad_indices = loss_potential()
         # if update == True:
-        #     sampler = SubSampler(bad_indices)
-        #     tr_loader_temp = DataLoader(tr_set, batch_size=64, shuffle=False,
-        #                             sampler=sampler, drop_last=False)
-        #     feature_emb =  predict_batchwise(model, tr_loader_temp) # shape (N, nz_embedding)
-        #     centroid_emb = torch.mean(feature_emb, dim=0)
+        #     for k, v in bad_indices.item():
+            #     sampler = SubSampler(v)
+            #     tr_loader_temp = DataLoader(tr_set, batch_size=64, shuffle=False,
+            #                             sampler=sampler, drop_last=False)
+            #     feature_emb =  predict_batchwise(model, tr_loader_temp) # shape (N, nz_embedding)
+            #     centroid_emb = torch.mean(feature_emb, dim=0)
+            #     criterion.add_proxy(k, centroid_emb.to(criterion.device))
 
         model.losses = losses
         model.current_epoch = e

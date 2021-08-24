@@ -17,21 +17,20 @@ def loss_potential(sim_dict, cls_dict, current_t, rolling_t=5, ts_sim=0.5, ts_ra
     '''
     # TODO: should get potential for each class
     update = False
-    sim_prev = np.stack([sim_dict[str(x)] for x in range(current_t-rolling_t+1, current_t+1)]).T
-    assert sim_prev.shape[1] == min(rolling_t, current_t)
+    sim_prev_list = [sim_dict[str(x)] for x in range(current_t-rolling_t, current_t+1)]
+    sim_prev = np.stack(sim_prev_list).T
 
     indices = np.where((sim_prev <= ts_sim).all(1) == True)[0] # get low similarity indices
 
     # rolling_diff = np.diff(sim_prev)
     # indices2 = np.where((np.abs(rolling_diff) <= ts_diff).all(1) == True)[0] # get slow convergence indices
 
-    # get intersection between indices1 and indices2
-    # indices = set(indices1).intersection(set(indices2))
     returned_indices = {}
     for cls in set(cls_dict[str(current_t)]): # loop over classses
-        num_sample_cls = np,sum(np.array(cls_dict[str(current_t)]) == cls) # number of samples belongs to that class
         indices_cls = np.where(np.array(cls_dict[str(current_t)]) == cls)[0]
-        ratio_cls = np.sum(indices_cls.isin(indices)) / num_sample_cls
+        num_sample_cls = len(indices_cls) # number of samples belongs to that class
+        ratio_cls = np.sum(np.isin(indices_cls, indices)) / num_sample_cls
+        # print(ratio_cls)
         if ratio_cls >= ts_ratio[0] and ratio_cls <= ts_ratio[1]: # if a bunch of samples (but not all) are far away from proxy
             returned_indices[cls] = indices_cls
             update = True
@@ -41,9 +40,9 @@ def loss_potential(sim_dict, cls_dict, current_t, rolling_t=5, ts_sim=0.5, ts_ra
 
 
 if __name__ == '__main__':
-    with open('./log/logo2k_logo2k_trainval_2048_0_sim.json', 'rt') as handle:
+    with open('./log/logo2k_logo2k_trainval_2048_0_ip.json', 'rt') as handle:
         sim_dict = json.load(handle)
     with open('./log/logo2k_logo2k_trainval_2048_0_cls.json', 'rt') as handle:
         cls_dict = json.load(handle)
 
-    update, indices = loss_potential(sim_dict=sim_dict, cls_dict=cls_dict, current_t=5)
+    update, indices = loss_potential(sim_dict=sim_dict, cls_dict=cls_dict, current_t=0, rolling_t=0, ts_sim=0.04)

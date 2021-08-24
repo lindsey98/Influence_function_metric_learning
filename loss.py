@@ -76,6 +76,11 @@ class ProxyNCA_prob(torch.nn.Module):
         # initialze cached inner product list
         self.cached_sim = np.zeros(self.len_training)
 
+    def add_proxy(self, cls, new_proxy):
+        self.proxies[self.max_proxy_per_class*cls + self.current_proxy[cls], :] = new_proxy # initilaize new proxy there
+        self.current_proxy[cls] += 1 # update number of proxy for this class
+        self.mask[(self.max_proxy_per_class*cls):(self.max_proxy_per_class*cls + self.current_proxy[cls])] = 1 # unfreeze mask
+
     def inner_product_sim(self, X, P, T):
         # get inner product to ground-truth proxy
         IP = torch.mm(F.normalize(X, dim=-1, p=2),
