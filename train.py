@@ -479,12 +479,13 @@ if __name__ == '__main__':
         opt.zero_grad()
         for ct, (x, y, indices) in tqdm(enumerate(dl_tr)):
             it += 1
-
-            m = model(x.cuda())
-
+            x = x.cuda()
+            x.requires_grad = True # ensure gradient flow
+            m = model(x)
+            # FIXME: loss not improving, keeps as 7.066
             loss = criterion(m, indices, y.cuda())
             loss.backward()
-            # print(m.grad.data)
+            # print(x.grad)
             # exit()
 
             torch.nn.utils.clip_grad_value_(model.parameters(), 10)

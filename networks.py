@@ -9,7 +9,8 @@ import torch.nn.functional as F
 import torch.utils.model_zoo as model_zoo
 
 __all__ = ['BNInception', 'bninception',
-           'Feat_resnet50_max', 'Feat_resnet50_avg', 'Feat_resnet50_max_n', 'Feat_resnet50_avg_n']
+           'Feat_resnet50_max', 'Feat_resnet50_avg',
+           'Feat_resnet50_max_n', 'Feat_resnet50_avg_n']
 
 class Feature(nn.Module):
     def __init__(self, model='resnet50', pool='avg', use_lnorm=False):
