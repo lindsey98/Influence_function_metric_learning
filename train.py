@@ -430,7 +430,7 @@ if __name__ == '__main__':
             logging.info('warm up ends in %d epochs' % (args.warmup_k-e))
 
 
-    '''BnInception_512 training loop'''
+    '''training loop'''
 
     for e in range(0, args.nb_epochs):
         if e == 0:
@@ -449,19 +449,19 @@ if __name__ == '__main__':
 
         # TODO: add new proxy
         # print(criterion.proxies)
-        print(torch.sum(criterion.mask))
+#         print(torch.sum(criterion.mask))
         # print(loss_recorder)
-        if e >= 5:
-            update, bad_indices = loss_potential(loss_recorder, label_recorder, current_t=e, rolling_t=2, ts_ratio=[0.3, 1])
-            if update == True:
-                for k, v in bad_indices.items():
-                    sampler = SubSampler(v)
-                    tr_loader_temp = DataLoader(tr_dataset, batch_size=64, shuffle=False, sampler=sampler, drop_last=False)
-                    feature_emb =  predict_batchwise(model, tr_loader_temp)[0] # shape (N, nz_embedding)
-                    centroid_emb = torch.mean(feature_emb, dim=0)
-                    criterion.add_proxy(k, centroid_emb.to(criterion.proxies.device))
+#         if e >= 5:
+#             update, bad_indices = loss_potential(loss_recorder, label_recorder, current_t=e, rolling_t=2, ts_ratio=[0.3, 1])
+#             if update == True:
+#                 for k, v in bad_indices.items():
+#                     sampler = SubSampler(v)
+#                     tr_loader_temp = DataLoader(tr_dataset, batch_size=64, shuffle=False, sampler=sampler, drop_last=False)
+#                     feature_emb =  predict_batchwise(model, tr_loader_temp)[0] # shape (N, nz_embedding)
+#                     centroid_emb = torch.mean(feature_emb, dim=0)
+#                     criterion.add_proxy(k, centroid_emb.to(criterion.proxies.device))
                 # print(criterion.proxies)
-                print(torch.sum(criterion.mask))
+#                 print(torch.sum(criterion.mask))
 
         # exit()
 
@@ -518,9 +518,6 @@ if __name__ == '__main__':
             )
         )
 
-
-
-
         model.losses = losses
         model.current_epoch = e
 
@@ -570,13 +567,13 @@ if __name__ == '__main__':
             logging.info('Best val r1: %s', str(best_val_r1))
             logging.info(str(lr_steps))
 
-        #TODO: this is for dvi
-        save_dir = 'dvi_data_logo2k/ResNet_64_Model'
-        os.makedirs('{}/Epoch_{}'.format(save_dir, e+1), exist_ok=True)
-        with open('{}/Epoch_{}/index.json'.format(save_dir, e + 1), 'wt') as handle:
-            handle.write(json.dumps(list(range(len(dl_tr.dataset)))))
-        torch.save(model.state_dict(), '{}/Epoch_{}/logo2k_logo2k_trainval_2048_0.pth'.format(save_dir, e+1))
-        torch.save(criterion.proxies, '{}/Epoch_{}/proxy.pth'.format(save_dir, e+1))
+        #TODO: this is for umap visualization
+#         save_dir = 'dvi_data_logo2k/ResNet_2048_Model'
+#         os.makedirs('{}/Epoch_{}'.format(save_dir, e+1), exist_ok=True)
+#         with open('{}/Epoch_{}/index.json'.format(save_dir, e + 1), 'wt') as handle:
+#             handle.write(json.dumps(list(range(len(dl_tr.dataset)))))
+#         torch.save(model.state_dict(), '{}/Epoch_{}/logo2k_logo2k_trainval_2048_0.pth'.format(save_dir, e+1))
+#         torch.save(criterion.proxies, '{}/Epoch_{}/proxy.pth'.format(save_dir, e+1))
         ######################################################################################
 
         if args.mode == 'trainval':
