@@ -30,6 +30,11 @@ CUDA_VISIBLE_DEVICES=0,1 python train.py --dataset logo2k  --config config/logo2
 
 ```
 
+To debug the code
+```
+CUDA_VISIBLE_DEVICES=0,1 python train.py --dataset cub  --config config/cub.json --mode train --apex --seed 0 --no_warmup
+```
+
 The following is the Bibtex of our paper:
 ```
 @article{teh2020proxynca++,
