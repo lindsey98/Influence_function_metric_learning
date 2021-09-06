@@ -476,25 +476,25 @@ if __name__ == '__main__':
         losses_per_epoch = []
         tnmi = []
 
-        opt.zero_grad()
+
         for ct, (x, y, indices) in tqdm(enumerate(dl_tr)):
             it += 1
             x = x.cuda()
-            x.requires_grad = True # ensure gradient flow
             m = model(x)
             # FIXME: loss not improving, keeps as 7.066
             loss = criterion(m, indices, y.cuda())
+            opt.zero_grad()
             loss.backward()
+            opt.step()
             # print(x.grad)
             # exit()
 
             torch.nn.utils.clip_grad_value_(model.parameters(), 10)
-
             losses_per_epoch.append(loss.data.cpu().numpy())
 
-            if (ct + 1) % 1 == 0:
-                opt.step()
-                opt.zero_grad()
+            # if (ct + 1) % 1 == 0:
+            #     opt.step()
+            #     opt.zero_grad()
 
 
         time_per_epoch_2 = time.time()
