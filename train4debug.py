@@ -24,6 +24,7 @@ from dataset.base import SubSampler
 from loss_potential import loss_potential
 from torch.utils.data import Dataset, DataLoader
 
+
 if __name__ == '__main__':
     batch_size = 32
     num_cls_per_batch = 8
@@ -120,9 +121,12 @@ if __name__ == '__main__':
             opt.zero_grad()
             loss.backward()
             opt.step()
+
+            losses_per_epoch.append(loss.data.cpu().numpy())
+
             # print(loss) # you can print out the loss
             # break # set breakpoint here to only run on first 1st batch
-            losses_per_epoch.append(loss.data.cpu().numpy())
+
 
         losses.append(np.mean(losses_per_epoch))
         print(opt)

@@ -143,10 +143,10 @@ class ProxyNCA_prob(torch.nn.Module):
         mask = self.mask.view(self.nb_classes * self.max_proxy_per_class, -1).to(P_copy.device)
         masked_P = P_copy * mask # mask unactivated proxies
         IP = torch.mm(X_copy, masked_P.T)  # inner product between X and P of shape (N, C*self.max_proxy_per_class)
-        IP_reshape = torch.reshape(IP, (X_copy.size(0), self.nb_classes, self.max_proxy_per_class))  # reshape inner product as shape of (N, C, self.max_proxy_per_class)
+        IP_reshape = torch.reshape(IP, (X_copy.shape[0], self.nb_classes, self.max_proxy_per_class))  # reshape inner product as shape of (N, C, self.max_proxy_per_class)
 
         cls_labels = T_copy.nonzero()[:, 1] # get where the one-hot label is and that's the class label
-        IP_gt = IP_reshape[torch.arange(len(X_copy)), cls_labels.long(), :]  # get similarities to gt-class's proxies, of shape (N, self.max_proxy_per_class)
+        IP_gt = IP_reshape[torch.arange(X_copy.shape[0]), cls_labels.long(), :]  # get similarities to gt-class's proxies, of shape (N, self.max_proxy_per_class)
         L_IP, _ = torch.max(IP_gt, dim=-1)  # get maximum similarity to gt-class's proxies, of shape (N,)
 
         return L_IP, cls_labels
@@ -171,20 +171,20 @@ class ProxyNCA_prob(torch.nn.Module):
             squared=True
         )[:X.size()[0], X.size()[0]:]  # of shape (N, C*maxP)
 
-        D_reshape = D.reshape((X.size()[0], self.nb_classes, self.max_proxy_per_class))  # of shape (N, C, maxP)
+        D_reshape = D.reshape((X.shape[0], self.nb_classes, self.max_proxy_per_class))  # of shape (N, C, maxP)
         output = D_reshape * self.mask.unsqueeze(0)  # mask unactivated proxies
         prob = F.softmax(-output, dim=-1)  # low distance proxy get higher weights
         D_weighted = torch.sum(prob * output, dim=-1)  # weighted sum of distance, reduce to shape (N, C)
 
-        T = binarize_and_smooth_labels(
-            T=T, nb_classes=self.nb_classes, smoothing_const=0  # one-hot gt label
-        )  # smooth one-hot label
+        smoothing_const = 0.0 # smoothing class labels
+        target_probs = (torch.ones((X.shape[0], self.nb_classes)) * smoothing_const).to(T.device)
+        target_probs.scatter_(1, T.unsqueeze(1), 1 - smoothing_const) # one-hot label
 
         # TODO: multiple proxies per class
-        loss = torch.sum(- T * F.log_softmax(-D_weighted, -1), -1)
+        loss = torch.sum(- target_probs * F.log_softmax(-D_weighted, -1), -1)
 
         if indices is not None:
-            L_IP, cls_labels = self.inner_product_sim(X, P, T)
+            L_IP, cls_labels = self.inner_product_sim(X, P, target_probs)
             self.cached_sim[indices] = L_IP.detach().cpu().numpy()  # cache losses for each training sample
             self.cached_cls[indices] = cls_labels.detach().cpu().numpy()
 
