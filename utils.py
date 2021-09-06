@@ -30,6 +30,9 @@ class JSONEncoder(json.JSONEncoder):
 
 
 def load_config(config_name = 'config.json'):
+    '''
+        Load config.json file
+    '''
     config = json.load(open(config_name))
     def eval_json(config):
         for k in config:
@@ -41,13 +44,16 @@ def load_config(config_name = 'config.json'):
     return config
 
 def predict_batchwise(model, dataloader):
-    # list with N lists, where N = |{image, label, index}|
+    '''
+        Predict on a batch
+        :return: list with N lists, where N = |{image, label, index}|
+    '''
+
     model_is_training = model.training
     model.eval()
     ds = dataloader.dataset
     A = [[] for i in range(len(ds[0]))]
     with torch.no_grad():
-
         # extract batches (A becomes list of samples)
         for batch in dataloader:
             for i, J in enumerate(batch):
@@ -97,6 +103,13 @@ def predict_batchwise_inshop(model, dataloader):
     return result
 
 def evaluate(model, dataloader, eval_nmi=True, recall_list=[1,2,4,8]):
+    '''
+        Evaluation on dataloader
+        :param model: embedding model
+        :param dataloader: dataloader
+        :param eval_nmi: evaluate NMI (Mutual information between clustering on embedding and the gt class labels) or not
+        :param recall_list: recall@K
+    '''
     eval_time = time.time()
     nb_classes = dataloader.dataset.nb_classes()
 
