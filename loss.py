@@ -8,9 +8,16 @@ import math
 from dataset.base import SubSampler
 from torch.utils.data import DataLoader
 from typing import Union, List
+import sklearn.preprocessing
 
 def binarize_and_smooth_labels(T, nb_classes, smoothing_const=0):
-    import sklearn.preprocessing
+    '''
+        Create smoother gt class labels
+        :param T: torch.Tensor of shape (N,), gt class labels
+        :param nb_classes: number of classes
+        :param smoothing_const: smoothing factor, when =0, no smoothing is applied, just one-hot label
+        :return T: torch.Tensor of shape (N, C)
+    '''
     T = T.cpu().numpy()
     T = sklearn.preprocessing.label_binarize(
         T, classes=range(0, nb_classes)
@@ -24,11 +31,22 @@ def binarize_and_smooth_labels(T, nb_classes, smoothing_const=0):
 
 class ProxyNCA_classic(torch.nn.Module):
     def __init__(self, nb_classes, sz_embed, scale, **kwargs):
+        '''
+            :param nb_classes: number of classes in training set
+            :param sz_embed: embedding size, e.g. 2048, 512, 64
+            :param scale: self.scale is equal to sqrt(1/Temperature), default is 3
+        '''
         torch.nn.Module.__init__(self)
         self.proxies = torch.nn.Parameter(torch.randn(nb_classes, sz_embed) / 8)
         self.scale = scale
 
     def forward(self, X, T):
+        '''
+            Forward propogation of loss
+            :param X: the embedding torch.Tensor of shape (N, sz_embed)
+            :param T: a torch.Tensor of shape (N, ), keeping class labels: sample -> class label
+            :return : batch average loss
+        '''
         P = self.proxies
 
         # note: self.scale is equal to sqrt(1/T)
