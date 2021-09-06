@@ -48,8 +48,9 @@ class ProxyNCA_classic(torch.nn.Module):
             T=T, nb_classes=len(P), smoothing_const=0
         )  # smoothing constant =0 means no smoothing, just one-hot label
         loss1 = torch.sum(T * torch.exp(-D), -1)
-        loss2 = torch.sum((1 - T) * torch.exp(-D), -1)
-        loss = -torch.log(loss1 / loss2)
+        loss2 = torch.sum((1 - T) * torch.exp(-D), -1) # here the denominator is the sum over all other classes
+        loss = -torch.log(loss1 / loss2) # There is no guarantee that k = (exp(-positive_distance)/ exp(-negative_distance)) is below 1.
+                                         # if k is greater than one, algorithm will give you negative loss values. (-log(k))
         loss = loss.mean()
         return loss
 
