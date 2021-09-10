@@ -476,7 +476,6 @@ if __name__ == '__main__':
         losses_per_epoch = []
         tnmi = []
 
-
         for ct, (x, y, indices) in tqdm(enumerate(dl_tr)):
             it += 1
             x = x.cuda()
@@ -486,16 +485,9 @@ if __name__ == '__main__':
             opt.zero_grad()
             loss.backward()
             opt.step()
-            # print(x.grad)
-            # exit()
 
             torch.nn.utils.clip_grad_value_(model.parameters(), 10)
             losses_per_epoch.append(loss.data.cpu().numpy())
-
-            # if (ct + 1) % 1 == 0:
-            #     opt.step()
-            #     opt.zero_grad()
-
 
         time_per_epoch_2 = time.time()
         losses.append(np.mean(losses_per_epoch[-20:]))

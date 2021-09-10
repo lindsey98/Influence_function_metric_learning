@@ -187,7 +187,6 @@ class ProxyNCA_prob(torch.nn.Module):
 
         D_reshape = D.reshape((X.shape[0], self.nb_classes, self.max_proxy_per_class))  # of shape (N, C, maxP)
         output = D_reshape * self.mask.unsqueeze(0)  # mask unactivated proxies
-        # FIXME: low distance should get higher weight
         inner_prod = inner_prod.reshape((X.shape[0], self.nb_classes, self.max_proxy_per_class)) # of shape (N, C, maxP)
         prob = inner_prod * self.mask.unsqueeze(0)
         normalize_prob = masked_softmax(prob)
