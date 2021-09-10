@@ -10,6 +10,16 @@ from torch.utils.data import DataLoader
 from typing import Union, List
 import sklearn.preprocessing
 
+def masked_softmax(A):
+    '''
+        Apply softmax but ignore zeros
+    '''
+    A_max = torch.max(A, dim=-1, keepdim=True)[0]
+    A_exp = torch.exp(A-A_max)
+    A_exp = A_exp * (A != 0).float()  # this step masks
+    A_softmax = A_exp / torch.sum(A_exp, dim=-1, keepdim=True)
+    return A_softmax
+
 def binarize_and_smooth_labels(T, nb_classes, smoothing_const=0):
     '''
         Create smoother gt class labels
@@ -161,20 +171,27 @@ class ProxyNCA_prob(torch.nn.Module):
         '''
 
         P = self.proxies
-
-        P = self.scale * F.normalize(P, p=2, dim=-1)
-        X = self.scale * F.normalize(X, p=2, dim=-1)
+        temperature = self.scale
+        # P = F.normalize(P, p=2, dim=-1) * self.scale
+        # X = F.normalize(X, p=2, dim=-1) * self.scale
+        P = F.normalize(P, p=2, dim=-1) * temperature
+        X = F.normalize(X, p=2, dim=-1) * temperature
 
         # tensor
-        D = pairwise_distance(
+        D, inner_prod = pairwise_distance(
             torch.cat([X, P]),
             squared=True
-        )[:X.size()[0], X.size()[0]:]  # of shape (N, C*maxP)
+        )
+        D = D[:X.size()[0], X.size()[0]:] # of shape (N, C*maxP)
+        inner_prod = inner_prod[:X.size()[0], X.size()[0]:] # of shape (N, C*maxP)
 
         D_reshape = D.reshape((X.shape[0], self.nb_classes, self.max_proxy_per_class))  # of shape (N, C, maxP)
         output = D_reshape * self.mask.unsqueeze(0)  # mask unactivated proxies
-        prob = F.softmax(-output, dim=-1)  # low distance proxy get higher weights
-        D_weighted = torch.sum(prob * output, dim=-1)  # weighted sum of distance, reduce to shape (N, C)
+        # FIXME: low distance should get higher weight
+        inner_prod = inner_prod.reshape((X.shape[0], self.nb_classes, self.max_proxy_per_class)) # of shape (N, C, maxP)
+        prob = inner_prod * self.mask.unsqueeze(0)
+        normalize_prob = masked_softmax(prob)
+        D_weighted = torch.sum(normalize_prob * output, dim=-1)  # weighted sum of distance, reduce to shape (N, C)
 
         smoothing_const = 0.0 # smoothing class labels
         target_probs = (torch.ones((X.shape[0], self.nb_classes)) * smoothing_const).to(T.device)
@@ -189,3 +206,34 @@ class ProxyNCA_prob(torch.nn.Module):
             self.cached_cls[indices] = cls_labels.detach().cpu().numpy()
 
         return loss.mean()
+
+
+class ProxyNCA_prob_orig(torch.nn.Module):
+    def __init__(self, nb_classes, sz_embed, scale, **kwargs):
+        torch.nn.Module.__init__(self)
+        self.proxies = torch.nn.Parameter(torch.randn(nb_classes, sz_embed) / 8)
+        self.scale = scale
+
+    def forward(self, X, T):
+        P = self.proxies
+        # note: self.scale is equal to sqrt(1/T)
+        # in the paper T = 1/9, therefore, scale = sart(1/(1/9)) = sqrt(9) = 3
+        #  we need to apply sqrt because the pairwise distance is calculated as norm^2
+
+        P = self.scale * F.normalize(P, p=2, dim=-1)
+        X = self.scale * F.normalize(X, p=2, dim=-1)
+
+        D = pairwise_distance(
+            torch.cat(
+                [X, P]
+            ),
+            squared=True
+        )[0][:X.size()[0], X.size()[0]:]
+
+        T = binarize_and_smooth_labels(
+            T=T, nb_classes=len(P), smoothing_const=0
+        )
+
+        loss = torch.sum(- T * F.log_softmax(-D, -1), -1)
+        loss = loss.mean()
+        return loss

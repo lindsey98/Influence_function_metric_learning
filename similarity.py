@@ -10,12 +10,12 @@ def pairwise_distance(a, squared=False):
         :param squared: if True, will compute (euclidean_dist)^2
         :return pairwise_distances: distance torch.Tensor (M, M)
     '''
+
+    inner_prod = torch.mm(a, torch.t(a))
     pairwise_distances_squared = torch.add(
         a.pow(2).sum(dim=1, keepdim=True).expand(a.size(0), -1),
         torch.t(a).pow(2).sum(dim=0, keepdim=True).expand(a.size(0), -1)
-    ) - 2 * (
-        torch.mm(a, torch.t(a))
-    ) # compute euclidean distance in dot-product way, since ||x-y||^2 = x'x - 2x'y + y'y
+    ) - 2 * (inner_prod) # compute euclidean distance in dot-product way, since ||x-y||^2 = x'x - 2x'y + y'y
 
     # Deal with numerical inaccuracies. Set small negatives to zero.
     pairwise_distances_squared = torch.clamp(
@@ -46,6 +46,6 @@ def pairwise_distance(a, squared=False):
     )
     pairwise_distances = torch.mul(pairwise_distances, mask_offdiagonals)
 
-    return pairwise_distances
+    return pairwise_distances, inner_prod
 
 
