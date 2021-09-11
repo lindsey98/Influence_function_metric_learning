@@ -127,7 +127,7 @@ class ProxyNCA_prob(torch.nn.Module):
             :param new_proxy: the added proxy (mean of hard examples)
         '''
         cls = int(cls)
-        if self.current_proxy[cls] == self.max_proxy_per_class:
+        if self.current_proxy[cls] == self.max_proxy_per_class: # if reach the maximum proxy one class can get
             pass
         else:
             self.proxies.data[self.max_proxy_per_class * cls + self.current_proxy[cls], :] = new_proxy.data  # initilaize new proxy there
@@ -153,11 +153,11 @@ class ProxyNCA_prob(torch.nn.Module):
         P_copy = F.normalize(P_copy, dim=-1, p=2)
         mask = self.mask.view(self.nb_classes * self.max_proxy_per_class, -1).to(P_copy.device)
         masked_P = P_copy * mask # mask unactivated proxies
-        IP = torch.mm(X_copy, masked_P.T)  # inner product between X and P of shape (N, C*self.max_proxy_per_class)
-        IP_reshape = torch.reshape(IP, (X_copy.shape[0], self.nb_classes, self.max_proxy_per_class))  # reshape inner product as shape of (N, C, self.max_proxy_per_class)
+        IP = torch.mm(X_copy, masked_P.T)  # inner product between X and P of shape (N, C*maxP)
+        IP_reshape = torch.reshape(IP, (X_copy.shape[0], self.nb_classes, self.max_proxy_per_class))  # reshape to (N, C, maxP)
 
         cls_labels = T_copy.nonzero()[:, 1] # get where the one-hot label is and that's the class label
-        IP_gt = IP_reshape[torch.arange(X_copy.shape[0]), cls_labels.long(), :]  # get similarities to gt-class's proxies, of shape (N, self.max_proxy_per_class)
+        IP_gt = IP_reshape[torch.arange(X_copy.shape[0]), cls_labels.long(), :]  # get similarities to gt-class's proxies, of shape (N, maxP)
         L_IP, _ = torch.max(IP_gt, dim=-1)  # get maximum similarity to gt-class's proxies, of shape (N,)
 
         return L_IP, cls_labels
@@ -173,8 +173,6 @@ class ProxyNCA_prob(torch.nn.Module):
 
         P = self.proxies
         temperature = self.scale
-        # P = F.normalize(P, p=2, dim=-1) * self.scale
-        # X = F.normalize(X, p=2, dim=-1) * self.scale
         P = F.normalize(P, p=2, dim=-1) * temperature
         X = F.normalize(X, p=2, dim=-1) * temperature
 
@@ -186,14 +184,13 @@ class ProxyNCA_prob(torch.nn.Module):
 
         D_reshape = D.reshape((X.shape[0], self.nb_classes, self.max_proxy_per_class))  # of shape (N, C, maxP)
         output = D_reshape * self.mask.unsqueeze(0)  # mask unactivated proxies
-        normalize_prob = masked_softmax(-output)
+        normalize_prob = masked_softmax(-output) # low distance proxy should get higher weight
         D_weighted = torch.sum(normalize_prob * output, dim=-1)  # weighted sum of distance, reduce to shape (N, C)
 
         smoothing_const = 0.0 # smoothing class labels
         target_probs = (torch.ones((X.shape[0], self.nb_classes)) * smoothing_const).to(T.device)
         target_probs.scatter_(1, T.unsqueeze(1), 1 - smoothing_const) # one-hot label
 
-        # TODO: multiple proxies per class
         loss = torch.sum(- target_probs * F.log_softmax(-D_weighted, -1), -1)
 
         if indices is not None:
@@ -205,6 +202,9 @@ class ProxyNCA_prob(torch.nn.Module):
 
 
 class ProxyNCA_prob_orig(torch.nn.Module):
+    '''
+        Original loss in ProxyNCA++
+    '''
     def __init__(self, nb_classes, sz_embed, scale, **kwargs):
         torch.nn.Module.__init__(self)
         self.proxies = torch.nn.Parameter(torch.randn(nb_classes, sz_embed) / 8)

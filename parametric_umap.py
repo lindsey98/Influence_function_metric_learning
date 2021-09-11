@@ -12,6 +12,7 @@ from umap.parametric_umap import ParametricUMAP
 import tensorflow as tf
 from umap.parametric_umap import load_ParametricUMAP
 from loss import ProxyNCA_prob
+from utils import predict_batchwise
 os.environ['CUDA_VISIBLE_DEVICES'] = "1,0"
 
 os.makedirs('dvi_data_logo2k/', exist_ok=True)
@@ -95,23 +96,6 @@ def prepare_data(data_name='cub', root='dvi_data_cub200/', save=False):
 
     return dl_tr, dl_ev
 
-@torch.no_grad()
-def feature_extract(model, dl):
-    '''
-    Extract intermediate features
-    :param model: pretrained model
-    :param dl: dataloader
-    '''
-    device = 'cuda'
-    model.eval()
-    embeddings = torch.tensor([])
-    labels = torch.tensor([])
-    for ct, (x, y, _) in tqdm(enumerate(dl)):
-        x = x.to(device)
-        feat = model(x)
-        embeddings = torch.cat((embeddings, feat.detach().cpu()), dim=0)
-        labels = torch.cat((labels, y), dim=0)
-    return embeddings, labels
 
 def encoder_decoder(size=512, n_components=2):
     '''
@@ -133,9 +117,9 @@ def encoder_decoder(size=512, n_components=2):
     return encoder, decoder
 
 if __name__ == '__main__':
-    model_dir = 'dvi_data_logo2k/ResNet_64_Model'
-    plot_dir = 'dvi_data_logo2k/resnet_64_umap_plots'
-    sz_embedding = 64
+    model_dir = 'dvi_data_logo2k/ResNet_2048_Model'
+    plot_dir = 'dvi_data_logo2k/resnet_2048_umap_plots'
+    sz_embedding = 2048
 
     os.makedirs(plot_dir, exist_ok=True)
     dl_tr, dl_ev = prepare_data(data_name='logo2k', root='dvi_data_logo2k/', save=False)
@@ -153,7 +137,7 @@ if __name__ == '__main__':
         proxies = torch.load('{}/Epoch_{}/proxy.pth'.format(model_dir, e+1), map_location='cpu').detach().numpy()
         # print(proxies.shape)
 
-        embedding, label = feature_extract(model, dl_tr)
+        embedding, label, *_ = predict_batchwise(model, dl_tr)
         torch.save(embedding, '{}/Epoch_{}/training_embeddings.pth'.format(model_dir, e+1))
         torch.save(label, '{}/Epoch_{}/training_labels.pth'.format(model_dir, e+1))
 

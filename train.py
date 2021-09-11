@@ -20,7 +20,7 @@ from tqdm import tqdm
 from utils import JSONEncoder, json_dumps
 from utils import predict_batchwise
 from dataset.base import SubSampler
-from loss_potential import loss_potential
+from hard_detection import hard_potential
 from torch.utils.data import Dataset, DataLoader
 
 parser = argparse.ArgumentParser(description='Training ProxyNCA++') 
@@ -433,6 +433,8 @@ if __name__ == '__main__':
     '''training loop'''
 
     for e in range(0, args.nb_epochs):
+        criterion.reinitialize_cache_sim() # in each epoch reinitialized cached similarity
+
         if e == 0:
             loss_recorder = {}
             with open("{0}/{1}_ip.json".format('log', args.log_filename), 'wt') as handle:
@@ -441,7 +443,6 @@ if __name__ == '__main__':
             with open("{0}/{1}_cls.json".format('log', args.log_filename), 'wt') as handle:
                 json.dump(label_recorder, handle)
 
-        criterion.reinitialize_cache_sim()
         with open("{0}/{1}_ip.json".format('log', args.log_filename), 'rt') as handle:
             loss_recorder = json.load(handle)
         with open("{0}/{1}_cls.json".format('log', args.log_filename), 'rt') as handle:
@@ -451,20 +452,21 @@ if __name__ == '__main__':
         # print(criterion.proxies)
 #         print(torch.sum(criterion.mask))
         # print(loss_recorder)
-#         if e >= 5:
-#             update, bad_indices = loss_potential(loss_recorder, label_recorder, current_t=e, rolling_t=2, ts_ratio=[0.3, 1])
-#             if update == True:
-#                 for k, v in bad_indices.items():
-#                     sampler = SubSampler(v)
-#                     tr_loader_temp = DataLoader(tr_dataset, batch_size=64, shuffle=False, sampler=sampler, drop_last=False)
-#                     feature_emb =  predict_batchwise(model, tr_loader_temp)[0] # shape (N, nz_embedding)
-#                     centroid_emb = torch.mean(feature_emb, dim=0)
-#                     criterion.add_proxy(k, centroid_emb.to(criterion.proxies.device))
-                # print(criterion.proxies)
-#                 print(torch.sum(criterion.mask))
+        # if e >= 5:
+        #     update, bad_indices = hard_potential(loss_recorder, label_recorder, current_t=e, rolling_t=2, ts_ratio=[0.3, 1])
+        #     if update == True:
+        #         for k, v in bad_indices.items():
+        #             sampler = SubSampler(v)
+        #             tr_loader_temp = DataLoader(tr_dataset, batch_size=64, shuffle=False, sampler=sampler, drop_last=False)
+        #             feature_emb =  predict_batchwise(model, tr_loader_temp)[0] # shape (N, nz_embedding)
+        #             centroid_emb = torch.mean(feature_emb, dim=0)
+        #             criterion.add_proxy(k, centroid_emb.to(criterion.proxies.device))
+        #         print(criterion.proxies)
+        #         print(torch.sum(criterion.mask))
 
         # exit()
 
+        # lr decay
         if args.mode == 'train':
             curr_lr = opt.param_groups[0]['lr']
             print(prev_lr, curr_lr)
@@ -478,12 +480,11 @@ if __name__ == '__main__':
 
         for ct, (x, y, indices) in tqdm(enumerate(dl_tr)):
             it += 1
-            x = x.cuda()
+            x, y = x.cuda(), y.cuda()
             m = model(x)
-            # FIXME: loss not improving, keeps as 7.066
-            loss = criterion(m, indices, y.cuda())
+            loss = criterion(m, indices, y)
             opt.zero_grad()
-            loss.backward()
+            loss.backward() # backprop
             opt.step()
 
             torch.nn.utils.clip_grad_value_(model.parameters(), 10)
@@ -560,12 +561,12 @@ if __name__ == '__main__':
             logging.info(str(lr_steps))
 
         #TODO: this is for umap visualization
-#         save_dir = 'dvi_data_logo2k/ResNet_2048_Model'
-#         os.makedirs('{}/Epoch_{}'.format(save_dir, e+1), exist_ok=True)
-#         with open('{}/Epoch_{}/index.json'.format(save_dir, e + 1), 'wt') as handle:
-#             handle.write(json.dumps(list(range(len(dl_tr.dataset)))))
-#         torch.save(model.state_dict(), '{}/Epoch_{}/logo2k_logo2k_trainval_2048_0.pth'.format(save_dir, e+1))
-#         torch.save(criterion.proxies, '{}/Epoch_{}/proxy.pth'.format(save_dir, e+1))
+        save_dir = 'dvi_data_logo2k/ResNet_2048_Model'
+        os.makedirs('{}/Epoch_{}'.format(save_dir, e+1), exist_ok=True)
+        with open('{}/Epoch_{}/index.json'.format(save_dir, e + 1), 'wt') as handle:
+            handle.write(json.dumps(list(range(len(dl_tr.dataset)))))
+        torch.save(model.state_dict(), '{}/Epoch_{}/logo2k_logo2k_trainval_2048_0.pth'.format(save_dir, e+1))
+        torch.save(criterion.proxies, '{}/Epoch_{}/proxy.pth'.format(save_dir, e+1))
         ######################################################################################
 
         if args.mode == 'trainval':

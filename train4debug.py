@@ -21,7 +21,7 @@ from tqdm import tqdm
 from utils import JSONEncoder, json_dumps
 from utils import predict_batchwise
 from dataset.base import SubSampler
-from loss_potential import loss_potential
+from hard_detection import hard_potential
 from torch.utils.data import Dataset, DataLoader
 
 
