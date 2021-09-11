@@ -12,7 +12,8 @@ import networks
 import time
 #import margin_net
 import similarity
-
+import torch.nn.functional as F
+from tqdm import tqdm
 # __repr__ may contain `\n`, json replaces it by `\\n` + indent
 json_dumps = lambda **kwargs: json.dumps(
     **kwargs
@@ -55,7 +56,7 @@ def predict_batchwise(model, dataloader):
     A = [[] for i in range(len(ds[0]))]
     with torch.no_grad():
         # extract batches (A becomes list of samples)
-        for batch in dataloader:
+        for batch in tqdm(dataloader, desc="Batch-wise prediction"):
             for i, J in enumerate(batch):
                 # i = 0: sz_batch * images
                 # i = 1: sz_batch * labels
@@ -204,3 +205,32 @@ def evaluate_inshop(model, dl_query, dl_gallery,
     return nmi, recall
 
 
+@torch.no_grad()
+def inner_product_sim(X: torch.Tensor, P: torch.nn.Parameter, T: torch.Tensor,
+                      mask: torch.Tensor, nb_classes:int, max_proxy_per_class:int):
+    '''
+        get maximum inner product similarity to ground-truth proxy
+        :param X: embedding torch.Tensor of shape (N, sz_embed)
+        :param P: learnt proxy torch.Tensor of shape (C * self.max_proxy_per_class, sz_embed)
+        :param T: one-hot ground-truth class label torch.Tensor of shape (N, C)
+        :param mask: mask on activated proxies
+        :param nb_classes: number of classes
+        :param max_proxy_per_class: maximum proxies per class
+        :return L_IP: Inner product similarity to the closest gt-class proxies
+        :return cls_labels: gt-class labels
+    '''
+    X_copy, P_copy, T_copy = X.clone(), P.clone(), T.clone()
+
+    X_copy = F.normalize(X_copy, dim=-1, p=2).to(P_copy.device)
+    P_copy = F.normalize(P_copy, dim=-1, p=2)
+    mask = mask.view(nb_classes * max_proxy_per_class, -1).to(P_copy.device)
+    masked_P = P_copy * mask # mask unactivated proxies
+    IP = torch.mm(X_copy, masked_P.T)  # inner product between X and P of shape (N, C*maxP)
+    IP_reshape = IP.reshape((X_copy.shape[0], nb_classes, max_proxy_per_class))  # reshape to (N, C, maxP)
+
+    IP_gt = IP_reshape[torch.arange(X_copy.shape[0]), T_copy.long(), :]  # get similarities to gt-class's proxies, of shape (N, maxP)
+    rescale_IP_gt = (IP_gt+1)*(IP_gt!=0) # IP_gt range from [-1, 1]
+    _, max_indices = torch.max(rescale_IP_gt, dim=-1)  # get maximum similarity to gt-class's proxies, of shape (N,)
+    L_IP = IP_gt[torch.arange(IP_gt.shape[0]), max_indices]
+
+    return L_IP.detach().cpu().numpy(), T_copy.detach().cpu().numpy()

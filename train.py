@@ -18,7 +18,7 @@ import random
 from tqdm import tqdm
 # from apex import amp
 from utils import JSONEncoder, json_dumps
-from utils import predict_batchwise
+from utils import predict_batchwise, inner_product_sim
 from dataset.base import SubSampler
 from hard_detection import hard_potential
 from torch.utils.data import Dataset, DataLoader
@@ -224,7 +224,6 @@ if __name__ == '__main__':
     )
 
 
-
     if args.mode == 'train':
         tr_dataset = dataset.load(
                 name = args.dataset,
@@ -233,6 +232,7 @@ if __name__ == '__main__':
                 classes = dataset_config['dataset'][args.dataset]['classes']['train'],
                 transform = train_transform
             )
+
     elif args.mode == 'trainval' or args.mode == 'test':
         # print(dataset_config['dataset'][args.dataset]['root'])
         tr_dataset = dataset.load(
@@ -242,7 +242,6 @@ if __name__ == '__main__':
                 classes = dataset_config['dataset'][args.dataset]['classes']['trainval'],
                 transform = train_transform
             )
-
 
     num_class_per_batch = config['num_class_per_batch']
     num_gradcum = config['num_gradcum']
@@ -261,6 +260,24 @@ if __name__ == '__main__':
         num_workers = args.nb_workers,
         #pin_memory = True
     )
+
+    # training dataloader without shuffling and without transformation
+    dl_tr_noshuffle = torch.utils.data.DataLoader(
+            dataset=dataset.load(
+                    name=args.dataset,
+                    root=dataset_config['dataset'][args.dataset]['root'],
+                    source=dataset_config['dataset'][args.dataset]['source'],
+                    classes=dataset_config['dataset'][args.dataset]['classes']['train'],
+                    transform=dataset.utils.make_transform(
+                        **dataset_config[transform_key],
+                        is_train=False
+                    )
+                ),
+            num_workers = args.nb_workers,
+            shuffle=False,
+            batch_size=64,
+    )
+
 
     print("===")
     if args.mode == 'train':
@@ -433,7 +450,9 @@ if __name__ == '__main__':
     '''training loop'''
 
     for e in range(0, args.nb_epochs):
-        criterion.reinitialize_cache_sim() # in each epoch reinitialized cached similarity
+        len_training = len(dl_tr_noshuffle.dataset)  # training
+        cached_sim = np.zeros(len_training)  # cache the similarity to ground-truth proxy
+        cached_cls = np.zeros(len_training) # cache the gt-class
 
         if e == 0:
             loss_recorder = {}
@@ -442,7 +461,7 @@ if __name__ == '__main__':
             label_recorder = {}
             with open("{0}/{1}_cls.json".format('log', args.log_filename), 'wt') as handle:
                 json.dump(label_recorder, handle)
-
+        #
         with open("{0}/{1}_ip.json".format('log', args.log_filename), 'rt') as handle:
             loss_recorder = json.load(handle)
         with open("{0}/{1}_cls.json".format('log', args.log_filename), 'rt') as handle:
@@ -494,10 +513,16 @@ if __name__ == '__main__':
         losses.append(np.mean(losses_per_epoch[-20:]))
 
         # save proxy-similarity and class labels
-        loss_recorder[e] = criterion.cached_sim.tolist()
+        train_embs, train_cls, *_ = predict_batchwise(model, dl_tr_noshuffle)
+        # FIXME: release mask
+        cached_sim, cached_cls = inner_product_sim(X=train_embs, P=criterion.proxies, T=train_cls,
+                                                   mask=criterion.mask,
+                                                   nb_classes=criterion.nb_classes,
+                                                   max_proxy_per_class=criterion.max_proxy_per_class)
+        loss_recorder[e] = cached_sim.tolist()
         with open("{0}/{1}_ip.json".format('log', args.log_filename), 'wt') as handle:
             json.dump(loss_recorder, handle)
-        label_recorder[e] = criterion.cached_cls.tolist()
+        label_recorder[e] = cached_cls.tolist()
         with open("{0}/{1}_cls.json".format('log', args.log_filename), 'wt') as handle:
             json.dump(label_recorder, handle)
 

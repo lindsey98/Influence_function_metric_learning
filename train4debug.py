@@ -110,24 +110,26 @@ if __name__ == '__main__':
 
     # training!
     losses = []
+    visited_indices = []
     for e in range(0, 100): # train for 5 epochs for example
         losses_per_epoch = []
         for ct, (x, y, indices) in tqdm(enumerate(dl_tr)):
-            x = x.cuda()
-            m = model(x)
+            visited_indices.extend(indices.detach().cpu().numpy())
+            # x = x.cuda()
+            # m = model(x)
             # FIXME: loss not improving
-            loss = criterion(m, indices, y.cuda())
+            # loss = criterion(m, indices, y.cuda())
             # loss = criterion(m, y.cuda())
 
-            opt.zero_grad()
-            loss.backward()
-            opt.step()
+            # opt.zero_grad()
+            # loss.backward()
+            # opt.step()
 
-            losses_per_epoch.append(loss.data.cpu().numpy())
+            # losses_per_epoch.append(loss.data.cpu().numpy())
 
-            print(loss) # you can print out the loss
-            break # set breakpoint here to only run on first 1st batch
-
+            # print(loss) # you can print out the loss
+            # break # set breakpoint here to only run on first 1st batch
+        break
 
         # losses.append(np.mean(losses_per_epoch))
         # print(opt)
@@ -138,3 +140,5 @@ if __name__ == '__main__':
         #     )
         # )
 
+    print(set(visited_indices))
+    # print(set(range(len(dl_tr.dataset))) - )

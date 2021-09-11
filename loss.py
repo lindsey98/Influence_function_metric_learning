@@ -95,13 +95,10 @@ class ProxyNCA_prob(torch.nn.Module):
 
         torch.nn.Module.__init__(self)
         self.max_proxy_per_class = 5  # maximum number of proxies per class
-        self.current_proxy = [1] * nb_classes  # start with single proxy per class # FIXME
+        self.current_proxy = [1] * nb_classes  # start with single proxy per class
         self.proxies = torch.nn.Parameter(torch.randn(nb_classes * self.max_proxy_per_class, sz_embed) / 8)
         self.mask = torch.zeros((nb_classes, self.max_proxy_per_class), requires_grad=False).to('cuda')
         self.scale = scale  # sqrt(1/Temperature)
-        self.len_training = len_training  # training
-        self.cached_sim = np.zeros(len_training)  # cache the similarity to ground-truth proxy
-        self.cached_cls = np.zeros(len_training) # cache the gt-class
         self.nb_classes = nb_classes  # number of classes
 
         self.create_mask()  # create initial mask
@@ -113,12 +110,6 @@ class ProxyNCA_prob(torch.nn.Module):
         for c in range(self.nb_classes):
             proxy4cls = self.current_proxy[c]
             self.mask[c, 0:proxy4cls] = 1
-
-    def reinitialize_cache_sim(self):
-        '''
-            initialze cached inner product similarity list to be all zeros
-        '''
-        self.cached_sim = np.zeros(self.len_training)
 
     def add_proxy(self, cls: Union[int, float], new_proxy: torch.Tensor):
         '''
@@ -134,33 +125,6 @@ class ProxyNCA_prob(torch.nn.Module):
             self.current_proxy[cls] += 1  # update number of proxy for this class
             self.mask[cls, self.current_proxy[cls]] = 1  # unfreeze mask
         return
-
-    @torch.no_grad()
-    def inner_product_sim(self, X: torch.Tensor, P: torch.nn.Parameter, T: torch.Tensor):
-        '''
-            get maximum inner product similarity to ground-truth proxy
-            :param X: embedding torch.Tensor of shape (N, sz_embed)
-            :param P: learnt proxy torch.Tensor of shape (C * self.max_proxy_per_class, sz_embed)
-            :param T: one-hot ground-truth class label torch.Tensor of shape (N, C)
-            :return L_IP: Inner product similarity to the closest gt-class proxies
-            :return cls_labels: gt-class labels
-        '''
-        X_copy, P_copy, T_copy = X.clone(), P.clone(), T.clone()
-
-        X_copy = F.normalize(X_copy, dim=-1, p=2)
-        P_copy = F.normalize(P_copy, dim=-1, p=2)
-        mask = self.mask.view(self.nb_classes * self.max_proxy_per_class, -1).to(P_copy.device)
-        masked_P = P_copy * mask # mask unactivated proxies
-        IP = torch.mm(X_copy, masked_P.T)  # inner product between X and P of shape (N, C*maxP)
-        IP_reshape = IP.reshape((X_copy.shape[0], self.nb_classes, self.max_proxy_per_class))  # reshape to (N, C, maxP)
-
-        cls_labels = T_copy.nonzero()[:, 1] # get where the one-hot label is and that's the class label
-        IP_gt = IP_reshape[torch.arange(X_copy.shape[0]), cls_labels.long(), :]  # get similarities to gt-class's proxies, of shape (N, maxP)
-        rescale_IP_gt = (IP_gt+1)*(IP_gt!=0) # IP_gt range from [-1, 1]
-        _, max_indices = torch.max(rescale_IP_gt, dim=-1)  # get maximum similarity to gt-class's proxies, of shape (N,)
-        L_IP = IP_gt[torch.arange(IP_gt.shape[0]), max_indices]
-
-        return L_IP, cls_labels
 
     def forward(self, X:torch.Tensor, indices: torch.Tensor, T:torch.Tensor):
         '''
@@ -192,11 +156,6 @@ class ProxyNCA_prob(torch.nn.Module):
         target_probs.scatter_(1, T.unsqueeze(1), 1 - smoothing_const) # one-hot label
 
         loss = torch.sum(- target_probs * F.log_softmax(-D_weighted, -1), -1)
-
-        if indices is not None:
-            L_IP, cls_labels = self.inner_product_sim(X, P, target_probs)
-            self.cached_sim[indices] = L_IP.detach().cpu().numpy()  # cache losses for each training sample
-            self.cached_cls[indices] = cls_labels.detach().cpu().numpy()
 
         return loss.mean()
 
