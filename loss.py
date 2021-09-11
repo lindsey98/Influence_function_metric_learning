@@ -13,10 +13,11 @@ import sklearn.preprocessing
 def masked_softmax(A):
     '''
         Apply softmax but ignore zeros
+        :param A: torch.tensor of shape (N, C)
+        :return A_softmax: masked softmax of A
     '''
-    A_max = torch.max(A, dim=-1, keepdim=True)[0]
-    A_exp = torch.exp(A-A_max)
-    A_exp = A_exp * (A != 0).float()  # this step masks
+    A_exp = torch.exp(A)
+    A_exp = A_exp * (A != 0).float()  # this step masks zero entries
     A_softmax = A_exp / torch.sum(A_exp, dim=-1, keepdim=True)
     return A_softmax
 
@@ -178,18 +179,14 @@ class ProxyNCA_prob(torch.nn.Module):
         X = F.normalize(X, p=2, dim=-1) * temperature
 
         # tensor
-        D, inner_prod = pairwise_distance(
+        D = pairwise_distance(
             torch.cat([X, P]),
             squared=True
-        )
-        D = D[:X.size()[0], X.size()[0]:] # of shape (N, C*maxP)
-        inner_prod = inner_prod[:X.size()[0], X.size()[0]:] # of shape (N, C*maxP)
+        )[:X.size()[0], X.size()[0]:] # of shape (N, C*maxP)
 
         D_reshape = D.reshape((X.shape[0], self.nb_classes, self.max_proxy_per_class))  # of shape (N, C, maxP)
         output = D_reshape * self.mask.unsqueeze(0)  # mask unactivated proxies
-        inner_prod = inner_prod.reshape((X.shape[0], self.nb_classes, self.max_proxy_per_class)) # of shape (N, C, maxP)
-        prob = inner_prod * self.mask.unsqueeze(0)
-        normalize_prob = masked_softmax(prob)
+        normalize_prob = masked_softmax(-output)
         D_weighted = torch.sum(normalize_prob * output, dim=-1)  # weighted sum of distance, reduce to shape (N, C)
 
         smoothing_const = 0.0 # smoothing class labels
@@ -227,7 +224,7 @@ class ProxyNCA_prob_orig(torch.nn.Module):
                 [X, P]
             ),
             squared=True
-        )[0][:X.size()[0], X.size()[0]:]
+        )[:X.size()[0], X.size()[0]:]
 
         T = binarize_and_smooth_labels(
             T=T, nb_classes=len(P), smoothing_const=0
