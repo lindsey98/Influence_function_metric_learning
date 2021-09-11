@@ -91,7 +91,6 @@ def prepare_data(data_name='cub', root='dvi_data_cub200/', save=False):
 def encoder_model(n_components=2):
     '''
     Customized encoder
-    :param size: embedding size
     :param n_components: low dimensional projection dimensions
     '''
     encoder = tf.keras.Sequential([

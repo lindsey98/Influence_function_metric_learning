@@ -90,7 +90,6 @@ class ProxyNCA_prob(torch.nn.Module):
             :param nb_classes: number of classes in training set
             :param sz_embed: embedding size, e.g. 2048, 512, 64
             :param scale: self.scale is equal to sqrt(1/Temperature), default is 3
-            :param len_training: number of training examples in train loader
         '''
 
         torch.nn.Module.__init__(self)
@@ -123,7 +122,7 @@ class ProxyNCA_prob(torch.nn.Module):
         else:
             self.proxies.data[self.max_proxy_per_class * cls + self.current_proxy[cls], :] = new_proxy.data  # initilaize new proxy there
             self.current_proxy[cls] += 1  # update number of proxy for this class
-            self.mask[cls, self.current_proxy[cls]] = 1  # unfreeze mask
+            self.mask[cls, :self.current_proxy[cls]] = 1  # unfreeze mask
         return
 
     def forward(self, X:torch.Tensor, indices: torch.Tensor, T:torch.Tensor):
