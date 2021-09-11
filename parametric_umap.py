@@ -97,9 +97,9 @@ def prepare_data(data_name='cub', root='dvi_data_cub200/', save=False):
     return dl_tr, dl_ev
 
 
-def encoder_decoder(size=512, n_components=2):
+def encoder_model(size=512, n_components=2):
     '''
-    Customized encoder and decoder
+    Customized encoder
     :param size: embedding size
     :param n_components: low dimensional projection dimensions
     '''
@@ -108,13 +108,7 @@ def encoder_decoder(size=512, n_components=2):
             tf.keras.layers.Dense(units=256, activation="relu"),
             tf.keras.layers.Dense(units=n_components),
         ])
-
-    decoder = tf.keras.Sequential([
-        tf.keras.layers.InputLayer(input_shape=(n_components)),
-        tf.keras.layers.Dense(units=256, activation="relu"),
-        tf.keras.layers.Dense(units=size, activation="relu"),
-    ])
-    return encoder, decoder
+    return encoder
 
 if __name__ == '__main__':
     model_dir = 'dvi_data_logo2k/ResNet_2048_Model'
@@ -123,6 +117,8 @@ if __name__ == '__main__':
 
     os.makedirs(plot_dir, exist_ok=True)
     dl_tr, dl_ev = prepare_data(data_name='logo2k', root='dvi_data_logo2k/', save=False)
+
+    # load model
     feat = Feat_resnet50_max_n()
     in_sz = feat(torch.rand(1, 3, 256, 256)).squeeze().size(0)
     feat.train()
@@ -135,24 +131,23 @@ if __name__ == '__main__':
 
         model.load_state_dict(torch.load('{}/Epoch_{}/logo2k_logo2k_trainval_2048_0.pth'.format(model_dir, e+1)))
         proxies = torch.load('{}/Epoch_{}/proxy.pth'.format(model_dir, e+1), map_location='cpu').detach().numpy()
-        # print(proxies.shape)
 
         embedding, label, *_ = predict_batchwise(model, dl_tr)
         torch.save(embedding, '{}/Epoch_{}/training_embeddings.pth'.format(model_dir, e+1))
         torch.save(label, '{}/Epoch_{}/training_labels.pth'.format(model_dir, e+1))
 
         # Parametric Umap model
-        encoder, _ = encoder_decoder(size=sz_embedding)
+        encoder = encoder_model(size=sz_embedding)
         embedder = ParametricUMAP(encoder=encoder, verbose=False)
 
-        if e != 0:
+        if e > 0:
             # Initialize by last visualization model
             embedder.encoder = tf.keras.models.load_model('{}/Epoch_{}/parametric_model/encoder'.format(model_dir, e))
         # Train on all samples and all proxies
         embedder.fit_transform(np.concatenate((embedding.numpy(), proxies), axis=0))
         embedder.encoder.save('{}/Epoch_{}/parametric_model/encoder'.format(model_dir, e+1))
 
-        # Only visualize 10 classes
+        # Only visualize first 10 classes
         embedding_sub = embedding[label < 10, :].numpy()
         label_sub = label[label < 10].numpy()
         low_dim_emb = embedder.transform(embedding_sub)
