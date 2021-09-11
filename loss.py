@@ -95,7 +95,7 @@ class ProxyNCA_prob(torch.nn.Module):
 
         torch.nn.Module.__init__(self)
         self.max_proxy_per_class = 5  # maximum number of proxies per class
-        self.current_proxy = [1] * nb_classes  # start with single proxy per class
+        self.current_proxy = [1] * nb_classes  # start with single proxy per class # FIXME
         self.proxies = torch.nn.Parameter(torch.randn(nb_classes * self.max_proxy_per_class, sz_embed) / 8)
         self.mask = torch.zeros((nb_classes, self.max_proxy_per_class), requires_grad=False).to('cuda')
         self.scale = scale  # sqrt(1/Temperature)
@@ -145,16 +145,14 @@ class ProxyNCA_prob(torch.nn.Module):
             :return L_IP: Inner product similarity to the closest gt-class proxies
             :return cls_labels: gt-class labels
         '''
-        X_copy = X.clone()
-        P_copy = P.clone()
-        T_copy = T.clone()
+        X_copy, P_copy, T_copy = X.clone(), P.clone(), T.clone()
 
         X_copy = F.normalize(X_copy, dim=-1, p=2)
         P_copy = F.normalize(P_copy, dim=-1, p=2)
         mask = self.mask.view(self.nb_classes * self.max_proxy_per_class, -1).to(P_copy.device)
         masked_P = P_copy * mask # mask unactivated proxies
         IP = torch.mm(X_copy, masked_P.T)  # inner product between X and P of shape (N, C*maxP)
-        IP_reshape = torch.reshape(IP, (X_copy.shape[0], self.nb_classes, self.max_proxy_per_class))  # reshape to (N, C, maxP)
+        IP_reshape = IP.reshape((X_copy.shape[0], self.nb_classes, self.max_proxy_per_class))  # reshape to (N, C, maxP)
 
         cls_labels = T_copy.nonzero()[:, 1] # get where the one-hot label is and that's the class label
         IP_gt = IP_reshape[torch.arange(X_copy.shape[0]), cls_labels.long(), :]  # get similarities to gt-class's proxies, of shape (N, maxP)
