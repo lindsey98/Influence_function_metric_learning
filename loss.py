@@ -158,7 +158,9 @@ class ProxyNCA_prob(torch.nn.Module):
 
         cls_labels = T_copy.nonzero()[:, 1] # get where the one-hot label is and that's the class label
         IP_gt = IP_reshape[torch.arange(X_copy.shape[0]), cls_labels.long(), :]  # get similarities to gt-class's proxies, of shape (N, maxP)
-        L_IP, _ = torch.max(IP_gt, dim=-1)  # get maximum similarity to gt-class's proxies, of shape (N,)
+        rescale_IP_gt = (IP_gt+1)*(IP_gt!=0) # IP_gt range from [-1, 1]
+        _, max_indices = torch.max(rescale_IP_gt, dim=-1)  # get maximum similarity to gt-class's proxies, of shape (N,)
+        L_IP = IP_gt[torch.arange(IP_gt.shape[0]), max_indices]
 
         return L_IP, cls_labels
 
@@ -176,7 +178,7 @@ class ProxyNCA_prob(torch.nn.Module):
         P = F.normalize(P, p=2, dim=-1) * temperature
         X = F.normalize(X, p=2, dim=-1) * temperature
 
-        # tensor
+        # pairwise distance
         D = pairwise_distance(
             torch.cat([X, P]),
             squared=True

@@ -2,7 +2,6 @@ from .base import *
 import h5py
 import torch
 
-
 class Logo2k(BaseDatasetMod):
     def __init__(self, root, source, classes, transform=None):
         BaseDatasetMod.__init__(self, root, source, classes, transform)
@@ -18,8 +17,6 @@ class Logo2k(BaseDatasetMod):
                 # self.im_paths.append(os.path.join(root, i[0]))
                 self.im_paths.append(i[0])
                 index += 1
-
-
 
 class Logo2k_class(BaseDatasetMod):
     def __init__(self, root, source, classes, transform=None, mode='train'):
