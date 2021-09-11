@@ -19,7 +19,7 @@ import random
 from tqdm import tqdm
 # from apex import amp
 from utils import JSONEncoder, json_dumps
-from utils import predict_batchwise
+from utils import predict_batchwise, inner_product_sim
 from dataset.base import SubSampler
 from hard_detection import hard_potential
 from torch.utils.data import Dataset, DataLoader
@@ -62,7 +62,26 @@ if __name__ == '__main__':
         num_workers = 0,
         shuffle=False, # TODO: disable shuffling for debugging purpose
     )
+
+    # training dataloader without shuffling and without transformation
+    dl_tr_noshuffle = torch.utils.data.DataLoader(
+            dataset=dataset.load(
+                    name='cub',
+                    root=dataset_config['dataset']['cub']['root'],
+                    source=dataset_config['dataset']['cub']['source'],
+                    classes=dataset_config['dataset']['cub']['classes']['train'],
+                    transform=dataset.utils.make_transform(
+                        **dataset_config['transform_parameters'],
+                        is_train=False
+                    )
+                ),
+            num_workers = 0,
+            shuffle=False,
+            batch_size=64,
+    )
     print('Length of dataset: ', len(dl_tr.dataset))
+    print('Length of dataset: ', len(dl_tr_noshuffle.dataset))
+
 
     # model
     feat = config['model']['type']()
@@ -114,7 +133,7 @@ if __name__ == '__main__':
     for e in range(0, 100): # train for 5 epochs for example
         losses_per_epoch = []
         for ct, (x, y, indices) in tqdm(enumerate(dl_tr)):
-            visited_indices.extend(indices.detach().cpu().numpy())
+            # visited_indices.extend(indices.detach().cpu().numpy())
             # x = x.cuda()
             # m = model(x)
             # FIXME: loss not improving
@@ -127,6 +146,15 @@ if __name__ == '__main__':
 
             # losses_per_epoch.append(loss.data.cpu().numpy())
 
+            # save proxy-similarity and class labels
+            train_embs, train_cls, *_ = predict_batchwise(model, dl_tr_noshuffle)
+            # FIXME: release mask
+            cached_sim, cached_cls = inner_product_sim(X=train_embs, P=criterion.proxies, T=train_cls,
+                                                       mask=criterion.mask,
+                                                       nb_classes=criterion.nb_classes,
+                                                       max_proxy_per_class=criterion.max_proxy_per_class)
+            print(cached_sim)
+            print(cached_cls)
             # print(loss) # you can print out the loss
             # break # set breakpoint here to only run on first 1st batch
         break

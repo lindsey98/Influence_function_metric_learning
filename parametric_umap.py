@@ -38,23 +38,20 @@ def prepare_data(data_name='cub', root='dvi_data_cub200/', save=False):
         transform_key = config['transform_key']
     print('Transformation: ', transform_key)
 
-    train_transform = dataset.utils.make_transform(
-        **dataset_config[transform_key],
-         is_train = False # disable fancy transformations
-    )
-    tr_dataset = dataset.load(
-        name=data_name,
-        root=dataset_config['dataset'][data_name]['root'],
-        source=dataset_config['dataset'][data_name]['source'],
-        classes=dataset_config['dataset'][data_name]['classes']['trainval'],
-        transform=train_transform
-    )
-
-    dl_tr = torch.utils.data.DataLoader(
-        tr_dataset,
-        batch_size=128,
-        shuffle=False,
-        num_workers=0,
+    dl_tr_noshuffle = torch.utils.data.DataLoader(
+            dataset=dataset.load(
+                    name=data_name,
+                    root=dataset_config['dataset'][data_name]['root'],
+                    source=dataset_config['dataset'][data_name]['source'],
+                    classes=dataset_config['dataset'][data_name]['classes']['train'],
+                    transform=dataset.utils.make_transform(
+                        **dataset_config[transform_key],
+                        is_train=False
+                    )
+                ),
+            num_workers = 0,
+            shuffle=False,
+            batch_size=64,
     )
 
     dl_ev = torch.utils.data.DataLoader(
@@ -74,30 +71,24 @@ def prepare_data(data_name='cub', root='dvi_data_cub200/', save=False):
     )
 
     if save:
-        training_x = torch.tensor([])
-        training_y = torch.tensor([])
-
-        for ct, (x,y,_) in tqdm(enumerate(dl_tr)): #FIXME: memory error
+        training_x, training_y = torch.tensor([]), torch.tensor([])
+        for ct, (x,y,_) in tqdm(enumerate(dl_tr_noshuffle)): #FIXME: memory error
             training_x = torch.cat((training_x, x), dim=0)
             training_y = torch.cat((training_y, y), dim=0)
-
         torch.save(training_x, os.path.join(root, 'Training_data_resnet', 'training_dataset_data.pth'))
         torch.save(training_y, os.path.join(root, 'Training_data_resnet', 'training_dataset_label.pth'))
 
-        test_x = torch.tensor([])
-        test_y = torch.tensor([])
-
+        test_x, test_y = torch.tensor([]), torch.tensor([])
         for ct, (x,y,_) in tqdm(enumerate(dl_ev)):
             test_x = torch.cat((test_x, x), dim=0)
             test_y = torch.cat((test_y, y), dim=0)
-
         torch.save(test_x, os.path.join(root, 'Testing_data_resnet', 'testing_dataset_data.pth'))
         torch.save(test_y, os.path.join(root, 'Testing_data_resnet', 'testing_dataset_label.pth'))
 
-    return dl_tr, dl_ev
+    return dl_tr_noshuffle, dl_ev
 
 
-def encoder_model(size=512, n_components=2):
+def encoder_model(n_components=2):
     '''
     Customized encoder
     :param size: embedding size
@@ -137,7 +128,7 @@ if __name__ == '__main__':
         torch.save(label, '{}/Epoch_{}/training_labels.pth'.format(model_dir, e+1))
 
         # Parametric Umap model
-        encoder = encoder_model(size=sz_embedding)
+        encoder = encoder_model()
         embedder = ParametricUMAP(encoder=encoder, verbose=False)
 
         if e > 0:
@@ -156,6 +147,7 @@ if __name__ == '__main__':
         # Visualize
         fig = plt.figure()
         plt.scatter(low_dim_emb[:, 0], low_dim_emb[:, 1], c=label_sub, cmap='tab10', s=5)
+        plt.legend()
         plt.scatter(low_dim_proxy[:, 0], low_dim_proxy[:, 1], c=range(10), cmap='tab10', marker=(5,1))
         fig.savefig('{}/Epoch_{}.png'.format(plot_dir, e+1))
 
