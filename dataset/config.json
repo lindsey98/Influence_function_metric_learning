@@ -85,8 +85,8 @@
         },
         "logo2k": {
             "classes": {
-                "train": "range(0, 1171)",
-                "val": "range(1171, 2340)",
+                "train": "range(0, 585)",
+                "val": "range(585, 1171)",
                 "trainval": "range(0, 1171)",
                 "eval": "range(1171, 2340)"
             },

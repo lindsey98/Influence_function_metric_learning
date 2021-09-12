@@ -133,6 +133,7 @@ if __name__ == '__main__':
     with open("{0}/{1}_cls.json".format('log', '{}_{}_trainval_2048_0'.format(dataset_name, dataset_name)), 'rt') as handle:
         cache_label = json.load(handle)
 
+    # Line plot which show the trend of inner_prod_sim to nearest ground-truth class's proxy
     # os.makedirs(os.path.join(plot_dir, 'line_plot'), exist_ok=True)
     # for cls in range(criterion.nb_classes):
     #     sim_cls1 = []
