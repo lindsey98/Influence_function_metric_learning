@@ -49,7 +49,7 @@ def predict_batchwise(model, dataloader):
         Predict on a batch
         :return: list with N lists, where N = |{image, label, index}|
     '''
-
+    # print(list(model.parameters())[0].device)
     model_is_training = model.training
     model.eval()
     ds = dataloader.dataset

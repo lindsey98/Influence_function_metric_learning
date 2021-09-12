@@ -33,12 +33,12 @@ parser.add_argument('--log-filename', default = 'example')
 parser.add_argument('--workers', default = 16, type=int, dest = 'nb_workers')
 parser.add_argument('--seed', default=0, type=int)
 parser.add_argument('--mode', default='trainval', choices=['train', 'trainval', 'test'],
-    help='train with train data or train with trainval')
+                              help='train with train data or train with trainval')
 parser.add_argument('--lr_steps', default=[1000], nargs='+', type=int)
 parser.add_argument('--source_dir', default='', type=str)
 parser.add_argument('--root_dir', default='', type=str)
 parser.add_argument('--eval_nmi', default=False, action='store_true')
-parser.add_argument('--recall', default=[1,2,4,8], nargs='+', type=int)
+parser.add_argument('--recall', default=[1, 2, 4, 8], nargs='+', type=int)
 parser.add_argument('--init_eval', default=False, action='store_true')
 parser.add_argument('--no_warmup', default=True, action='store_true')
 parser.add_argument('--apex', default=True, action='store_true')
@@ -267,7 +267,7 @@ if __name__ == '__main__':
                     name=args.dataset,
                     root=dataset_config['dataset'][args.dataset]['root'],
                     source=dataset_config['dataset'][args.dataset]['source'],
-                    classes=dataset_config['dataset'][args.dataset]['classes']['train'],
+                    classes=dataset_config['dataset'][args.dataset]['classes']['trainval'],
                     transform=dataset.utils.make_transform(
                         **dataset_config[transform_key],
                         is_train=False
@@ -586,12 +586,12 @@ if __name__ == '__main__':
             logging.info(str(lr_steps))
 
         #TODO: this is for umap visualization
-        save_dir = 'dvi_data_logo2k/ResNet_2048_Model'
+        save_dir = 'dvi_data_{}/ResNet_2048_Model'.format(args.dataset)
         os.makedirs('{}/Epoch_{}'.format(save_dir, e+1), exist_ok=True)
         with open('{}/Epoch_{}/index.json'.format(save_dir, e + 1), 'wt') as handle:
             handle.write(json.dumps(list(range(len(dl_tr.dataset)))))
-        torch.save(model.state_dict(), '{}/Epoch_{}/logo2k_logo2k_trainval_2048_0.pth'.format(save_dir, e+1))
-        torch.save(criterion.proxies, '{}/Epoch_{}/proxy.pth'.format(save_dir, e+1))
+        torch.save(model.state_dict(), '{}/Epoch_{}/{}_{}_trainval_2048_0.pth'.format(save_dir, e+1, args.dataset, args.dataset))
+        torch.save({"proxies": criterion.proxies, "mask": criterion.mask}, '{}/Epoch_{}/proxy.pth'.format(save_dir, e+1))
         ######################################################################################
 
         if args.mode == 'trainval':

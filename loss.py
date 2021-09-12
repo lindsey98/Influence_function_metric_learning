@@ -85,7 +85,7 @@ class ProxyNCA_classic(torch.nn.Module):
 
 
 class ProxyNCA_prob(torch.nn.Module):
-    def __init__(self, nb_classes: int, sz_embed: int, scale: float, len_training: int, **kwargs):
+    def __init__(self, nb_classes: int, sz_embed: int, scale: float, **kwargs):
         '''
             :param nb_classes: number of classes in training set
             :param sz_embed: embedding size, e.g. 2048, 512, 64

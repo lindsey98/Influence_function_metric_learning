@@ -69,7 +69,7 @@ if __name__ == '__main__':
                     name='cub',
                     root=dataset_config['dataset']['cub']['root'],
                     source=dataset_config['dataset']['cub']['source'],
-                    classes=dataset_config['dataset']['cub']['classes']['train'],
+                    classes=dataset_config['dataset']['cub']['classes']['trainval'],
                     transform=dataset.utils.make_transform(
                         **dataset_config['transform_parameters'],
                         is_train=False
