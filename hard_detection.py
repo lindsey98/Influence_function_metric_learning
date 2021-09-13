@@ -12,6 +12,7 @@ def hard_potential(sim_dict, cls_dict, current_t, rolling_t=5, ts_sim=0.5, ts_ra
     :param ts_ratio: lower/upper threshold to decide whether hard examples are prevalent
     :param len_training: number of training data
     '''
+
     update = False
     sim_prev_list = [sim_dict[str(x)] for x in range(current_t-rolling_t, current_t)]
     sim_prev = np.stack(sim_prev_list).T
@@ -40,7 +41,7 @@ if __name__ == '__main__':
     with open('./log/{}_{}_trainval_2048_0_cls.json'.format(data_name, data_name), 'rt') as handle:
         cls_dict = json.load(handle)
 
-    for t in range(10, 20, 5):
+    for t in range(10, 40, 5):
         update, indices = hard_potential(sim_dict=sim_dict, cls_dict=cls_dict,
                                          current_t=t, rolling_t=5, ts_sim=0.3)
         print("Epoch {}, update is {}, number of classes need to update is {}".format(t, update,
