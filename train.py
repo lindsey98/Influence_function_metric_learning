@@ -32,7 +32,7 @@ parser.add_argument('--epochs', default = 40, type=int, dest = 'nb_epochs')
 parser.add_argument('--log-filename', default = 'example')
 parser.add_argument('--workers', default = 16, type=int, dest = 'nb_workers')
 parser.add_argument('--seed', default=0, type=int)
-parser.add_argument('--mode', default='trainval', choices=['train', 'trainval', 'test'],
+parser.add_argument('--mode', default='test', choices=['train', 'trainval', 'test'],
                               help='train with train data or train with trainval')
 parser.add_argument('--lr_steps', default=[1000], nargs='+', type=int)
 parser.add_argument('--source_dir', default='', type=str)
@@ -380,7 +380,7 @@ if __name__ == '__main__':
             else:
                 utils.evaluate(model, dl_ev, args.eval_nmi, args.recall)
 
-        exit()
+        exit() # exit the program
 
     if args.mode == 'train':
         scheduler = config['lr_scheduler']['type'](

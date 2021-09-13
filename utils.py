@@ -103,7 +103,7 @@ def predict_batchwise_inshop(model, dataloader):
     model.train(model_is_training) # revert to previous training state
     return result
 
-def evaluate(model, dataloader, eval_nmi=True, recall_list=[1,2,4,8]):
+def evaluate(model, dataloader, eval_nmi=True, recall_list=[1, 2, 4, 8]):
     '''
         Evaluation on dataloader
         :param model: embedding model

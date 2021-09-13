@@ -35,15 +35,16 @@ def hard_potential(sim_dict, cls_dict, current_t, rolling_t=5, ts_sim=0.5, ts_ra
 
 
 if __name__ == '__main__':
-    data_name = 'logo2k'
+    data_name = 'cub'
     with open('./log/{}_{}_trainval_2048_0_ip.json'.format(data_name, data_name), 'rt') as handle:
         sim_dict = json.load(handle)
     with open('./log/{}_{}_trainval_2048_0_cls.json'.format(data_name, data_name), 'rt') as handle:
         cls_dict = json.load(handle)
 
-    for t in range(10, 40, 5):
+    for t in range(20, 40, 10):
         update, indices = hard_potential(sim_dict=sim_dict, cls_dict=cls_dict,
                                          current_t=t, rolling_t=5, ts_sim=0.3)
         print("Epoch {}, update is {}, number of classes need to update is {}".format(t, update,
                                                                                       len(indices.keys())))
+        print(indices.keys())
         # print(indices)

@@ -63,6 +63,7 @@ def prepare_data(data_name='cub', root='dvi_data_cub200/', save=False):
         batch_size=128,
         shuffle=False,
         num_workers=0,
+
     )
 
     if save:
@@ -147,12 +148,13 @@ if __name__ == '__main__':
     #         plt.plot(range(40), sim_cls1[:, j], linestyle='-', color='k', linewidth=0.5)
     #     fig.savefig(os.path.join(plot_dir, 'line_plot', 'cls{}.png'.format(str(cls))))
 
-    for e in tqdm(range(34, 40)):
+    for e in tqdm(range(40)):
 
         model.load_state_dict(torch.load('{}/Epoch_{}/{}_{}_trainval_2048_0.pth'.format(model_dir, e+1, dataset_name, dataset_name)))
         proxies = torch.load('{}/Epoch_{}/proxy.pth'.format(model_dir, e+1), map_location='cpu')['proxies'].detach()
         proxies = proxies.view(criterion.nb_classes, criterion.max_proxy_per_class, -1)
-        used_proxies = proxies[:, 0, :] # of shape (C, sz_embedding) # FIXME: get only the 1st proxy each class
+        # FIXME: get only the 1st proxy each class
+        used_proxies = proxies[:, 0, :] # of shape (C, sz_embedding)
 
         # embedding, label, *_ = predict_batchwise(model, dl_tr)
         # torch.save(embedding, '{}/Epoch_{}/training_embeddings.pth'.format(model_dir, e+1))
@@ -161,25 +163,27 @@ if __name__ == '__main__':
         label = torch.load('{}/Epoch_{}/training_labels.pth'.format(model_dir, e+1))
         embedding = F.normalize(embedding, dim=-1) # normalize?
         used_proxies = F.normalize(used_proxies, dim=-1)
+        print(embedding.shape)
+        print(used_proxies.shape)
 
         # Parametric Umap model
         encoder = encoder_model()
-        embedder = ParametricUMAP(encoder=encoder, verbose=False)
+        embedder = ParametricUMAP(encoder=encoder, verbose=False, batch_size=256)
 
         if e > 0:
             # Initialize by last visualization model
             embedder.encoder = tf.keras.models.load_model('{}/Epoch_{}/parametric_model/encoder'.format(model_dir, e))
         # Train on all samples and all proxies
         embedder.fit_transform(np.concatenate((embedding.detach().cpu().numpy(), used_proxies.cpu().numpy()), axis=0))
-        # embedder.fit_transform(embedding.detach().cpu().numpy())
         embedder.encoder.save('{}/Epoch_{}/parametric_model/encoder'.format(model_dir, e+1))
-        # embedder.encoder = tf.keras.models.load_model('{}/Epoch_{}/parametric_model/encoder'.format(model_dir, e+1))
+        embedder.encoder = tf.keras.models.load_model('{}/Epoch_{}/parametric_model/encoder'.format(model_dir, e+1))
+
         low_dim_emb = embedder.transform(embedding.detach().cpu().numpy())
         low_dim_proxy = embedder.transform(used_proxies.cpu().numpy())
-
-        # Only visualize first 10 classes
         print(low_dim_emb.shape)
         print(low_dim_proxy.shape)
+
+        # Only visualize first 10 classes
         label_sub = label[label < 10].numpy()
         low_dim_emb = low_dim_emb[label < 10, :]
         low_dim_proxy = low_dim_proxy[:10]
@@ -191,4 +195,3 @@ if __name__ == '__main__':
         plt.scatter(low_dim_proxy[:, 0], low_dim_proxy[:, 1], c=range(10), cmap='tab10', marker=(5,1), edgecolors='black')
         plt.legend(handles=scatter.legend_elements()[0], labels=classes)
         fig.savefig('{}/Epoch_{}.png'.format(plot_dir, e+1))
-        # break
