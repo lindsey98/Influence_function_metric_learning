@@ -1,7 +1,7 @@
 import json
 import numpy as np
 
-def hard_potential(sim_dict, cls_dict, current_t, rolling_t=5, ts_sim=0.5, ts_ratio=[0.4, 0.6]):
+def hard_potential(sim_dict, cls_dict, current_t, rolling_t=5, ts_sim=0.5, ts_ratio=[0.4, 0.8]):
     '''
     Compute the hard indices
     :param sim_dict: Dictionary for inner product similarities
@@ -33,18 +33,24 @@ def hard_potential(sim_dict, cls_dict, current_t, rolling_t=5, ts_sim=0.5, ts_ra
     return update, returned_indices
 
 
-
 if __name__ == '__main__':
-    data_name = 'cub'
+    data_name = 'logo2k'
     with open('./log/{}_{}_trainval_2048_0_ip.json'.format(data_name, data_name), 'rt') as handle:
         sim_dict = json.load(handle)
     with open('./log/{}_{}_trainval_2048_0_cls.json'.format(data_name, data_name), 'rt') as handle:
         cls_dict = json.load(handle)
 
-    for t in range(20, 40, 10):
+    gt_hard = [3, 20, 36, 39, 40, 41, 47, 49, 52, 53, 56, 62, 65, 68, 71, 73, 76, 78, 83, 84, 89, 96, 99,
+              106, 108, 110, 114, 118, 124, 127, 128, 129, 131, 138, 139, 141, 142, 144, 148, 152, 158, 162, 172, 181, 184, 191, 192, 193, 195, 196, 199,
+               ]
+    print(len(gt_hard))
+
+    for t in range(20, 21):
         update, indices = hard_potential(sim_dict=sim_dict, cls_dict=cls_dict,
                                          current_t=t, rolling_t=5, ts_sim=0.3)
         print("Epoch {}, update is {}, number of classes need to update is {}".format(t, update,
                                                                                       len(indices.keys())))
         print(indices.keys())
+        print(len(set(indices.keys()).intersection(set(gt_hard))) / (len(set(gt_hard))))
+        print()
         # print(indices)

@@ -22,6 +22,7 @@ from utils import predict_batchwise, inner_product_sim
 from dataset.base import SubSampler
 from hard_detection import hard_potential
 from torch.utils.data import Dataset, DataLoader
+import torch.nn.functional as F
 
 parser = argparse.ArgumentParser(description='Training ProxyNCA++') 
 parser.add_argument('--dataset', default='cars')
@@ -32,17 +33,18 @@ parser.add_argument('--epochs', default = 40, type=int, dest = 'nb_epochs')
 parser.add_argument('--log-filename', default = 'example')
 parser.add_argument('--workers', default = 16, type=int, dest = 'nb_workers')
 parser.add_argument('--seed', default=0, type=int)
-parser.add_argument('--mode', default='test', choices=['train', 'trainval', 'test'],
-                              help='train with train data or train with trainval')
+parser.add_argument('--mode', default='trainval', choices=['train', 'trainval', 'test'], help='train with train data or train with trainval')
 parser.add_argument('--lr_steps', default=[1000], nargs='+', type=int)
 parser.add_argument('--source_dir', default='', type=str)
 parser.add_argument('--root_dir', default='', type=str)
 parser.add_argument('--eval_nmi', default=False, action='store_true')
 parser.add_argument('--recall', default=[1, 2, 4, 8], nargs='+', type=int)
 parser.add_argument('--init_eval', default=False, action='store_true')
-parser.add_argument('--no_warmup', default=True, action='store_true')
+parser.add_argument('--no_warmup', default=False, action='store_true')
 parser.add_argument('--apex', default=True, action='store_true')
 parser.add_argument('--warmup_k', default=5, type=int)
+parser.add_argument('--dynamic_proxy', default=True, action='store_true')
+parser.add_argument('--proxy_update_schedule', default=[0.5, 0.75], nargs='+', type=float)
 
 args = parser.parse_args()
 
@@ -103,7 +105,7 @@ if __name__ == '__main__':
 
     curr_fn = os.path.basename(args.config).split(".")[0]
 
-    out_results_fn = "log/%s_%s_%s_%d.json" % (args.dataset, curr_fn, args.mode, args.seed)
+    out_results_fn = "log/%s_%s_%s_%d_%s.json" % (args.dataset, curr_fn, args.mode, args.seed, args.dynamic_proxy)
 
     config = utils.load_config(args.config)
 
@@ -136,7 +138,7 @@ if __name__ == '__main__':
     print('Transformation: ', transform_key)
 
 
-    args.log_filename = '%s_%s_%s_%d_%d' % (args.dataset, curr_fn, args.mode, args.sz_embedding,args.seed)
+    args.log_filename = '%s_%s_%s_%d_%d_%s' % (args.dataset, curr_fn, args.mode, args.sz_embedding, args.seed, args.dynamic_proxy)
     if args.mode == 'test':
         args.log_filename = args.log_filename.replace('test', 'trainval')
 
@@ -144,7 +146,7 @@ if __name__ == '__main__':
 
     '''Dataloader'''
     if args.mode == 'trainval':
-        train_results_fn = "log/%s_%s_%s_%d_%d.json" % (args.dataset, curr_fn, 'train', args.sz_embedding, args.seed)
+        train_results_fn = "log/%s_%s_%s_%d_%d_%s.json" % (args.dataset, curr_fn, 'train', args.sz_embedding, args.seed, args.dynamic_proxy)
         if os.path.exists(train_results_fn):
             with open(train_results_fn, 'r') as f:
                 train_results = json.load(f)
@@ -467,24 +469,6 @@ if __name__ == '__main__':
         with open("{0}/{1}_cls.json".format('log', args.log_filename), 'rt') as handle:
             label_recorder = json.load(handle)
 
-        # TODO: add new proxy
-        # print(criterion.proxies)
-#         print(torch.sum(criterion.mask))
-        # print(loss_recorder)
-        # if e >= 5:
-        #     update, bad_indices = hard_potential(loss_recorder, label_recorder, current_t=e, rolling_t=2, ts_ratio=[0.3, 1])
-        #     if update == True:
-        #         for k, v in bad_indices.items():
-        #             sampler = SubSampler(v)
-        #             tr_loader_temp = DataLoader(tr_dataset, batch_size=64, shuffle=False, sampler=sampler, drop_last=False)
-        #             feature_emb =  predict_batchwise(model, tr_loader_temp)[0] # shape (N, nz_embedding)
-        #             centroid_emb = torch.mean(feature_emb, dim=0)
-        #             criterion.add_proxy(k, centroid_emb.to(criterion.proxies.device))
-        #         print(criterion.proxies)
-        #         print(torch.sum(criterion.mask))
-
-        # exit()
-
         # lr decay
         if args.mode == 'train':
             curr_lr = opt.param_groups[0]['lr']
@@ -585,8 +569,28 @@ if __name__ == '__main__':
             logging.info('Best val r1: %s', str(best_val_r1))
             logging.info(str(lr_steps))
 
+        # TODO: add new proxy
+        if args.dynamic_proxy:
+            update_epoch = [int(x * args.nb_epochs) for x in args.proxy_update_schedule]
+            if e in update_epoch:
+                update, bad_indices = hard_potential(loss_recorder, label_recorder, current_t=e,
+                                                     # rolling_t=1,
+                                                     rolling_t=5,
+                                                     ts_sim=0.3,
+                                                     # ts_ratio=[0.4, 1],
+                                                     ) #FIXME: rolling_t, ts_ratio
+                if update == True:
+                    for k, v in bad_indices.items():
+                        sampler = SubSampler(v)
+                        tr_loader_temp = DataLoader(tr_dataset, batch_size=64, shuffle=False, sampler=sampler,
+                                                    drop_last=False)
+                        feature_emb = predict_batchwise(model, tr_loader_temp)[0]  # shape (N, nz_embedding)
+                        centroid_emb = F.normalize(torch.mean(feature_emb, dim=0), p=2, dim=-1)
+                        criterion.add_proxy(k, centroid_emb.to(criterion.proxies.device))
+                        print('Class {} update no. proxies to be {}'.format(k, criterion.current_proxy[k]))
+
         #TODO: this is for umap visualization
-        save_dir = 'dvi_data_{}/ResNet_2048_Model'.format(args.dataset)
+        save_dir = 'dvi_data_{}_{}/ResNet_2048_Model'.format(args.dataset, args.dynamic_proxy)
         os.makedirs('{}/Epoch_{}'.format(save_dir, e+1), exist_ok=True)
         with open('{}/Epoch_{}/index.json'.format(save_dir, e + 1), 'wt') as handle:
             handle.write(json.dumps(list(range(len(dl_tr.dataset)))))
