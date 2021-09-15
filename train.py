@@ -23,6 +23,7 @@ from dataset.base import SubSampler
 from hard_detection import hard_potential
 from torch.utils.data import Dataset, DataLoader
 import torch.nn.functional as F
+os.environ["CUDA_VISIBLE_DEVICES"]="1,0"
 
 parser = argparse.ArgumentParser(description='Training ProxyNCA++') 
 parser.add_argument('--dataset', default='cars')
@@ -498,7 +499,6 @@ if __name__ == '__main__':
 
         # save proxy-similarity and class labels
         train_embs, train_cls, *_ = predict_batchwise(model, dl_tr_noshuffle)
-        # FIXME: release mask
         cached_sim, cached_cls = inner_product_sim(X=train_embs, P=criterion.proxies, T=train_cls,
                                                    mask=criterion.mask,
                                                    nb_classes=criterion.nb_classes,
@@ -573,12 +573,13 @@ if __name__ == '__main__':
         if args.dynamic_proxy:
             update_epoch = [int(x * args.nb_epochs) for x in args.proxy_update_schedule]
             if e in update_epoch:
-                update, bad_indices = hard_potential(loss_recorder, label_recorder, current_t=e,
-                                                     # rolling_t=1,
+                update, bad_indices = hard_potential(loss_recorder,
+                                                     label_recorder,
+                                                     current_t=e,
                                                      rolling_t=5,
-                                                     ts_sim=0.3,
-                                                     # ts_ratio=[0.4, 1],
-                                                     ) #FIXME: rolling_t, ts_ratio
+                                                     ts_sim = 0.5, # larger ts_sim catches more hard examples
+                                                     ts_ratio=[0.4, 1], # higher lower bound catches less hard examples
+                                                     ) #FIXME: rolling_t=5 is ok, you need to adjust ts_ratio, ts_sim
                 if update == True:
                     for k, v in bad_indices.items():
                         sampler = SubSampler(v)
@@ -587,9 +588,9 @@ if __name__ == '__main__':
                         feature_emb = predict_batchwise(model, tr_loader_temp)[0]  # shape (N, nz_embedding)
                         centroid_emb = F.normalize(torch.mean(feature_emb, dim=0), p=2, dim=-1)
                         criterion.add_proxy(k, centroid_emb.to(criterion.proxies.device))
-                        print('Class {} update no. proxies to be {}'.format(k, criterion.current_proxy[k]))
+                        logging.info('Class {} update no. proxies to be {}'.format(k, criterion.current_proxy[k]))
 
-        #TODO: this is for umap visualization
+        #TODO: this is for umap visualization -- save intermediate models and proxies
         save_dir = 'dvi_data_{}_{}/ResNet_2048_Model'.format(args.dataset, args.dynamic_proxy)
         os.makedirs('{}/Epoch_{}'.format(save_dir, e+1), exist_ok=True)
         with open('{}/Epoch_{}/index.json'.format(save_dir, e + 1), 'wt') as handle:
