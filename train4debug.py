@@ -63,6 +63,8 @@ if __name__ == '__main__':
         shuffle=False, # TODO: disable shuffling for debugging purpose
     )
 
+    # v = [0, 1, 2, 3, 4, 5, 6, 7]
+    # sampler = SubSampler(v)
     # training dataloader without shuffling and without transformation
     dl_tr_noshuffle = torch.utils.data.DataLoader(
             dataset=dataset.load(
@@ -78,6 +80,7 @@ if __name__ == '__main__':
             num_workers = 0,
             shuffle=False,
             batch_size=64,
+            # sampler=sampler,
     )
     print('Length of dataset: ', len(dl_tr.dataset))
     print('Length of dataset: ', len(dl_tr_noshuffle.dataset))
@@ -133,6 +136,7 @@ if __name__ == '__main__':
     for e in range(0, 100): # train for 5 epochs for example
         losses_per_epoch = []
         for ct, (x, y, indices) in tqdm(enumerate(dl_tr)):
+            print(indices)
             # visited_indices.extend(indices.detach().cpu().numpy())
             # x = x.cuda()
             # m = model(x)
@@ -147,17 +151,17 @@ if __name__ == '__main__':
             # losses_per_epoch.append(loss.data.cpu().numpy())
 
             # save proxy-similarity and class labels
-            train_embs, train_cls, *_ = predict_batchwise(model, dl_tr_noshuffle)
-            # FIXME: release mask
-            cached_sim, cached_cls = inner_product_sim(X=train_embs, P=criterion.proxies, T=train_cls,
-                                                       mask=criterion.mask,
-                                                       nb_classes=criterion.nb_classes,
-                                                       max_proxy_per_class=criterion.max_proxy_per_class)
-            print(cached_sim)
-            print(cached_cls)
+            # train_embs, train_cls, *_ = predict_batchwise(model, dl_tr_noshuffle)
+            # # FIXME: release mask
+            # cached_sim, cached_cls = inner_product_sim(X=train_embs, P=criterion.proxies, T=train_cls,
+            #                                            mask=criterion.mask,
+            #                                            nb_classes=criterion.nb_classes,
+            #                                            max_proxy_per_class=criterion.max_proxy_per_class)
+            # print(cached_sim)
+            # print(cached_cls)
             # print(loss) # you can print out the loss
             # break # set breakpoint here to only run on first 1st batch
-        break
+        # break
 
         # losses.append(np.mean(losses_per_epoch))
         # print(opt)

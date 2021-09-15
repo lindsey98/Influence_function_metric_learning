@@ -551,10 +551,23 @@ if __name__ == '__main__':
                 if update == True:
                     for k, v in bad_indices.items():
                         sampler = SubSampler(v)
-                        tr_loader_temp = DataLoader(tr_dataset, batch_size=64, shuffle=False, sampler=sampler,
-                                                    drop_last=False)
+                        tr_loader_temp = DataLoader(
+                                            dataset=dataset.load(
+                                                        name=args.dataset,
+                                                        root=dataset_config['dataset'][args.dataset]['root'],
+                                                        source=dataset_config['dataset'][args.dataset]['source'],
+                                                        classes=dataset_config['dataset'][args.dataset]['classes']['trainval'],
+                                                        transform=dataset.utils.make_transform(
+                                                            **dataset_config[transform_key],
+                                                            is_train=False
+                                                      )
+                                                   ),
+                                            batch_size=64,
+                                            shuffle=False,
+                                            sampler=sampler,
+                                            drop_last=False)
                         feature_emb = predict_batchwise(model, tr_loader_temp)[0]  # shape (N, nz_embedding)
-                        centroid_emb = F.normalize(torch.mean(feature_emb, dim=0), p=2, dim=-1)
+                        centroid_emb = F.normalize(torch.mean(feature_emb, dim=0), p=2, dim=-1) # shape (nz_embedding,)
                         criterion.add_proxy(k, centroid_emb.to(criterion.proxies.device))
                         logging.info('Class {} update no. proxies to be {}'.format(k, criterion.current_proxy[k]))
 
