@@ -234,3 +234,44 @@ def inner_product_sim(X: torch.Tensor, P: torch.nn.Parameter, T: torch.Tensor,
     L_IP = IP_gt[torch.arange(IP_gt.shape[0]), max_indices]
 
     return L_IP.detach().cpu().numpy(), T_copy.detach().cpu().numpy()
+
+@torch.no_grad()
+def get_centers(dl_tr, model, sz_embedding):
+    '''
+        Compute centroid for each class
+        :param dl_tr: data loader
+        :param model: embedding model
+        :param sz_embedding: size of embedding
+        :return c_centers: class centers of shape (C, sz_embedding)
+    '''
+    c_centers = torch.zeros(dl_tr.dataset.nb_classes(), sz_embedding).cuda()
+    n_centers = torch.zeros(dl_tr.dataset.nb_classes()).cuda()
+    for ct, (x, y, _) in enumerate(dl_tr):
+        with torch.no_grad():
+            m = model(x.cuda())
+        for ix in range(m.size(0)):
+            c_centers[y] += m[ix]
+            n_centers[y] += 1
+
+    for ix in range(n_centers.size(0)):
+        c_centers[ix] = c_centers[ix] / n_centers[ix]
+
+    return c_centers
+
+
+def batch_lbl_stats(y):
+    '''
+        Get statistics on label distribution
+        :param y: torch.Tensor of shape (N,)
+        :return kk_c: count of each class of shape (C,)
+    '''
+    print(torch.unique(y))
+    kk = torch.unique(y)
+    kk_c = torch.zeros(kk.size(0))
+    for kx in range(kk.size(0)):
+        for jx in range(y.size(0)):
+            if y[jx] == kk[kx]:
+                kk_c[kx] += 1
+
+    return kk_c
+

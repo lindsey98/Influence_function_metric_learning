@@ -49,37 +49,6 @@ parser.add_argument('--proxy_update_schedule', default=[0.5, 0.75], nargs='+', t
 
 args = parser.parse_args()
 
-
-def batch_lbl_stats(y):
-    print(torch.unique(y))
-    kk = torch.unique(y)
-    kk_c = torch.zeros(kk.size(0))
-    for kx in range(kk.size(0)):
-        for jx in range(y.size(0)):
-            if y[jx] == kk[kx]:
-                kk_c[kx] += 1
-
-
-def get_centers(dl_tr):
-    '''
-    Compute centroid for each class
-    :param dl_tr: data loader
-    '''
-    c_centers = torch.zeros(dl_tr.dataset.nb_classes(), args.sz_embedding).cuda()
-    n_centers = torch.zeros(dl_tr.dataset.nb_classes()).cuda()
-    for ct, (x, y, _) in enumerate(dl_tr):
-        with torch.no_grad():
-            m = model(x.cuda())
-        for ix in range(m.size(0)):
-            c_centers[y] += m[ix]
-            n_centers[y] += 1
-
-    for ix in range(n_centers.size(0)):
-        c_centers[ix] = c_centers[ix] / n_centers[ix]
-
-    return c_centers
-
-
 def save_best_checkpoint(model):
     torch.save(model.state_dict(), 'results/' + args.log_filename + '.pt')
 
@@ -126,7 +95,6 @@ if __name__ == '__main__':
         elif 'cub' in args.dataset or 'cars' in args.dataset:
             args.eval_nmi = True
 
-
     args.nb_epochs = config['nb_epochs']
     args.sz_batch = config['sz_batch']
     args.sz_embedding = config['sz_embedding']
@@ -137,7 +105,6 @@ if __name__ == '__main__':
     if 'transform_key' in config.keys():
         transform_key = config['transform_key']
     print('Transformation: ', transform_key)
-
 
     args.log_filename = '%s_%s_%s_%d_%d_%s' % (args.dataset, curr_fn, args.mode, args.sz_embedding, args.seed, args.dynamic_proxy)
     if args.mode == 'test':
@@ -432,8 +399,9 @@ if __name__ == '__main__':
     prev_lr = opt.param_groups[0]['lr']
     lr_steps = []
 
-    print('Number of training: ', len(dl_tr.dataset))
-    print('Number of testing: ', len(dl_ev.dataset))
+    logging.info('Number of training: {}'.format(len(dl_tr.dataset)))
+    logging.info('Number of original training: {}'.format(len(dl_tr_noshuffle.dataset)))
+    logging.info('Number of testing: {}'.format(len(dl_ev.dataset)))
 
     '''Warmup training'''
     if not args.no_warmup:
@@ -489,9 +457,9 @@ if __name__ == '__main__':
             loss = criterion(m, indices, y)
             opt.zero_grad()
             loss.backward() # backprop
-            opt.step()
+            torch.nn.utils.clip_grad_value_(model.parameters(), 10) # clip gradient?
+            opt.step() # gradient descent
 
-            torch.nn.utils.clip_grad_value_(model.parameters(), 10)
             losses_per_epoch.append(loss.data.cpu().numpy())
 
         time_per_epoch_2 = time.time()
@@ -569,10 +537,10 @@ if __name__ == '__main__':
             logging.info('Best val r1: %s', str(best_val_r1))
             logging.info(str(lr_steps))
 
-        # TODO: add new proxy
+        # add new proxy
         if args.dynamic_proxy:
-            update_epoch = [int(x * args.nb_epochs) for x in args.proxy_update_schedule]
-            if e in update_epoch:
+            update_epoch_schedule = [int(x * args.nb_epochs) for x in args.proxy_update_schedule]
+            if e in update_epoch_schedule:
                 update, bad_indices = hard_potential(loss_recorder,
                                                      label_recorder,
                                                      current_t=e,
@@ -591,16 +559,16 @@ if __name__ == '__main__':
                         logging.info('Class {} update no. proxies to be {}'.format(k, criterion.current_proxy[k]))
 
         #TODO: this is for umap visualization -- save intermediate models and proxies
-        save_dir = 'dvi_data_{}_{}/ResNet_2048_Model'.format(args.dataset, args.dynamic_proxy)
+        save_dir = 'dvi_data_{}_{}/ResNet_{}_Model'.format(args.dataset, args.dynamic_proxy, str(args.sz_embedding))
         os.makedirs('{}/Epoch_{}'.format(save_dir, e+1), exist_ok=True)
         with open('{}/Epoch_{}/index.json'.format(save_dir, e + 1), 'wt') as handle:
-            handle.write(json.dumps(list(range(len(dl_tr.dataset)))))
-        torch.save(model.state_dict(), '{}/Epoch_{}/{}_{}_trainval_2048_0.pth'.format(save_dir, e+1, args.dataset, args.dataset))
+            handle.write(json.dumps(list(range(len(dl_tr_noshuffle.dataset)))))
+        torch.save(model.state_dict(), '{}/Epoch_{}/{}_{}_{}_{}_{}.pth'.format(save_dir, e+1, args.dataset, args.dataset, args.mode, str(args.sz_embedding), str(args.seed)))
         torch.save({"proxies": criterion.proxies, "mask": criterion.mask}, '{}/Epoch_{}/proxy.pth'.format(save_dir, e+1))
         ######################################################################################
 
         if args.mode == 'trainval':
-            scheduler.step(e)
+            scheduler.step(e) # adjust learning rate
 
     if args.mode == 'trainval':
         save_best_checkpoint(model)
