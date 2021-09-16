@@ -21,7 +21,7 @@ from tqdm import tqdm
 from utils import JSONEncoder, json_dumps
 from utils import predict_batchwise, inner_product_sim
 from dataset.base import SubSampler
-from hard_detection import hard_potential
+from hard_detection import hard_potential, split_potential
 from torch.utils.data import Dataset, DataLoader
 
 
@@ -136,23 +136,19 @@ if __name__ == '__main__':
     for e in range(0, 100): # train for 5 epochs for example
         losses_per_epoch = []
         for ct, (x, y, indices) in tqdm(enumerate(dl_tr)):
-            print(indices)
-            # visited_indices.extend(indices.detach().cpu().numpy())
-            # x = x.cuda()
-            # m = model(x)
+            # print(indices)
+            visited_indices.extend(indices.detach().cpu().numpy())
+            x = x.cuda()
+            m = model(x)
             # FIXME: loss not improving
-            # loss = criterion(m, indices, y.cuda())
-            # loss = criterion(m, y.cuda())
+            loss = criterion(m, indices, y.cuda())
 
-            # opt.zero_grad()
-            # loss.backward()
-            # opt.step()
+            opt.zero_grad()
+            loss.backward()
+            opt.step()
 
-            # losses_per_epoch.append(loss.data.cpu().numpy())
+            losses_per_epoch.append(loss.data.cpu().numpy())
 
-            # save proxy-similarity and class labels
-            # train_embs, train_cls, *_ = predict_batchwise(model, dl_tr_noshuffle)
-            # # FIXME: release mask
             # cached_sim, cached_cls = inner_product_sim(X=train_embs, P=criterion.proxies, T=train_cls,
             #                                            mask=criterion.mask,
             #                                            nb_classes=criterion.nb_classes,
@@ -172,5 +168,11 @@ if __name__ == '__main__':
         #     )
         # )
 
-    print(set(visited_indices))
+        # save proxy-similarity and class labels
+        train_embs, train_cls, *_ = predict_batchwise(model, dl_tr_noshuffle)
+        count_proxy = torch.sum(criterion.mask, -1).detach().cpu().numpy()
+        update, bad_indices = split_potential(train_embs.detach().cpu().numpy(), train_cls.detach().cpu().numpy(),
+                                              count_proxy)
+        print(update, bad_indices)
+    # print(set(visited_indices))
     # print(set(range(len(dl_tr.dataset))) - )
