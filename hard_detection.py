@@ -9,14 +9,14 @@ from parametric_umap import *
 
 def hard_potential(sim_dict, cls_dict, current_t, rolling_t=5, ts_sim=0.5, ts_ratio=[0.4, 1]):
     '''
-    Compute the hard indices
-    :param sim_dict: Dictionary for inner product similarities
-    :param cls_dict: Dictionary for class labels
-    :param current_t: current epoch
-    :param rolling_t: number of previous rolling epochs
-    :param ts_sim: threshold to determine similarity is high or not
-    :param ts_ratio: lower/upper threshold to decide whether hard examples are prevalent
-    :param len_training: number of training data
+        Compute the hard indices
+        :param sim_dict: Dictionary for inner product similarities
+        :param cls_dict: Dictionary for class labels
+        :param current_t: current epoch
+        :param rolling_t: number of previous rolling epochs
+        :param ts_sim: threshold to determine similarity is high or not
+        :param ts_ratio: lower/upper threshold to decide whether hard examples are prevalent
+        :param len_training: number of training data
     '''
 
     update = False
@@ -57,31 +57,32 @@ def hard_potential(sim_dict, cls_dict, current_t, rolling_t=5, ts_sim=0.5, ts_ra
 
 def FullReduceTest(embedding, n_cluster, significance_level=0.001):
     '''
-        Full Reduced Model Test H0: n_cluster-1 centers is sufficient
-                                H1: need to have n_cluster centers
+        Full Reduced Model Test H0: k-1 centers is sufficient
+                                H1: need to have k centers
     '''
     assert n_cluster > 1
+    N = len(embedding)
+    k = n_cluster
     significance_thr = scipy.stats.f.ppf(q=1-significance_level,
-                                         dfn=1,
-                                         dfd=(len(embedding) - n_cluster)) # critical value @ significance level 0.05
-    # for n_cluster
-    clustering = KMeans(n_cluster).fit(embedding)
-    WSS = clustering.inertia_  # within-SS
-    MSW = WSS / (len(embedding) - n_cluster)  # mean-WSS
-    if MSW == 0:
+                                         dfn=1, dfd=(N-k)) # critical value @ significance level 0.05
+    # full model has k groups
+    clustering = KMeans(k).fit(embedding)
+    WSS = clustering.inertia_  # within-SS or SSE
+    MSW = WSS / (N-k)  # mean-WSS
+    if MSW == 0: # if zero within-SS, duplicate data and perfect clustering
         return 0.0, significance_thr, False
 
-    # for n_cluster - 1
-    if n_cluster - 1 == 1:
-        WSS_old = np.sum((embedding - embedding.mean(0)) ** 2)
+    # reduced model has k-1 groups
+    if k-1 == 1:
+        WSS_old = np.sum((embedding - embedding.mean(0)) ** 2) # if only 1 cluster, then WSS = TSS
     else:
-        clustering = KMeans(n_cluster-1).fit(embedding)
-        WSS_old = clustering.inertia_  # within-SS
+        clustering = KMeans(k-1).fit(embedding)
+        WSS_old = clustering.inertia_  # within-SS or SSE
 
     F = ((WSS_old - WSS) / 1) / MSW
     return F, significance_thr, F > significance_thr
 
-def split_potential(embeddings:np.ndarray, labels:np.ndarray, no_proxies:np.ndarray):
+def split_potential(embeddings:np.ndarray, labels:np.ndarray, no_proxies:np.ndarray, significance_level=0.001):
     '''
         Compute cluster spliting potential by significance test on number of proxies
         :param embeddings: of shape (N, sz_embedding)
@@ -95,7 +96,7 @@ def split_potential(embeddings:np.ndarray, labels:np.ndarray, no_proxies:np.ndar
         indices_cls = np.where(np.array(labels == cls))[0]
         embedding_cls = embeddings[indices_cls]
         count_proxy = int(no_proxies[cls])
-        _, _, significant = FullReduceTest(embedding_cls, count_proxy + 1)
+        _, _, significant = FullReduceTest(embedding_cls, count_proxy + 1, significance_level)
         if significant:
             update = True
             returned_indices[cls] = indices_cls
@@ -103,6 +104,7 @@ def split_potential(embeddings:np.ndarray, labels:np.ndarray, no_proxies:np.ndar
     return update, returned_indices
 
 if __name__ == '__main__':
+
     data_name = 'logo2k'
     # with open('./log/{}_{}_trainval_2048_0_True_ip.json'.format(data_name, data_name), 'rt') as handle:
     #     sim_dict = json.load(handle)
@@ -138,9 +140,9 @@ if __name__ == '__main__':
         model_dir = 'dvi_data_{}_{}_Ftest/ResNet_2048_Model'.format('logo2k', 'True')
         model.load_state_dict(torch.load('{}/Epoch_{}/{}_{}_trainval_2048_0.pth'.format(model_dir, t, 'logo2k', 'logo2k')))
 
-        embedding, label, *_ = predict_batchwise(model, dl_tr)
-        torch.save(embedding, '{}/Epoch_{}/training_embeddings.pth'.format(model_dir, t))
-        torch.save(label, '{}/Epoch_{}/training_labels.pth'.format(model_dir, t))
+        # embedding, label, *_ = predict_batchwise(model, dl_tr)
+        # torch.save(embedding, '{}/Epoch_{}/training_embeddings.pth'.format(model_dir, t))
+        # torch.save(label, '{}/Epoch_{}/training_labels.pth'.format(model_dir, t))
 
         embedding = torch.load('{}/Epoch_{}/training_embeddings.pth'.format(model_dir, t)).detach().cpu().numpy()
         label = torch.load('{}/Epoch_{}/training_labels.pth'.format(model_dir, t)).detach().cpu().numpy()
@@ -155,6 +157,6 @@ if __name__ == '__main__':
         # print(clustering_tradeoff(embedding_sub, n_cluster=2))
         # print(clustering_tradeoff(embedding_sub, n_cluster=3))
         # print(clustering_tradeoff(embedding_sub, n_cluster=4))
-        update, indices = split_potential(embedding, label, count_proxy)
+        update, indices = split_potential(embedding, label, count_proxy, 0.005)
         print("Epoch {}, update is {}, number of classes need to update is {}".format(t, update, len(indices.keys())))
         print(indices.keys())

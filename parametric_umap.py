@@ -20,10 +20,10 @@ os.environ['CUDA_VISIBLE_DEVICES'] = "1,0"
 
 def prepare_data(data_name='cub', root='dvi_data_cub200/', save=False):
     '''
-    Prepare dataloader
-    :param data_name: dataset used
-    :param root:root dir to save data
-    :param save: if save is True, save data
+        Prepare dataloader
+        :param data_name: dataset used
+        :param root:root dir to save data
+        :param save: if save is True, save data
     '''
     dataset_config = utils.load_config('dataset/config.json')
 
@@ -86,8 +86,8 @@ def prepare_data(data_name='cub', root='dvi_data_cub200/', save=False):
 
 def encoder_model(n_components=2):
     '''
-    Customized encoder
-    :param n_components: low dimensional projection dimensions
+        Customized encoder
+        :param n_components: low dimensional projection dimensions
     '''
     encoder = tf.keras.Sequential([
             tf.keras.layers.Dense(units=256, activation="relu"),
@@ -100,13 +100,13 @@ if __name__ == '__main__':
 
     dataset_name = 'logo2k'
     dynamic_proxy = True
-    os.makedirs('dvi_data_{}_{}/'.format(dataset_name, dynamic_proxy), exist_ok=True)
-    os.makedirs(os.path.join('dvi_data_{}_{}/'.format(dataset_name, dynamic_proxy), 'Training_data'), exist_ok=True)
-    os.makedirs(os.path.join('dvi_data_{}_{}/'.format(dataset_name, dynamic_proxy), 'Testing_data'), exist_ok=True)
-    os.makedirs('dvi_data_{}_{}/resnet_2048_umap_plots/'.format(dataset_name, dynamic_proxy), exist_ok=True)
+    os.makedirs('dvi_data_{}_{}_Ftest/'.format(dataset_name, dynamic_proxy), exist_ok=True)
+    os.makedirs(os.path.join('dvi_data_{}_{}_Ftest/'.format(dataset_name, dynamic_proxy), 'Training_data'), exist_ok=True)
+    os.makedirs(os.path.join('dvi_data_{}_{}_Ftest/'.format(dataset_name, dynamic_proxy), 'Testing_data'), exist_ok=True)
+    os.makedirs('dvi_data_{}_{}_Ftest/resnet_2048_umap_plots/'.format(dataset_name, dynamic_proxy), exist_ok=True)
 
-    model_dir = 'dvi_data_{}_{}/ResNet_2048_Model'.format(dataset_name, dynamic_proxy)
-    plot_dir = 'dvi_data_{}_{}/resnet_2048_umap_plots'.format(dataset_name, dynamic_proxy)
+    model_dir = 'dvi_data_{}_{}_Ftest/ResNet_2048_Model'.format(dataset_name, dynamic_proxy)
+    plot_dir = 'dvi_data_{}_{}_Ftest/resnet_2048_umap_plots'.format(dataset_name, dynamic_proxy)
     sz_embedding = 2048
 
     os.makedirs(plot_dir, exist_ok=True)
@@ -123,10 +123,9 @@ if __name__ == '__main__':
 
     # load loss
     # FIXME: should save the whole criterion class because mask might be updating
-    criterion = ProxyNCA_prob(
-        nb_classes = dl_tr.dataset.nb_classes(),
-        sz_embed = sz_embedding,
-        scale=3)
+    criterion = ProxyNCA_prob(nb_classes = dl_tr.dataset.nb_classes(),
+                              sz_embed = sz_embedding,
+                              scale=3)
 
     with open("{0}/{1}_ip.json".format('log', '{}_{}_trainval_2048_0_{}'.format(dataset_name, dataset_name, dynamic_proxy)), 'rt') as handle:
         cache_sim = json.load(handle)
@@ -149,10 +148,10 @@ if __name__ == '__main__':
     #         plt.plot(range(40), sim_cls1[:, j], linestyle='-', color='k', linewidth=0.5)
     #     fig.savefig(os.path.join(plot_dir, 'line_plot', 'cls{}.png'.format(str(cls))))
 
-    for i in range(1, 10):
-        subclasses = np.asarray(list(range(10*(i-1), 10*i)))
-        # subclasses = np.asarray([18, 27, 36, 42, 52, 55, 68, 82, 87, 96])
-        for e in tqdm([20]):
+    for i in range(1, 2):
+        # subclasses = np.asarray(list(range(10*(i-1), 10*i)))
+        subclasses = np.asarray([1, 11, 21, 23, 25, 26, 44, 46, 49, 50])
+        for e in tqdm([0, 9, 19, 20, 29, 30, 39]):
 
             model.load_state_dict(torch.load('{}/Epoch_{}/{}_{}_trainval_2048_0.pth'.format(model_dir, e+1, dataset_name, dataset_name)))
             proxies = torch.load('{}/Epoch_{}/proxy.pth'.format(model_dir, e+1), map_location='cpu')['proxies'].detach()
@@ -164,11 +163,11 @@ if __name__ == '__main__':
                 used_proxies.append(proxies[m, :int(n)]) # of shape (C, sz_embedding)
             stacked_proxies = torch.cat(used_proxies, dim=0)
 
-            # embedding, label, *_ = predict_batchwise(model, dl_tr)
-            # torch.save(embedding, '{}/Epoch_{}/training_embeddings.pth'.format(model_dir, e+1))
-            # torch.save(label, '{}/Epoch_{}/training_labels.pth'.format(model_dir, e+1))
-            embedding = torch.load('{}/Epoch_{}/training_embeddings.pth'.format(model_dir, e+1))
-            label = torch.load('{}/Epoch_{}/training_labels.pth'.format(model_dir, e+1))
+            embedding, label, *_ = predict_batchwise(model, dl_tr)
+            torch.save(embedding, '{}/Epoch_{}/training_embeddings.pth'.format(model_dir, e+1))
+            torch.save(label, '{}/Epoch_{}/training_labels.pth'.format(model_dir, e+1))
+            # embedding = torch.load('{}/Epoch_{}/training_embeddings.pth'.format(model_dir, e+1))
+            # label = torch.load('{}/Epoch_{}/training_labels.pth'.format(model_dir, e+1))
             embedding, stacked_proxies = F.normalize(embedding, dim=-1), F.normalize(stacked_proxies, dim=-1) # normalize?
             print(embedding.shape, stacked_proxies.shape)
 
@@ -184,8 +183,8 @@ if __name__ == '__main__':
                     print(error)
                     pass
             # Train on all samples and all proxies
-            # embedder.fit_transform(np.concatenate((embedding.detach().cpu().numpy(), stacked_proxies.cpu().numpy()), axis=0))
-            # embedder.encoder.save('{}/Epoch_{}/parametric_model/encoder'.format(model_dir, e+1))
+            embedder.fit_transform(np.concatenate((embedding.detach().cpu().numpy(), stacked_proxies.cpu().numpy()), axis=0))
+            embedder.encoder.save('{}/Epoch_{}/parametric_model/encoder'.format(model_dir, e+1))
             embedder.encoder = tf.keras.models.load_model('{}/Epoch_{}/parametric_model/encoder'.format(model_dir, e+1))
 
             low_dim_emb = embedder.transform(embedding.detach().cpu().numpy())

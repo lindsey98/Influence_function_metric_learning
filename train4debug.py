@@ -29,7 +29,9 @@ if __name__ == '__main__':
     batch_size = 32
     num_cls_per_batch = 8
     sz_embedding = 2048
-    config = utils.load_config('config/cub.json')
+    config = utils.load_config('config/logo2k.json')
+    print(config['ts_sim'])
+    print(config['ts_ratio'])
 
     # set random seed for all gpus
     random.seed(0)
@@ -131,23 +133,23 @@ if __name__ == '__main__':
     )
 
     # training!
-    losses = []
-    visited_indices = []
-    for e in range(0, 100): # train for 5 epochs for example
-        losses_per_epoch = []
-        for ct, (x, y, indices) in tqdm(enumerate(dl_tr)):
-            # print(indices)
-            visited_indices.extend(indices.detach().cpu().numpy())
-            x = x.cuda()
-            m = model(x)
-            # FIXME: loss not improving
-            loss = criterion(m, indices, y.cuda())
-
-            opt.zero_grad()
-            loss.backward()
-            opt.step()
-
-            losses_per_epoch.append(loss.data.cpu().numpy())
+    # losses = []
+    # visited_indices = []
+    # for e in range(0, 100): # train for 5 epochs for example
+    #     losses_per_epoch = []
+    #     for ct, (x, y, indices) in tqdm(enumerate(dl_tr)):
+    #         # print(indices)
+    #         visited_indices.extend(indices.detach().cpu().numpy())
+    #         x = x.cuda()
+    #         m = model(x)
+    #         # FIXME: loss not improving
+    #         loss = criterion(m, indices, y.cuda())
+    #
+    #         opt.zero_grad()
+    #         loss.backward()
+    #         opt.step()
+    #
+    #         losses_per_epoch.append(loss.data.cpu().numpy())
 
             # cached_sim, cached_cls = inner_product_sim(X=train_embs, P=criterion.proxies, T=train_cls,
             #                                            mask=criterion.mask,
@@ -169,10 +171,10 @@ if __name__ == '__main__':
         # )
 
         # save proxy-similarity and class labels
-        train_embs, train_cls, *_ = predict_batchwise(model, dl_tr_noshuffle)
-        count_proxy = torch.sum(criterion.mask, -1).detach().cpu().numpy()
-        update, bad_indices = split_potential(train_embs.detach().cpu().numpy(), train_cls.detach().cpu().numpy(),
-                                              count_proxy)
-        print(update, bad_indices)
+        # train_embs, train_cls, *_ = predict_batchwise(model, dl_tr_noshuffle)
+        # count_proxy = torch.sum(criterion.mask, -1).detach().cpu().numpy()
+        # update, bad_indices = split_potential(train_embs.detach().cpu().numpy(), train_cls.detach().cpu().numpy(),
+        #                                       count_proxy)
+        # print(update, bad_indices)
     # print(set(visited_indices))
     # print(set(range(len(dl_tr.dataset))) - )
