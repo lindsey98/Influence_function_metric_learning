@@ -100,14 +100,15 @@ if __name__ == '__main__':
 
     dataset_name = 'logo2k'
     dynamic_proxy = True
+    sz_embedding = 2048
+
     os.makedirs('dvi_data_{}_{}_Ftest/'.format(dataset_name, dynamic_proxy), exist_ok=True)
     os.makedirs(os.path.join('dvi_data_{}_{}_Ftest/'.format(dataset_name, dynamic_proxy), 'Training_data'), exist_ok=True)
     os.makedirs(os.path.join('dvi_data_{}_{}_Ftest/'.format(dataset_name, dynamic_proxy), 'Testing_data'), exist_ok=True)
-    os.makedirs('dvi_data_{}_{}_Ftest/resnet_2048_umap_plots/'.format(dataset_name, dynamic_proxy), exist_ok=True)
+    os.makedirs('dvi_data_{}_{}_Ftest/resnet_{}_umap_plots/'.format(dataset_name, dynamic_proxy, sz_embedding), exist_ok=True)
 
-    model_dir = 'dvi_data_{}_{}_Ftest/ResNet_2048_Model'.format(dataset_name, dynamic_proxy)
-    plot_dir = 'dvi_data_{}_{}_Ftest/resnet_2048_umap_plots'.format(dataset_name, dynamic_proxy)
-    sz_embedding = 2048
+    model_dir = 'dvi_data_{}_{}_Ftest/ResNet_{}_Model'.format(dataset_name, dynamic_proxy, sz_embedding)
+    plot_dir = 'dvi_data_{}_{}_Ftest/resnet_{}_umap_plots'.format(dataset_name, dynamic_proxy, sz_embedding)
 
     os.makedirs(plot_dir, exist_ok=True)
     dl_tr, dl_ev = prepare_data(data_name=dataset_name, root='dvi_data_{}_{}/'.format(dataset_name, dynamic_proxy), save=False)
@@ -127,9 +128,9 @@ if __name__ == '__main__':
                               sz_embed = sz_embedding,
                               scale=3)
 
-    with open("{0}/{1}_ip.json".format('log', '{}_{}_trainval_2048_0_{}'.format(dataset_name, dataset_name, dynamic_proxy)), 'rt') as handle:
+    with open("{0}/{1}_ip.json".format('log', '{}_{}_trainval_{}_0_{}'.format(dataset_name, dataset_name, sz_embedding, dynamic_proxy)), 'rt') as handle:
         cache_sim = json.load(handle)
-    with open("{0}/{1}_cls.json".format('log', '{}_{}_trainval_2048_0_{}'.format(dataset_name, dataset_name, dynamic_proxy)), 'rt') as handle:
+    with open("{0}/{1}_cls.json".format('log', '{}_{}_trainval_{}_0_{}'.format(dataset_name, dataset_name, sz_embedding, dynamic_proxy)), 'rt') as handle:
         cache_label = json.load(handle)
 
     # Line plot which show the trend of inner_prod_sim to nearest ground-truth class's proxy

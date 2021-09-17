@@ -10,13 +10,14 @@ from torch.utils.data import DataLoader
 from typing import Union, List
 import sklearn.preprocessing
 
-def masked_softmax(A):
+def masked_softmax(A, t=1.0):
     '''
         Apply softmax but ignore zeros
         :param A: torch.tensor of shape (N, C)
+        :param t: temperature
         :return A_softmax: masked softmax of A
     '''
-    A_exp = torch.exp(A)
+    A_exp = torch.exp(A*(1/t))
     A_exp = A_exp * (A != 0).float()  # this step masks zero entries
     A_softmax = A_exp / torch.sum(A_exp, dim=-1, keepdim=True)
     return A_softmax
@@ -147,7 +148,7 @@ class ProxyNCA_prob(torch.nn.Module):
 
         D_reshape = D.reshape((X.shape[0], self.nb_classes, self.max_proxy_per_class))  # of shape (N, C, maxP)
         output = D_reshape * self.mask.unsqueeze(0)  # mask unactivated proxies
-        normalize_prob = masked_softmax(-output) # low distance proxy should get higher weight
+        normalize_prob = masked_softmax(-output, t=0.1) # low distance proxy should get higher weight
         D_weighted = torch.sum(normalize_prob * output, dim=-1)  # weighted sum of distance, reduce to shape (N, C)
 
         smoothing_const = 0.0 # smoothing class labels

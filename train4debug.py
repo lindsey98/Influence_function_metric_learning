@@ -133,23 +133,23 @@ if __name__ == '__main__':
     )
 
     # training!
-    # losses = []
-    # visited_indices = []
-    # for e in range(0, 100): # train for 5 epochs for example
-    #     losses_per_epoch = []
-    #     for ct, (x, y, indices) in tqdm(enumerate(dl_tr)):
-    #         # print(indices)
-    #         visited_indices.extend(indices.detach().cpu().numpy())
-    #         x = x.cuda()
-    #         m = model(x)
-    #         # FIXME: loss not improving
-    #         loss = criterion(m, indices, y.cuda())
-    #
-    #         opt.zero_grad()
-    #         loss.backward()
-    #         opt.step()
-    #
-    #         losses_per_epoch.append(loss.data.cpu().numpy())
+    losses = []
+    visited_indices = []
+    for e in range(0, 100): # train for 5 epochs for example
+        losses_per_epoch = []
+        for ct, (x, y, indices) in tqdm(enumerate(dl_tr)):
+            # print(indices)
+            visited_indices.extend(indices.detach().cpu().numpy())
+            x = x.cuda()
+            m = model(x)
+            # FIXME: loss not improving
+            loss = criterion(m, indices, y.cuda())
+
+            opt.zero_grad()
+            loss.backward()
+            opt.step()
+
+            losses_per_epoch.append(loss.data.cpu().numpy())
 
             # cached_sim, cached_cls = inner_product_sim(X=train_embs, P=criterion.proxies, T=train_cls,
             #                                            mask=criterion.mask,

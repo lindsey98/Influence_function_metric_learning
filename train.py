@@ -73,7 +73,7 @@ if __name__ == '__main__':
 
     curr_fn = os.path.basename(args.config).split(".")[0]
 
-    out_results_fn = "log/%s_%s_%s_%d_%s.json" % (args.dataset, curr_fn, args.mode, args.seed, args.dynamic_proxy)
+    out_results_fn = "log/%s_%s_%s_%d_%s_t0.1.json" % (args.dataset, curr_fn, args.mode, args.seed, args.dynamic_proxy)
 
     config = utils.load_config(args.config)
     dataset_config = utils.load_config('dataset/config.json')
@@ -103,7 +103,7 @@ if __name__ == '__main__':
         transform_key = config['transform_key']
     print('Transformation: ', transform_key)
 
-    args.log_filename = '%s_%s_%s_%d_%d_%s' % (args.dataset, curr_fn, args.mode, args.sz_embedding, args.seed, args.dynamic_proxy)
+    args.log_filename = '%s_%s_%s_%d_%d_%s_t0.1' % (args.dataset, curr_fn, args.mode, args.sz_embedding, args.seed, args.dynamic_proxy)
     if args.mode == 'test':
         args.log_filename = args.log_filename.replace('test', 'trainval')
 
@@ -111,7 +111,7 @@ if __name__ == '__main__':
 
     '''Dataloader'''
     if args.mode == 'trainval':
-        train_results_fn = "log/%s_%s_%s_%d_%d_%s.json" % (args.dataset, curr_fn, 'train', args.sz_embedding, args.seed, args.dynamic_proxy)
+        train_results_fn = "log/%s_%s_%s_%d_%d_%s_t0.1.json" % (args.dataset, curr_fn, 'train', args.sz_embedding, args.seed, args.dynamic_proxy)
         if os.path.exists(train_results_fn):
             with open(train_results_fn, 'r') as f:
                 train_results = json.load(f)
@@ -541,9 +541,6 @@ if __name__ == '__main__':
                                                      ts_sim=config['ts_sim'], # larger ts_sim catches more hard examples
                                                      ts_ratio=config['ts_ratio'], # higher lower bound catches less hard examples
                                                      ) #FIXME: rolling_t=5 is ok, you need to adjust ts_ratio, ts_sim
-                # count_proxy = torch.sum(criterion.mask, -1).detach().cpu().numpy()
-                # update, bad_indices = split_potential(train_embs.detach().cpu().numpy(), train_cls.detach().cpu().numpy(), count_proxy)
-
                 if update == True:
                     for k, v in bad_indices.items():
                         sampler = SubSampler(v)
@@ -568,7 +565,7 @@ if __name__ == '__main__':
                         logging.info('Class {} update no. proxies to be {}'.format(k, criterion.current_proxy[k]))
 
         #TODO: this is for umap visualization -- save intermediate models and proxies
-        save_dir = 'dvi_data_{}_{}/ResNet_{}_Model'.format(args.dataset, args.dynamic_proxy, str(args.sz_embedding))
+        save_dir = 'dvi_data_{}_{}_t0.1/ResNet_{}_Model'.format(args.dataset, args.dynamic_proxy, str(args.sz_embedding))
         os.makedirs('{}/Epoch_{}'.format(save_dir, e+1), exist_ok=True)
         with open('{}/Epoch_{}/index.json'.format(save_dir, e + 1), 'wt') as handle:
             handle.write(json.dumps(list(range(len(dl_tr_noshuffle.dataset)))))
