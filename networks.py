@@ -13,6 +13,9 @@ __all__ = ['BNInception', 'bninception',
            'Feat_resnet50_max_n', 'Feat_resnet50_avg_n']
 
 class Feature(nn.Module):
+    '''
+        Feature embedding network
+    '''
     def __init__(self, model='resnet50', pool='avg', use_lnorm=False):
         nn.Module.__init__(self)
         self.model = model
@@ -67,8 +70,6 @@ class Feat_resnet50_avg_n(Feature):
 
 # modify from
 # https://github.com/Cadene/pretrained-models.pytorch/blob/master/pretrainedmodels/models/bninception.py
-
-
 
 pretrained_settings = {
     'bninception': {

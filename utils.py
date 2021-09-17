@@ -74,6 +74,11 @@ def predict_batchwise(model, dataloader):
     return [torch.stack(A[i]) for i in range(len(A))]
 
 def predict_batchwise_inshop(model, dataloader):
+    '''
+        Predict on a batch on InShop dataset
+        :param model:
+        :param dataloader:
+    '''
     # list with N lists, where N = |{image, label, index}|
     model_is_training = model.training
     model.eval()
@@ -157,14 +162,15 @@ def evaluate(model, dataloader, eval_nmi=True, recall_list=[1, 2, 4, 8]):
 
 def evaluate_inshop(model, dl_query, dl_gallery,
         K = [1, 10, 20, 30, 40, 50], with_nmi = False):
+    '''
+        Evaluate on Inshop dataset
+    '''
 
     # calculate embeddings with model and get targets
     X_query, T_query, *_ = predict_batchwise_inshop(
         model, dl_query)
     X_gallery, T_gallery, *_ = predict_batchwise_inshop(
         model, dl_gallery)
-
-    
 
     nb_classes = dl_query.dataset.nb_classes()
 
