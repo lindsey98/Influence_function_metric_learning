@@ -168,7 +168,7 @@ if __name__ == '__main__':
             torch.save(label, '{}/Epoch_{}/training_labels.pth'.format(model_dir, e+1))
             # embedding = torch.load('{}/Epoch_{}/training_embeddings.pth'.format(model_dir, e+1))
             # label = torch.load('{}/Epoch_{}/training_labels.pth'.format(model_dir, e+1))
-            embedding, stacked_proxies = F.normalize(embedding, dim=-1), F.normalize(stacked_proxies, dim=-1) # normalize?
+            embedding, stacked_proxies = F.normalize(embedding, dim=-1), F.normalize(stacked_proxies, dim=-1) # need to normalize, other producing wierd results
             print(embedding.shape, stacked_proxies.shape)
 
             # Parametric Umap model
@@ -187,6 +187,7 @@ if __name__ == '__main__':
             embedder.encoder.save('{}/Epoch_{}/parametric_model/encoder'.format(model_dir, e+1))
             embedder.encoder = tf.keras.models.load_model('{}/Epoch_{}/parametric_model/encoder'.format(model_dir, e+1))
 
+            # transform high dimensional embedding and proxy to low-dimension
             low_dim_emb = embedder.transform(embedding.detach().cpu().numpy())
             low_dim_proxy = []
             for p in used_proxies:
@@ -195,7 +196,7 @@ if __name__ == '__main__':
             print(low_dim_emb.shape)
             print(len(low_dim_proxy))
 
-            # Only visualize first 10 classes
+            # Only visualize subset of 10 classes
             label_sub = label[np.isin(label, subclasses)].numpy()
             label_cmap = {v: k for k, v in enumerate(subclasses)}
             print(label_cmap)
@@ -215,10 +216,10 @@ if __name__ == '__main__':
             scatter = plt.scatter(low_dim_emb[:, 0], low_dim_emb[:, 1],
                                   c=[label_cmap[x] for x in label_sub],
                                   cmap='tab10', s=5)
-            classes = subclasses.tolist()
             plt.scatter(low_dim_proxy_sub[:, 0], low_dim_proxy_sub[:, 1],
                         c=[label_cmap[x] for x in low_dim_proxy_labels],
                         cmap='tab10', marker=(5,1), edgecolors='black')
+            classes = subclasses.tolist()
             plt.legend(handles=scatter.legend_elements()[0], labels=classes)
             os.makedirs('{}/{}th_batch'.format(plot_dir, str(i)), exist_ok=True)
             fig.savefig('{}/{}th_batch/Epoch_{}.png'.format(plot_dir, str(i), e+1))

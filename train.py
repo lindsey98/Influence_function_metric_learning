@@ -538,7 +538,7 @@ if __name__ == '__main__':
                                                      label_recorder,
                                                      current_t=e,
                                                      rolling_t=5,
-                                                     ts_sim = config['ts_sim'], # larger ts_sim catches more hard examples
+                                                     ts_sim=config['ts_sim'], # larger ts_sim catches more hard examples
                                                      ts_ratio=config['ts_ratio'], # higher lower bound catches less hard examples
                                                      ) #FIXME: rolling_t=5 is ok, you need to adjust ts_ratio, ts_sim
                 # count_proxy = torch.sum(criterion.mask, -1).detach().cpu().numpy()

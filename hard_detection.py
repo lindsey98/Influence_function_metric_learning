@@ -37,28 +37,32 @@ def hard_potential(sim_dict, cls_dict, current_t, rolling_t=5, ts_sim=0.5, ts_ra
 
     return update, returned_indices
 
-
-# def ANOVA(embedding, n_cluster, significance_level=0.001):
-#     '''
-#         ANOVA test on H0: mu1 = mu2 = ... muk
-#     '''
-#     assert n_cluster > 1
-#     significance_thr = scipy.stats.f.ppf(q=1-significance_level, dfn=(n_cluster - 1), dfd=(len(embedding) - n_cluster)) # critical value @ significance level 0.05
-#     clustering = KMeans(n_cluster).fit(embedding)
-#     WSS = clustering.inertia_ # within-SS
-#     TSS = np.sum((embedding - embedding.mean(0)) ** 2) # total-SS
-#     BSS = TSS - WSS # between-SS
-#     MSB = BSS / (n_cluster - 1) # mean-BSS
-#     MSW = WSS / (len(embedding) - n_cluster) # mean-WSS
-#     if MSW == 0:
-#         return 0, significance_thr, False
-#     F = MSB / MSW # F-statistics
-#     return F, significance_thr, F > significance_thr
-
-def FullReduceTest(embedding, n_cluster, significance_level=0.001):
+def ANOVA(embedding:np.ndarray, n_cluster:int, significance_level=0.001):
     '''
-        Full Reduced Model Test H0: k-1 centers is sufficient
-                                H1: need to have k centers
+        One-way ANOVA test on H0: u1 = u2 = ...  = uk
+        :param embedding: numpy.ndarray of shape (N, sz_embedding)
+        :param n_cluster: k
+        :param significance_level: test significance level
+    '''
+    assert n_cluster > 1
+    significance_thr = scipy.stats.f.ppf(q=1-significance_level, dfn=(n_cluster - 1), dfd=(len(embedding) - n_cluster)) # critical value @ significance level 0.05
+    clustering = KMeans(n_cluster).fit(embedding)
+    WSS = clustering.inertia_ # within-SS
+    TSS = np.sum((embedding - embedding.mean(0)) ** 2) # total-SS
+    BSS = TSS - WSS # between-SS
+    MSB = BSS / (n_cluster - 1) # mean-BSS
+    MSW = WSS / (len(embedding) - n_cluster) # mean-WSS
+    if MSW == 0:
+        return 0, significance_thr, False
+    F = MSB / MSW # F-statistics
+    return F, significance_thr, F > significance_thr
+
+def FullReduceTest(embedding:np.ndarray, n_cluster:int, significance_level=0.001):
+    '''
+        Full Reduced Model Test H0: k-1 centers is sufficient, H1: need to have k centers
+        :param embedding: numpy.ndarray of shape (N, sz_embedding)
+        :param n_cluster: k
+        :param significance_level: test significance level
     '''
     assert n_cluster > 1
     N = len(embedding)
