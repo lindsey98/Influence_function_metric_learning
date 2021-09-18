@@ -34,7 +34,7 @@ parser.add_argument('--epochs', default = 40, type=int, dest = 'nb_epochs')
 parser.add_argument('--log-filename', default = 'example')
 parser.add_argument('--workers', default = 16, type=int, dest = 'nb_workers')
 parser.add_argument('--seed', default=0, type=int)
-parser.add_argument('--mode', default='trainval', choices=['train', 'trainval', 'test'], help='train with train data or train with trainval')
+parser.add_argument('--mode', default='trainval', choices=['train', 'trainval', 'test', 'testontrain'], help='train with train data or train with trainval')
 parser.add_argument('--lr_steps', default=[1000], nargs='+', type=int)
 parser.add_argument('--source_dir', default='', type=str)
 parser.add_argument('--root_dir', default='', type=str)
@@ -44,7 +44,7 @@ parser.add_argument('--init_eval', default=False, action='store_true')
 parser.add_argument('--no_warmup', default=False, action='store_true')
 parser.add_argument('--apex', default=True, action='store_true')
 parser.add_argument('--warmup_k', default=5, type=int)
-parser.add_argument('--dynamic_proxy', default=False, action='store_true')
+parser.add_argument('--dynamic_proxy', default=True, action='store_true')
 parser.add_argument('--proxy_update_schedule', default=[0.5, 0.75], nargs='+', type=float)
 
 args = parser.parse_args()
@@ -73,6 +73,7 @@ if __name__ == '__main__':
 
     curr_fn = os.path.basename(args.config).split(".")[0]
 
+    # out_results_fn = "log/%s_%s_%s_%d_%s.json" % (args.dataset, curr_fn, args.mode, args.seed, args.dynamic_proxy)
     out_results_fn = "log/%s_%s_%s_%d_%s_t0.1.json" % (args.dataset, curr_fn, args.mode, args.seed, args.dynamic_proxy)
 
     config = utils.load_config(args.config)
@@ -103,6 +104,7 @@ if __name__ == '__main__':
         transform_key = config['transform_key']
     print('Transformation: ', transform_key)
 
+    # args.log_filename = '%s_%s_%s_%d_%d_%s' % (args.dataset, curr_fn, args.mode, args.sz_embedding, args.seed, args.dynamic_proxy)
     args.log_filename = '%s_%s_%s_%d_%d_%s_t0.1' % (args.dataset, curr_fn, args.mode, args.sz_embedding, args.seed, args.dynamic_proxy)
     if args.mode == 'test':
         args.log_filename = args.log_filename.replace('test', 'trainval')
@@ -111,6 +113,7 @@ if __name__ == '__main__':
 
     '''Dataloader'''
     if args.mode == 'trainval':
+        # train_results_fn = "log/%s_%s_%s_%d_%d_%s.json" % (args.dataset, curr_fn, 'train', args.sz_embedding, args.seed, args.dynamic_proxy)
         train_results_fn = "log/%s_%s_%s_%d_%d_%s_t0.1.json" % (args.dataset, curr_fn, 'train', args.sz_embedding, args.seed, args.dynamic_proxy)
         if os.path.exists(train_results_fn):
             with open(train_results_fn, 'r') as f:
@@ -343,6 +346,12 @@ if __name__ == '__main__':
                 utils.evaluate_inshop(model, dl_query, dl_gallery)
             else:
                 utils.evaluate(model, dl_ev, args.eval_nmi, args.recall)
+        exit() # exit the program
+    if args.mode == 'testontrain':
+        with torch.no_grad():
+            logging.info("**Evaluating...(test mode, test on training set)**")
+            model = load_best_checkpoint(model)
+            utils.evaluate(model, dl_tr_noshuffle, args.eval_nmi, args.recall)
         exit() # exit the program
 
     if args.mode == 'train':

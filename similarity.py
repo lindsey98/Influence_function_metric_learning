@@ -46,6 +46,6 @@ def pairwise_distance(a, squared=False):
     )
     pairwise_distances = torch.mul(pairwise_distances, mask_offdiagonals)
 
-    return pairwise_distances
+    return pairwise_distances, inner_prod
 
 

@@ -17,9 +17,10 @@ def masked_softmax(A, t=1.0):
         :param t: temperature
         :return A_softmax: masked softmax of A
     '''
-    A_exp = torch.exp(A*(1/t))
+    A_exp = torch.exp(A)
     A_exp = A_exp * (A != 0).float()  # this step masks zero entries
-    A_softmax = A_exp / torch.sum(A_exp, dim=-1, keepdim=True)
+    temp_A = (A_exp)**(1/t)
+    A_softmax = temp_A / torch.sum(temp_A, dim=-1, keepdim=True)
     return A_softmax
 
 def binarize_and_smooth_labels(T, nb_classes, smoothing_const=0):
@@ -95,7 +96,7 @@ class ProxyNCA_prob(torch.nn.Module):
 
         torch.nn.Module.__init__(self)
         self.max_proxy_per_class = 5  # maximum number of proxies per class
-        self.current_proxy = [1] * nb_classes  # start with single proxy per class
+        self.current_proxy = [2] * nb_classes  # start with single proxy per class
         self.proxies = torch.nn.Parameter(torch.randn(nb_classes * self.max_proxy_per_class, sz_embed) / 8)
         self.mask = torch.zeros((nb_classes, self.max_proxy_per_class), requires_grad=False).to('cuda')
         self.scale = scale  # sqrt(1/Temperature)
@@ -141,14 +142,20 @@ class ProxyNCA_prob(torch.nn.Module):
         X = F.normalize(X, p=2, dim=-1) * temperature
 
         # pairwise distance
-        D = pairwise_distance(
+        D, IP = pairwise_distance(
             torch.cat([X, P]),
             squared=True
-        )[:X.size()[0], X.size()[0]:] # of shape (N, C*maxP)
+        ) # of shape (N, C*maxP)
+        D = D[:X.size()[0], X.size()[0]:]
+        IP = IP[:X.size()[0], X.size()[0]:]
 
         D_reshape = D.reshape((X.shape[0], self.nb_classes, self.max_proxy_per_class))  # of shape (N, C, maxP)
         output = D_reshape * self.mask.unsqueeze(0)  # mask unactivated proxies
-        normalize_prob = masked_softmax(-output, t=0.1) # low distance proxy should get higher weight
+        # normalize_prob_orig = masked_softmax(-output, t=1) # low distance proxy should get higher weight
+        #FIXME: here use inner product to compute intra-class weight
+        output_IP = IP.reshape((X.shape[0], self.nb_classes, self.max_proxy_per_class)) * self.mask.unsqueeze(0)
+        normalize_prob = masked_softmax(output_IP, t=0.1)
+
         D_weighted = torch.sum(normalize_prob * output, dim=-1)  # weighted sum of distance, reduce to shape (N, C)
 
         smoothing_const = 0.0 # smoothing class labels
