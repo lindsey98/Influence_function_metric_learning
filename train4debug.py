@@ -104,6 +104,7 @@ if __name__ == '__main__':
         nb_classes = dl_tr.dataset.nb_classes(),
         sz_embed = sz_embedding,
         len_training = len(dl_tr.dataset),
+        initial_proxy_num=2,
         **config['criterion']['args']
     ).cuda()
 
@@ -143,6 +144,7 @@ if __name__ == '__main__':
             x = x.cuda()
             m = model(x)
             # FIXME: loss not improving
+
             loss = criterion(m, indices, y.cuda())
 
             opt.zero_grad()

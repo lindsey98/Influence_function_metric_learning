@@ -103,23 +103,23 @@ def encoder_model(n_components=2):
 if __name__ == '__main__':
 
     dataset_name = 'logo2k'
-    dynamic_proxy = True
+    dynamic_proxy = False
     sz_embedding = 2048
     presaved = True
     pretrained = True
+    initial_proxy_num = 2
 
-    os.makedirs('dvi_data_{}_{}/'.format(dataset_name, dynamic_proxy), exist_ok=True)
-    os.makedirs(os.path.join('dvi_data_{}_{}/'.format(dataset_name, dynamic_proxy), 'Training_data'), exist_ok=True)
-    os.makedirs(os.path.join('dvi_data_{}_{}/'.format(dataset_name, dynamic_proxy), 'Testing_data'), exist_ok=True)
-    os.makedirs('dvi_data_{}_{}/resnet_{}_umap_plots/'.format(dataset_name, dynamic_proxy, sz_embedding), exist_ok=True)
+    folder = 'dvi_data_{}_{}_t0.1_proxy{}/'.format(dataset_name, dynamic_proxy, initial_proxy_num)
+    os.makedirs(folder, exist_ok=True)
+    os.makedirs(os.path.join(folder, 'Training_data'), exist_ok=True)
+    os.makedirs(os.path.join(folder, 'Testing_data'), exist_ok=True)
+    os.makedirs('{}/resnet_{}_umap_plots/'.format(folder, sz_embedding), exist_ok=True)
 
-    model_dir = 'dvi_data_{}_{}/ResNet_{}_Model'.format(dataset_name, dynamic_proxy, sz_embedding)
-    plot_dir = 'dvi_data_{}_{}/resnet_{}_umap_plots'.format(dataset_name, dynamic_proxy, sz_embedding)
+    model_dir = '{}/ResNet_{}_Model'.format(folder, sz_embedding)
+    plot_dir = '{}/resnet_{}_umap_plots'.format(folder, sz_embedding)
 
     os.makedirs(plot_dir, exist_ok=True)
-    dl_tr, dl_ev = prepare_data(data_name=dataset_name, root='dvi_data_{}_{}/'.format(dataset_name, dynamic_proxy), save=False)
-
-    # exit()
+    dl_tr, dl_ev = prepare_data(data_name=dataset_name, root=folder, save=False)
 
     # load model
     feat = Feat_resnet50_max_n()
@@ -134,7 +134,8 @@ if __name__ == '__main__':
     # FIXME: should save the whole criterion class because mask might be updating
     criterion = ProxyNCA_prob(nb_classes = dl_tr.dataset.nb_classes(),
                               sz_embed = sz_embedding,
-                              scale=3)
+                              scale=3,
+                              initial_proxy_num=initial_proxy_num)
 
     with open("{0}/{1}_ip.json".format('log', '{}_{}_trainval_{}_0_{}'.format(dataset_name, dataset_name, sz_embedding, dynamic_proxy)), 'rt') as handle:
         cache_sim = json.load(handle)
@@ -157,10 +158,11 @@ if __name__ == '__main__':
     #         plt.plot(range(40), sim_cls1[:, j], linestyle='-', color='k', linewidth=0.5)
     #     fig.savefig(os.path.join(plot_dir, 'line_plot', 'cls{}.png'.format(str(cls))))
 
-    for i in range(1, 2):
-        # subclasses = np.asarray(list(range(10*(i-1), 10*i)))
-        subclasses = np.asarray([1, 11, 21, 23, 25, 26, 44, 46, 49, 50])
-        for e in tqdm([0, 9, 19, 20, 29, 30, 39]):
+    for i in range(2, 3):
+        subclasses = np.asarray(list(range(10*(i-1), 10*i)))
+        # subclasses = np.asarray([1, 11, 21, 23, 25, 26, 44, 46, 49, 50])
+        # for e in tqdm([0, 9, 19, 20, 29, 30, 39]):
+        for e in tqdm([39]):
 
             model.load_state_dict(torch.load('{}/Epoch_{}/{}_{}_trainval_2048_0.pth'.format(model_dir, e+1, dataset_name, dataset_name)))
             proxies = torch.load('{}/Epoch_{}/proxy.pth'.format(model_dir, e+1), map_location='cpu')['proxies'].detach()
@@ -209,10 +211,12 @@ if __name__ == '__main__':
             print(len(low_dim_proxy))
 
             # Only visualize subset of 10 classes
-            label_sub = label[np.isin(label, subclasses)].numpy()
+            indices = np.where(np.isin(label, subclasses))[0]
+            images = [dl_tr.dataset.__getitem__(ind)[0].permute(1, 2, 0).numpy() for ind in indices]
+            label_sub = label[indices].numpy()
             label_cmap = {v: k for k, v in enumerate(subclasses)}
             print(label_cmap)
-            low_dim_emb = low_dim_emb[np.isin(label, subclasses), :]
+            low_dim_emb = low_dim_emb[indices, :]
             low_dim_proxy_sub = []
             low_dim_proxy_labels = []
             for m, p in enumerate(low_dim_proxy):
@@ -225,7 +229,7 @@ if __name__ == '__main__':
 
             # Visualize
             classes = subclasses.tolist()
-            fig, ax = plt.subplots()
+            fig, ax = plt.subplots(figsize=(30,30))
             x = low_dim_emb[:, 0]
             y = low_dim_emb[:, 1]
             line = ax.scatter(x, y,c=[label_cmap[x] for x in label_sub],
@@ -233,10 +237,10 @@ if __name__ == '__main__':
             ax.scatter(low_dim_proxy_sub[:, 0], low_dim_proxy_sub[:, 1],
                         c=[label_cmap[x] for x in low_dim_proxy_labels],
                         cmap='tab10', marker=(5,1), edgecolors='black')
-            plt.legend(handles=ax.legend_elements()[0], labels=classes)
+            plt.legend(handles=line.legend_elements()[0], labels=classes)
 
             imagebox = OffsetImage(dl_tr.dataset.__getitem__(0)[0].permute(1, 2, 0).numpy(), zoom=0.2)
-            xybox = (50., 50.)
+            xybox = (250., 250.)
             ab = AnnotationBbox(imagebox, (0, 0),
                                 xybox=xybox,
                                 xycoords='data',
@@ -263,7 +267,7 @@ if __name__ == '__main__':
                     # place it at the position of the hovered scatter point
                     ab.xy = (x[ind], y[ind])
                     # set the image corresponding to that point
-                    imagebox.set_data(dl_tr.dataset.__getitem__(ind)[0].permute(1, 2, 0).numpy())
+                    imagebox.set_data(images[ind])
                 else:
                     # if the mouse is not over a scatter point
                     ab.set_visible(False)

@@ -28,13 +28,15 @@ os.environ["CUDA_VISIBLE_DEVICES"]="1,0"
 parser = argparse.ArgumentParser(description='Training ProxyNCA++') 
 parser.add_argument('--dataset', default='logo2k')
 parser.add_argument('--config', default='config/logo2k.json')
+parser.add_argument('--mode', default='trainval', choices=['train', 'trainval', 'test', 'testontrain'],
+                    help='train with train data or train with trainval')
+
 parser.add_argument('--embedding-size', default = 512, type=int, dest = 'sz_embedding')
 parser.add_argument('--batch-size', default = 32, type=int, dest = 'sz_batch')
 parser.add_argument('--epochs', default = 40, type=int, dest = 'nb_epochs')
 parser.add_argument('--log-filename', default = 'example')
 parser.add_argument('--workers', default = 16, type=int, dest = 'nb_workers')
 parser.add_argument('--seed', default=0, type=int)
-parser.add_argument('--mode', default='trainval', choices=['train', 'trainval', 'test', 'testontrain'], help='train with train data or train with trainval')
 parser.add_argument('--lr_steps', default=[1000], nargs='+', type=int)
 parser.add_argument('--source_dir', default='', type=str)
 parser.add_argument('--root_dir', default='', type=str)
@@ -44,7 +46,10 @@ parser.add_argument('--init_eval', default=False, action='store_true')
 parser.add_argument('--no_warmup', default=False, action='store_true')
 parser.add_argument('--apex', default=True, action='store_true')
 parser.add_argument('--warmup_k', default=5, type=int)
-parser.add_argument('--dynamic_proxy', default=True, action='store_true')
+
+parser.add_argument('--dynamic_proxy', default=False, action='store_true')
+parser.add_argument('--initial_proxy_num', default=2, type=int)
+parser.add_argument('--tau', default=0.2, type=float)
 parser.add_argument('--proxy_update_schedule', default=[0.5, 0.75], nargs='+', type=float)
 
 args = parser.parse_args()
@@ -73,8 +78,10 @@ if __name__ == '__main__':
 
     curr_fn = os.path.basename(args.config).split(".")[0]
 
-    # out_results_fn = "log/%s_%s_%s_%d_%s.json" % (args.dataset, curr_fn, args.mode, args.seed, args.dynamic_proxy)
-    out_results_fn = "log/%s_%s_%s_%d_%s_t0.1.json" % (args.dataset, curr_fn, args.mode, args.seed, args.dynamic_proxy)
+    if args.initial_proxy_num == 1:
+        out_results_fn = "log/%s_%s_%s_%d_%s_t0.1.json" % (args.dataset, curr_fn, args.mode, args.seed, args.dynamic_proxy)
+    else:
+        out_results_fn = "log/%s_%s_%s_%d_%s_t0.1_proxy%d_tau%0.2f.json" % (args.dataset, curr_fn, args.mode, args.seed, args.dynamic_proxy, args.initial_proxy_num, args.tau)
 
     config = utils.load_config(args.config)
     dataset_config = utils.load_config('dataset/config.json')
@@ -87,10 +94,10 @@ if __name__ == '__main__':
         dataset_config['dataset'][args.dataset]['root'] = os.path.join(args.root_dir, bs_name)
 
     #set NMI or recall accordingly depending on dataset. note for cub and cars R=1,2,4,8
-    if (args.mode =='trainval' or args.mode == 'test'):
+    if (args.mode =='trainval' or args.mode == 'test' or args.mode == 'testontrain'):
         if args.dataset == 'sop' or args.dataset == 'sop_h5':
             args.recall = [1, 10, 100, 1000]
-        elif 'cub' in args.dataset or 'cars' in args.dataset:
+        elif 'cub' in args.dataset or 'cars' in args.dataset: # FIXME: logo2k didnt evaluate NMI cuz it's time-consuming
             args.eval_nmi = True
 
     args.nb_epochs = config['nb_epochs']
@@ -104,17 +111,23 @@ if __name__ == '__main__':
         transform_key = config['transform_key']
     print('Transformation: ', transform_key)
 
-    # args.log_filename = '%s_%s_%s_%d_%d_%s' % (args.dataset, curr_fn, args.mode, args.sz_embedding, args.seed, args.dynamic_proxy)
-    args.log_filename = '%s_%s_%s_%d_%d_%s_t0.1' % (args.dataset, curr_fn, args.mode, args.sz_embedding, args.seed, args.dynamic_proxy)
+    if args.initial_proxy_num == 1:
+        args.log_filename = '%s_%s_%s_%d_%d_%s_t0.1' % (args.dataset, curr_fn, args.mode, args.sz_embedding, args.seed, args.dynamic_proxy)
+    else:
+        args.log_filename = '%s_%s_%s_%d_%d_%s_t0.1_proxy%d_tau%0.2f' % (args.dataset, curr_fn, args.mode, args.sz_embedding, args.seed, args.dynamic_proxy, args.initial_proxy_num, args.tau)
     if args.mode == 'test':
         args.log_filename = args.log_filename.replace('test', 'trainval')
+    elif args.mode == 'testontrain':
+        args.log_filename = args.log_filename.replace('testontrain', 'trainval')
 
     best_epoch = args.nb_epochs
 
     '''Dataloader'''
     if args.mode == 'trainval':
-        # train_results_fn = "log/%s_%s_%s_%d_%d_%s.json" % (args.dataset, curr_fn, 'train', args.sz_embedding, args.seed, args.dynamic_proxy)
-        train_results_fn = "log/%s_%s_%s_%d_%d_%s_t0.1.json" % (args.dataset, curr_fn, 'train', args.sz_embedding, args.seed, args.dynamic_proxy)
+        if args.initial_proxy_num == 1:
+            train_results_fn = "log/%s_%s_%s_%d_%d_%s_t0.1.json" % (args.dataset, curr_fn, 'train', args.sz_embedding, args.seed, args.dynamic_proxy)
+        else:
+            train_results_fn = "log/%s_%s_%s_%d_%d_%s_t0.1_proxy%d_tau%0.2f.json" % (args.dataset, curr_fn, 'train', args.sz_embedding, args.seed, args.dynamic_proxy, args.initial_proxy_num, args.tau)
         if os.path.exists(train_results_fn):
             with open(train_results_fn, 'r') as f:
                 train_results = json.load(f)
@@ -200,7 +213,7 @@ if __name__ == '__main__':
                 transform = train_transform
             )
 
-    elif args.mode == 'trainval' or args.mode == 'test':
+    elif args.mode == 'trainval' or args.mode == 'test' or args.mode == 'testontrain':
         # print(dataset_config['dataset'][args.dataset]['root'])
         tr_dataset = dataset.load(
                 name = args.dataset,
@@ -282,6 +295,7 @@ if __name__ == '__main__':
         nb_classes = dl_tr.dataset.nb_classes(),
         sz_embed = args.sz_embedding,
         len_training = len(dl_tr.dataset),
+        initial_proxy_num = args.initial_proxy_num,
         **config['criterion']['args']
     ).cuda()
 
@@ -574,7 +588,11 @@ if __name__ == '__main__':
                         logging.info('Class {} update no. proxies to be {}'.format(k, criterion.current_proxy[k]))
 
         #TODO: this is for umap visualization -- save intermediate models and proxies
-        save_dir = 'dvi_data_{}_{}_t0.1/ResNet_{}_Model'.format(args.dataset, args.dynamic_proxy, str(args.sz_embedding))
+        if args.initial_proxy_num == 1:
+            save_dir = 'dvi_data_{}_{}_t0.1/ResNet_{}_Model'.format(args.dataset, args.dynamic_proxy, str(args.sz_embedding))
+        else:
+            save_dir = 'dvi_data_{}_{}_t0.1_proxy{}_tau{}/ResNet_{}_Model'.format(args.dataset, args.dynamic_proxy, str(args.initial_proxy_num), str(args.sz_embedding), str(args.tau))
+
         os.makedirs('{}/Epoch_{}'.format(save_dir, e+1), exist_ok=True)
         with open('{}/Epoch_{}/index.json'.format(save_dir, e + 1), 'wt') as handle:
             handle.write(json.dumps(list(range(len(dl_tr_noshuffle.dataset)))))

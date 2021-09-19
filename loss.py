@@ -87,7 +87,7 @@ class ProxyNCA_classic(torch.nn.Module):
 
 
 class ProxyNCA_prob(torch.nn.Module):
-    def __init__(self, nb_classes: int, sz_embed: int, scale: float, **kwargs):
+    def __init__(self, nb_classes: int, sz_embed: int, scale: float, initial_proxy_num: int, tau:float=0.0, **kwargs):
         '''
             :param nb_classes: number of classes in training set
             :param sz_embed: embedding size, e.g. 2048, 512, 64
@@ -96,11 +96,12 @@ class ProxyNCA_prob(torch.nn.Module):
 
         torch.nn.Module.__init__(self)
         self.max_proxy_per_class = 5  # maximum number of proxies per class
-        self.current_proxy = [2] * nb_classes  # start with single proxy per class
+        self.current_proxy = [initial_proxy_num] * nb_classes  # start with single proxy per class
         self.proxies = torch.nn.Parameter(torch.randn(nb_classes * self.max_proxy_per_class, sz_embed) / 8)
         self.mask = torch.zeros((nb_classes, self.max_proxy_per_class), requires_grad=False).to('cuda')
         self.scale = scale  # sqrt(1/Temperature)
         self.nb_classes = nb_classes  # number of classes
+        self.tau = tau
 
         self.create_mask()  # create initial mask
 
@@ -127,6 +128,21 @@ class ProxyNCA_prob(torch.nn.Module):
             self.mask[cls, :self.current_proxy[cls]] = 1  # unfreeze mask
         return
 
+    def regularization(self, Proxy_IP):
+        A = []
+        for x in range(self.nb_classes):
+            count_proxy = int(torch.sum(self.mask[x]).item())
+            A_this = torch.zeros((self.max_proxy_per_class, self.max_proxy_per_class))
+            A_this[:count_proxy, :count_proxy] = 1.
+            A.append(A_this)
+        block_mask = torch.block_diag(*A).to(Proxy_IP.device)
+        masked_proxyIP = torch.mul(block_mask, Proxy_IP)
+        regularization = torch.sum(masked_proxyIP)
+        nonzero_items = torch.count_nonzero(masked_proxyIP).item()
+        mean_regularization = regularization / (nonzero_items) # divide by 2 because proxy inner product was
+
+        return mean_regularization
+
     def forward(self, X:torch.Tensor, indices: torch.Tensor, T:torch.Tensor):
         '''
             Forward propogation of loss
@@ -147,6 +163,8 @@ class ProxyNCA_prob(torch.nn.Module):
             squared=True
         ) # of shape (N, C*maxP)
         D = D[:X.size()[0], X.size()[0]:]
+        Proxy_IP = IP[X.size()[0]:, X.size()[0]:] # between-proxy similarity
+        Proxy_IP = ((Proxy_IP + 1.)/2) * (1 - torch.eye(Proxy_IP.shape[0], Proxy_IP.shape[0]).to(Proxy_IP.device)) # add 1 to avoid zero entries
         IP = IP[:X.size()[0], X.size()[0]:]
 
         D_reshape = D.reshape((X.shape[0], self.nb_classes, self.max_proxy_per_class))  # of shape (N, C, maxP)
@@ -162,9 +180,11 @@ class ProxyNCA_prob(torch.nn.Module):
         target_probs = (torch.ones((X.shape[0], self.nb_classes)) * smoothing_const).to(T.device)
         target_probs.scatter_(1, T.unsqueeze(1), 1 - smoothing_const) # one-hot label
 
-        loss = torch.sum(- target_probs * F.log_softmax(-D_weighted, -1), -1)
+        base_loss = torch.sum(- target_probs * F.log_softmax(-D_weighted, -1), -1).mean()
+        mean_regularization = self.regularization(Proxy_IP)
+        loss = base_loss + mean_regularization * self.tau
 
-        return loss.mean()
+        return loss
 
 
 class ProxyNCA_prob_orig(torch.nn.Module):
@@ -190,7 +210,7 @@ class ProxyNCA_prob_orig(torch.nn.Module):
                 [X, P]
             ),
             squared=True
-        )[:X.size()[0], X.size()[0]:]
+        )[0][:X.size()[0], X.size()[0]:]
 
         T = binarize_and_smooth_labels(
             T=T, nb_classes=len(P), smoothing_const=0

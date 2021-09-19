@@ -121,6 +121,8 @@ def evaluate(model, dataloader, eval_nmi=True, recall_list=[1, 2, 4, 8]):
 
     # calculate embeddings with model and get targets
     X, T, *_ = predict_batchwise(model, dataloader)
+    # X = X.detach().cpu()
+    # T = T.detach().cpu()
     
     print('done collecting prediction')
 
