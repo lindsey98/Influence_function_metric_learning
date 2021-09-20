@@ -143,6 +143,45 @@ class ProxyNCA_prob(torch.nn.Module):
 
         return mean_regularization
 
+    @torch.no_grad()
+    def loss4debug(self, X:torch.Tensor, indices: torch.Tensor, T:torch.Tensor):
+        '''
+            Return intermediate calculations of loss for debugging purpose
+        '''
+        P = self.proxies
+        temperature = self.scale
+        P = F.normalize(P, p=2, dim=-1) * temperature
+        X = F.normalize(X, p=2, dim=-1) * temperature
+        P = P.to(X.device)
+
+        # pairwise distance
+        D, IP = pairwise_distance(
+            torch.cat([X, P]),
+            squared=True
+        ) # of shape (N, C*maxP)
+        D = D[:X.size()[0], X.size()[0]:]
+        Proxy_IP = IP[X.size()[0]:, X.size()[0]:]
+        IP = IP[:X.size()[0], X.size()[0]:]
+
+        self.mask = self.mask.to(X.device)
+        D_reshape = D.reshape((X.shape[0], self.nb_classes, self.max_proxy_per_class))  # of shape (N, C, maxP)
+        output = D_reshape * self.mask.unsqueeze(0)  # mask unactivated proxies
+        output_IP = IP.reshape((X.shape[0], self.nb_classes, self.max_proxy_per_class)) * self.mask.unsqueeze(0)
+        normalize_prob = masked_softmax(output_IP, t=0.1) # p(i,c)
+        D_weighted = torch.sum(normalize_prob * output, dim=-1)  # S_i,c: weighted sum of distance, reduce to shape (N, C)
+
+        smoothing_const = 0.0 # smoothing class labels
+        target_probs = (torch.ones((X.shape[0], self.nb_classes)) * smoothing_const).to(T.device)
+        target_probs.scatter_(1, T.unsqueeze(1), 1 - smoothing_const) # one-hot label
+
+        gt_prob = normalize_prob[torch.arange(X.size()[0]), T.long(), :]
+        gt_D_weighted = D_weighted[torch.arange(X.size()[0]), T.long()]
+
+        base_loss = torch.sum(- target_probs * F.log_softmax(-D_weighted, -1), -1)
+
+        return indices, gt_prob, gt_D_weighted, base_loss, Proxy_IP
+
+
     def forward(self, X:torch.Tensor, indices: torch.Tensor, T:torch.Tensor):
         '''
             Forward propogation of loss

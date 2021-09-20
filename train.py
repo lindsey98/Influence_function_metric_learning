@@ -28,7 +28,7 @@ os.environ["CUDA_VISIBLE_DEVICES"]="1,0"
 parser = argparse.ArgumentParser(description='Training ProxyNCA++') 
 parser.add_argument('--dataset', default='logo2k')
 parser.add_argument('--config', default='config/logo2k.json')
-parser.add_argument('--mode', default='trainval', choices=['train', 'trainval', 'test', 'testontrain'],
+parser.add_argument('--mode', default='testontrain', choices=['train', 'trainval', 'test', 'testontrain'],
                     help='train with train data or train with trainval')
 
 parser.add_argument('--embedding-size', default = 512, type=int, dest = 'sz_embedding')

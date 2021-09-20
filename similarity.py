@@ -1,7 +1,7 @@
 
 import torch
 import sklearn
-
+import torch.nn.functional as F
 
 def pairwise_distance(a, squared=False):
     '''
@@ -11,11 +11,13 @@ def pairwise_distance(a, squared=False):
         :return pairwise_distances: distance torch.Tensor (M, M)
     '''
 
-    inner_prod = torch.mm(a, torch.t(a))
+    a_norm = F.normalize(a, p=2, dim=-1)
+    inner_prod = torch.mm(a_norm, torch.t(a_norm))
+
     pairwise_distances_squared = torch.add(
         a.pow(2).sum(dim=1, keepdim=True).expand(a.size(0), -1),
         torch.t(a).pow(2).sum(dim=0, keepdim=True).expand(a.size(0), -1)
-    ) - 2 * (inner_prod) # compute euclidean distance in dot-product way, since ||x-y||^2 = x'x - 2x'y + y'y
+    ) - 2 * (torch.mm(a, torch.t(a))) # compute euclidean distance in dot-product way, since ||x-y||^2 = x'x - 2x'y + y'y
 
     # Deal with numerical inaccuracies. Set small negatives to zero.
     pairwise_distances_squared = torch.clamp(
