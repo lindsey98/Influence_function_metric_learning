@@ -159,9 +159,9 @@ class ProxyNCA_prob(torch.nn.Module):
             torch.cat([X, P]),
             squared=True
         ) # of shape (N, C*maxP)
-        D = D[:X.size()[0], X.size()[0]:]
-        Proxy_IP = IP[X.size()[0]:, X.size()[0]:]
-        IP = IP[:X.size()[0], X.size()[0]:]
+        D = D[:X.size()[0], X.size()[0]:] # of shape (N, N)
+        Proxy_IP = IP[X.size()[0]:, X.size()[0]:] # of shape (C*maxP, C*maxP)
+        IP = IP[:X.size()[0], X.size()[0]:] # of shape (N, C*maxP)
 
         self.mask = self.mask.to(X.device)
         D_reshape = D.reshape((X.shape[0], self.nb_classes, self.max_proxy_per_class))  # of shape (N, C, maxP)

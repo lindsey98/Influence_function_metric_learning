@@ -19,7 +19,6 @@ from matplotlib.offsetbox import TextArea, DrawingArea, OffsetImage, \
     AnnotationBbox
 os.environ['CUDA_VISIBLE_DEVICES'] = "1,0"
 
-
 def prepare_data(data_name='cub', root='dvi_data_cub200/', save=False):
     '''
         Prepare dataloader
@@ -103,7 +102,7 @@ def pumap_training(model, model_dir, e,
                    criterion,
                    dl_tr, stacked_proxies, presaved, pretrained):
     '''
-        Parameteric umap training
+        Parameteric Umap training
     '''
     if not presaved:
         # embedding, label, *_ = predict_batchwise(model, dl_tr)
@@ -115,7 +114,6 @@ def pumap_training(model, model_dir, e,
         torch.save(base_loss, '{}/Epoch_{}/base_loss.pth'.format(model_dir, e + 1))
         torch.save(gt_D_weighted, '{}/Epoch_{}/gt_D_weighted.pth'.format(model_dir, e + 1))
         torch.save(p2p_sim, '{}/Epoch_{}/p2p_sim.pth'.format(model_dir, e + 1))
-
     else:
         embedding = torch.load('{}/Epoch_{}/training_embeddings.pth'.format(model_dir, e + 1))
         label = torch.load('{}/Epoch_{}/training_labels.pth'.format(model_dir, e + 1))
@@ -126,8 +124,10 @@ def pumap_training(model, model_dir, e,
         p2p_sim = torch.load('{}/Epoch_{}/p2p_sim.pth'.format(model_dir, e + 1))
 
     # need to normalize, other producing wierd results
-    embedding, stacked_proxies = F.normalize(embedding, dim=-1), F.normalize(stacked_proxies, dim=-1)
-    print('Embedding of shape: ', embedding.shape, 'Current proxies of shape: ', stacked_proxies.shape)
+    embedding = F.normalize(embedding, dim=-1)
+    stacked_proxies = F.normalize(stacked_proxies, dim=-1)
+    print('Embedding of shape: ', embedding.shape,
+          'Current proxies of shape: ', stacked_proxies.shape)
 
     # Parametric Umap model
     encoder = encoder_model()
@@ -162,15 +162,13 @@ if __name__ == '__main__':
 
     # folder = 'dvi_data_{}_{}_t0.1_proxy{}/'.format(dataset_name, dynamic_proxy, initial_proxy_num)
     folder = 'dvi_data_logo2k_False'
+    model_dir = '{}/ResNet_{}_Model'.format(folder, sz_embedding)
+    plot_dir = '{}/resnet_{}_umap_plots'.format(folder, sz_embedding)
     os.makedirs(folder, exist_ok=True)
     os.makedirs(os.path.join(folder, 'Training_data'), exist_ok=True)
     os.makedirs(os.path.join(folder, 'Testing_data'), exist_ok=True)
-    os.makedirs('{}/resnet_{}_umap_plots/'.format(folder, sz_embedding), exist_ok=True)
-
-    model_dir = '{}/ResNet_{}_Model'.format(folder, sz_embedding)
-    plot_dir = '{}/resnet_{}_umap_plots'.format(folder, sz_embedding)
-
     os.makedirs(plot_dir, exist_ok=True)
+
     dl_tr, dl_ev = prepare_data(data_name=dataset_name, root=folder, save=False)
 
     # load model
@@ -193,13 +191,10 @@ if __name__ == '__main__':
         subclasses = np.asarray(list(range(5*(i-1), 5*i)))
         for e in tqdm(range(40)):
 
-            model.load_state_dict(torch.load('{}/Epoch_{}/{}_{}_trainval_2048_0.pth'.format(model_dir, e+1, dataset_name, dataset_name)))
-            # TODO: older script
-            proxies = torch.load('{}/Epoch_{}/proxy.pth'.format(model_dir, e + 1), map_location='cpu').detach()
+            model.load_state_dict(torch.load('{}/Epoch_{}/{}_{}_trainval_{}_0.pth'.format(model_dir, e+1, dataset_name, dataset_name, sz_embedding)))
+            proxies = torch.load('{}/Epoch_{}/proxy.pth'.format(model_dir, e+1), map_location='cpu')['proxies'].detach()
             reshape_proxies = proxies.view(criterion.nb_classes, criterion.max_proxy_per_class, -1)
-            mask = criterion.mask
-            # proxies = torch.load('{}/Epoch_{}/proxy.pth'.format(model_dir, e+1), map_location='cpu')['proxies'].detach()
-            # mask = torch.load('{}/Epoch_{}/proxy.pth'.format(model_dir, e+1), map_location='cpu')['mask'].detach()
+            mask = torch.load('{}/Epoch_{}/proxy.pth'.format(model_dir, e+1), map_location='cpu')['mask'].detach()
             count_proxy = torch.sum(mask, -1).detach().cpu().numpy().tolist()
             used_proxies = []
             for m, n in enumerate(count_proxy):
@@ -228,8 +223,9 @@ if __name__ == '__main__':
             gt_prob_sub = gt_prob[indices].numpy()
             base_loss_sub = base_loss[indices].numpy()
             gt_D_weighted_sub = gt_D_weighted[indices].numpy()
-            label_cmap = {v: k for k, v in enumerate(subclasses)}
-            low_dim_emb = low_dim_emb[indices, :]
+            low_dim_emb_sub = low_dim_emb[indices, :]
+
+            label_cmap = {v: k for k, v in enumerate(subclasses)} # colormap
             low_dim_proxy_sub = []
             low_dim_proxy_labels = []
             low_dim_proxy_p2psim = []
@@ -240,25 +236,24 @@ if __name__ == '__main__':
                         low_dim_proxy_sub.append(sub_p)
                         p2p_sim_m = p2p_sim[(m * criterion.max_proxy_per_class):((m + 1) * criterion.max_proxy_per_class),
                                 (m * criterion.max_proxy_per_class):((m + 1) * criterion.max_proxy_per_class)].double().detach().cpu().numpy()
-                        count_proxy = torch.sum(mask, -1).detach().cpu().numpy().tolist()[m]
-                        low_dim_proxy_p2psim.append(p2p_sim_m[:int(count_proxy), :int(count_proxy)])
+                        low_dim_proxy_p2psim.append(p2p_sim_m[:int(count_proxy[m]), :int(count_proxy[m])])
 
             low_dim_proxy_sub = np.asarray(low_dim_proxy_sub)
 
             # # Visualize
-            classes = subclasses.tolist()
             fig, ax = plt.subplots()
             # For embedding points
-            x, y = low_dim_emb[:, 0], low_dim_emb[:, 1]
+            x, y = low_dim_emb_sub[:, 0], low_dim_emb_sub[:, 1]
             px, py = low_dim_proxy_sub[:, 0], low_dim_proxy_sub[:, 1]
 
-            line = ax.scatter(x, y, c=[label_cmap[x] for x in label_sub], cmap='tab10', s=5)
-            plt.legend(handles=line.legend_elements()[0], labels=classes)
-            line4proxy = ax.scatter(px, py, c=[label_cmap[x] for x in low_dim_proxy_labels],
-                                    cmap='tab10', marker=(5,1), edgecolors='black', linewidths=0.5)
+            scatter4sample = ax.scatter(x, y, c=[label_cmap[x] for x in label_sub],
+                                        cmap='tab10', s=5)
+            plt.legend(handles=scatter4sample.legend_elements()[0], labels=subclasses.tolist())
+            scatter4proxy = ax.scatter(px, py, c=[label_cmap[x] for x in low_dim_proxy_labels],
+                                       cmap='tab10', marker=(5,1), edgecolors='black', linewidths=0.5)
 
             if interactive:
-                imagebox = OffsetImage(dl_tr.dataset.__getitem__(0)[0].permute(1, 2, 0).numpy(), zoom=0.2)
+                imagebox = OffsetImage(images[0], zoom=0.2)
                 xybox = (32., 32.)
                 ab = AnnotationBbox(imagebox, (0, 0),
                                     xybox=xybox,
@@ -266,28 +261,28 @@ if __name__ == '__main__':
                                     boxcoords="offset points",
                                     arrowprops=dict(arrowstyle="->"))
                 ax.add_artist(ab)
-                ab.set_visible(False)
+                ab.set_visible(False) # invisible
                 xybox_ac = (50., 50.)
                 ac = ax.annotate("", xy=(0, 0),
                                  xytext=xybox_ac, textcoords="offset points",
-                                bbox=dict(boxstyle='round4', fc='linen', ec='k', lw=1),
-                                arrowprops=dict(arrowstyle='->'))
+                                 bbox=dict(boxstyle='round4', fc='linen', ec='k', lw=1),
+                                 arrowprops=dict(arrowstyle='->'))
                 ax.add_artist(ac)
-                ac.set_visible(False)
+                ac.set_visible(False) # invisible
 
                 xybox_ad = (-20, -20)
                 ad = ax.annotate("", xy=(0, 0), xytext=xybox_ad,
                                  xycoords='data',textcoords="offset points",
-                                    bbox=dict(boxstyle='round4', fc='linen', ec='k', lw=1), annotation_clip=False,
-                                    arrowprops=dict(arrowstyle='->'))
+                                 bbox=dict(boxstyle='round4', fc='linen', ec='k', lw=1),
+                                 arrowprops=dict(arrowstyle='->'))
                 ax.add_artist(ad)
-                ad.set_visible(False)
+                ad.set_visible(False) # invisible
 
                 def hover(event):
                     # if the mouse is over the scatter points
-                    if line.contains(event)[0]:
+                    if scatter4sample.contains(event)[0]:
                         # find out the index within the array from the event
-                        ind, = line.contains(event)[1]["ind"]
+                        ind, = scatter4sample.contains(event)[1]["ind"]
                         # get the figure size
                         w, h = fig.get_size_inches() * fig.dpi
                         ws = (event.x > w / 2.) * -1 + (event.x <= w / 2.)
@@ -303,8 +298,10 @@ if __name__ == '__main__':
 
                         ac.xybox = (xybox_ac[0] * ws, xybox_ac[1] * hs)
                         ac.xy = (x[ind], y[ind])
-                        text = "Indices={} \n Loss={:.4f} \n S_yi={:.4f} \n Weight2Proxy={}".format(indices[ind], base_loss_sub[ind],
-                                                                                                  gt_D_weighted_sub[ind], gt_prob_sub[ind])
+                        text = "Indices={} \n Loss={:.4f} \n S_yi={:.4f} \n Weight2Proxy={}".format(indices[ind],
+                                                                                                    base_loss_sub[ind],
+                                                                                                    gt_D_weighted_sub[ind],
+                                                                                                    gt_prob_sub[ind])
                         ac.set_visible(True)
                         ac.set_text(text)
 
@@ -315,9 +312,9 @@ if __name__ == '__main__':
                     fig.canvas.draw_idle()
 
                     # if the mouse is over the scatter points
-                    if line4proxy.contains(event)[0]:
+                    if scatter4proxy.contains(event)[0]:
                         # find out the index within the array from the event
-                        ind, = line4proxy.contains(event)[1]["ind"]
+                        ind, = scatter4proxy.contains(event)[1]["ind"]
                         w, h = fig.get_size_inches() * fig.dpi
                         ws = (event.x > w / 2.) * -1 + (event.x <= w / 2.)
                         hs = (event.y > h / 2.) * -1 + (event.y <= h / 2.)

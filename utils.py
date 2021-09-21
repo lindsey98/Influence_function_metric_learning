@@ -78,9 +78,7 @@ def predict_batchwise_loss(model, dataloader, criterion):
         Predict on a batch
         :return: list with N lists, where N = |{image, label, index}|
     '''
-    # print(list(model.parameters())[0].device)
     model.eval()
-    ds = dataloader.dataset
     indices = torch.tensor([])
     normalize_prob = torch.tensor([])
     base_loss = torch.tensor([])
@@ -102,7 +100,7 @@ def predict_batchwise_loss(model, dataloader, criterion):
 
     # compute proxy2proxy similarity
     _blk_mask = [torch.ones((criterion.max_proxy_per_class, criterion.max_proxy_per_class)) \
-                    for c in range(criterion.nb_classes)]
+                    for _ in range(criterion.nb_classes)]
     blk_mask = torch.block_diag(*_blk_mask).to(Proxy_IP.device)
     p2p_sim = Proxy_IP * blk_mask
 
