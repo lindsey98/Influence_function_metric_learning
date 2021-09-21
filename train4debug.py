@@ -45,10 +45,10 @@ if __name__ == '__main__':
                 **dataset_config['transform_parameters']
             )
     tr_dataset = dataset.load(
-        name='cub',
-        root=dataset_config['dataset']['cub']['root'],
-        source=dataset_config['dataset']['cub']['source'],
-        classes=dataset_config['dataset']['cub']['classes']['trainval'],
+        name='logo2k_super500',
+        root=dataset_config['dataset']['logo2k_super500']['root'],
+        source=dataset_config['dataset']['logo2k_super500']['source'],
+        classes=dataset_config['dataset']['logo2k_super500']['classes']['trainval'],
         transform=train_transform
     )
 
@@ -70,10 +70,10 @@ if __name__ == '__main__':
     # training dataloader without shuffling and without transformation
     dl_tr_noshuffle = torch.utils.data.DataLoader(
             dataset=dataset.load(
-                    name='cub',
-                    root=dataset_config['dataset']['cub']['root'],
-                    source=dataset_config['dataset']['cub']['source'],
-                    classes=dataset_config['dataset']['cub']['classes']['trainval'],
+                    name='logo2k_super500',
+                    root=dataset_config['dataset']['logo2k_super500']['root'],
+                    source=dataset_config['dataset']['logo2k_super500']['source'],
+                    classes=dataset_config['dataset']['logo2k_super500']['classes']['trainval'],
                     transform=dataset.utils.make_transform(
                         **dataset_config['transform_parameters'],
                         is_train=False

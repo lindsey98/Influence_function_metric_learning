@@ -3,7 +3,7 @@ from .cars import Cars, Cars_hdf5
 from .cub import CUBirds, CUBirds_hdf5, CUBirds_class, CUBirds_hdf5_alt, CUBirds_hdf5_bb
 from .sop import SOProducts, SOProducts_hdf5
 from .inshop import InShop, InShop_hdf5
-from .logo2k import Logo2k, Logo2k_class
+from .logo2k import Logo2k, Logo2k_class, Logo2k_super
 from . import utils
 
 
@@ -23,7 +23,9 @@ _type = {
     'sop_h5_mod': SOProducts_hdf5,
     'inshop': InShop,
     'inshop_h5': InShop_hdf5,
-    'logo2k': Logo2k
+    'logo2k': Logo2k,
+    'logo2k_super100': Logo2k_super,
+    'logo2k_super500': Logo2k_super,
 }
 
 

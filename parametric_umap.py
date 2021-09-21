@@ -155,12 +155,13 @@ if __name__ == '__main__':
     dataset_name = 'logo2k'
     dynamic_proxy = False
     sz_embedding = 2048
-    presaved = True
-    pretrained = True
-    initial_proxy_num = 2
+    presaved = False
+    pretrained = False
+    initial_proxy_num = 1
     interactive = False
 
-    folder = 'dvi_data_{}_{}_t0.1_proxy{}/'.format(dataset_name, dynamic_proxy, initial_proxy_num)
+    # folder = 'dvi_data_{}_{}_t0.1_proxy{}/'.format(dataset_name, dynamic_proxy, initial_proxy_num)
+    folder = 'dvi_data_logo2k_False'
     os.makedirs(folder, exist_ok=True)
     os.makedirs(os.path.join(folder, 'Training_data'), exist_ok=True)
     os.makedirs(os.path.join(folder, 'Testing_data'), exist_ok=True)
@@ -188,14 +189,17 @@ if __name__ == '__main__':
                               scale=3,
                               initial_proxy_num=initial_proxy_num)
 
-    for i in range(1, 10):
+    for i in range(1, 2):
         subclasses = np.asarray(list(range(5*(i-1), 5*i)))
-        for e in tqdm(range(39)):
+        for e in tqdm(range(40)):
 
             model.load_state_dict(torch.load('{}/Epoch_{}/{}_{}_trainval_2048_0.pth'.format(model_dir, e+1, dataset_name, dataset_name)))
-            proxies = torch.load('{}/Epoch_{}/proxy.pth'.format(model_dir, e+1), map_location='cpu')['proxies'].detach()
+            # TODO: older script
+            proxies = torch.load('{}/Epoch_{}/proxy.pth'.format(model_dir, e + 1), map_location='cpu').detach()
             reshape_proxies = proxies.view(criterion.nb_classes, criterion.max_proxy_per_class, -1)
-            mask = torch.load('{}/Epoch_{}/proxy.pth'.format(model_dir, e+1), map_location='cpu')['mask'].detach()
+            mask = criterion.mask
+            # proxies = torch.load('{}/Epoch_{}/proxy.pth'.format(model_dir, e+1), map_location='cpu')['proxies'].detach()
+            # mask = torch.load('{}/Epoch_{}/proxy.pth'.format(model_dir, e+1), map_location='cpu')['mask'].detach()
             count_proxy = torch.sum(mask, -1).detach().cpu().numpy().tolist()
             used_proxies = []
             for m, n in enumerate(count_proxy):
@@ -247,13 +251,11 @@ if __name__ == '__main__':
             # For embedding points
             x, y = low_dim_emb[:, 0], low_dim_emb[:, 1]
             px, py = low_dim_proxy_sub[:, 0], low_dim_proxy_sub[:, 1]
-            ax.set_xlim(min(min(x), min(px)), max(max(x), max(px)))
-            ax.set_ylim(min(min(y), min(py)), max(max(y), max(py)))
 
             line = ax.scatter(x, y, c=[label_cmap[x] for x in label_sub], cmap='tab10', s=5)
             plt.legend(handles=line.legend_elements()[0], labels=classes)
             line4proxy = ax.scatter(px, py, c=[label_cmap[x] for x in low_dim_proxy_labels],
-                                    cmap='tab10', marker=(5,1), edgecolors='black')
+                                    cmap='tab10', marker=(5,1), edgecolors='black', linewidths=0.5)
 
             if interactive:
                 imagebox = OffsetImage(dl_tr.dataset.__getitem__(0)[0].permute(1, 2, 0).numpy(), zoom=0.2)

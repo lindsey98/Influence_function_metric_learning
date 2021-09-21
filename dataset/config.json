@@ -93,6 +93,28 @@
             "source": "str('mnt/datasets/logo2k')",
             "root":"str('mnt/datasets/logo2k')"
 
+        },
+        "logo2k_super100": {
+            "classes": {
+                "train": "range(0, 107)",
+                "val": "range(107, 1276)",
+                "trainval": "range(0, 107)",
+                "eval": "range(107, 1276)"
+            },
+            "source": "str('mnt/datasets/logo2ksuperclass0.01')",
+            "root":"str('mnt/datasets/logo2ksuperclass0.01')"
+
+        },
+        "logo2k_super500": {
+            "classes": {
+                "train": "range(0, 586)",
+                "val": "range(586, 1755)",
+                "trainval": "range(0, 586)",
+                "eval": "range(586, 1755)"
+            },
+            "source": "str('mnt/datasets/logo2ksuperclass0.002')",
+            "root":"str('mnt/datasets/logo2ksuperclass0.002')"
+
         }
     },
      "transform_parameters": {
