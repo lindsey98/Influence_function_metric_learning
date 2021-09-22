@@ -30,7 +30,7 @@ parser.add_argument('--embedding-size', default = 512, type=int, dest = 'sz_embe
 parser.add_argument('--batch-size', default = 32, type=int, dest = 'sz_batch')
 parser.add_argument('--epochs', default = 40, type=int, dest = 'nb_epochs')
 parser.add_argument('--log-filename', default = 'example')
-parser.add_argument('--workers', default = 0, type=int, dest = 'nb_workers')
+parser.add_argument('--workers', default = 16, type=int, dest = 'nb_workers')
 parser.add_argument('--seed', default=0, type=int)
 parser.add_argument('--lr_steps', default=[1000], nargs='+', type=int)
 parser.add_argument('--source_dir', default='', type=str)
@@ -42,14 +42,13 @@ parser.add_argument('--no_warmup', default=False, action='store_true')
 parser.add_argument('--apex', default=False, action='store_true')
 parser.add_argument('--warmup_k', default=5, type=int)
 
-parser.add_argument('--dataset', default='logo2k_super500')
+parser.add_argument('--dataset', default='logo2k')
 parser.add_argument('--config', default='config/logo2k.json')
 parser.add_argument('--mode', default='trainval', choices=['train', 'trainval', 'test', 'testontrain'],
                     help='train with train data or train with trainval')
-
 parser.add_argument('--dynamic_proxy', default=False, action='store_true')
 parser.add_argument('--initial_proxy_num', default=2, type=int)
-parser.add_argument('--tau', default=0.0, type=float)
+parser.add_argument('--tau', default=0.2, type=float)
 parser.add_argument('--proxy_update_schedule', default=[0.5, 0.75], nargs='+', type=float)
 
 args = parser.parse_args()
@@ -391,7 +390,6 @@ if __name__ == '__main__':
             utils.evaluate(model, c_dl, args.eval_nmi, args.recall) #dl_val
 
     it = 0
-
     best_val_hmean = 0
     best_val_nmi = 0
     best_val_epoch = 0
@@ -438,7 +436,7 @@ if __name__ == '__main__':
             label_recorder = {}
             with open("{0}/{1}_cls.json".format('log', args.log_filename), 'wt') as handle:
                 json.dump(label_recorder, handle)
-        #
+
         with open("{0}/{1}_ip.json".format('log', args.log_filename), 'rt') as handle:
             loss_recorder = json.load(handle)
         with open("{0}/{1}_cls.json".format('log', args.log_filename), 'rt') as handle:
@@ -579,7 +577,7 @@ if __name__ == '__main__':
                         logging.info('Class {} update no. proxies to be {}'.format(k, criterion.current_proxy[k]))
 
         #TODO: this is for umap visualization -- save intermediate models and proxies
-        save_dir = 'dvi_data_{}_{}_t0.1_proxy{}_tau{}/ResNet_{}_Model'.format(args.dataset, args.dynamic_proxy, str(args.initial_proxy_num), str(args.sz_embedding), str(args.tau))
+        save_dir = 'dvi_data_{}_{}_t0.1_proxy{}_tau{}/ResNet_{}_Model'.format(args.dataset, args.dynamic_proxy, str(args.initial_proxy_num), str(args.tau), str(args.sz_embedding))
         os.makedirs('{}/Epoch_{}'.format(save_dir, e+1), exist_ok=True)
         with open('{}/Epoch_{}/index.json'.format(save_dir, e + 1), 'wt') as handle:
             handle.write(json.dumps(list(range(len(dl_tr_noshuffle.dataset)))))

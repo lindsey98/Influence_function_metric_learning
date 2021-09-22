@@ -51,8 +51,6 @@ class Logo2k_super(BaseDatasetMod):
                 # self.im_paths.append(os.path.join(root, i[0]))
                 self.im_paths.append(i[0])
                 index += 1
-            # else:
-            #     print(fn)
         pass
 
 class Logo2k_class(BaseDatasetMod):

@@ -17,7 +17,7 @@ import json
 import torch.nn.functional as F
 from matplotlib.offsetbox import TextArea, DrawingArea, OffsetImage, \
     AnnotationBbox
-os.environ['CUDA_VISIBLE_DEVICES'] = "1,0"
+os.environ['CUDA_VISIBLE_DEVICES'] = "0"
 
 def prepare_data(data_name='cub', root='dvi_data_cub200/', save=False):
     '''
@@ -131,7 +131,7 @@ def pumap_training(model, model_dir, e,
 
     # Parametric Umap model
     encoder = encoder_model()
-    embedder = ParametricUMAP(encoder=encoder, verbose=False, batch_size=256)
+    embedder = ParametricUMAP(encoder=encoder, verbose=False, batch_size=64)
 
     if not pretrained:
         if e > 0:
@@ -142,26 +142,132 @@ def pumap_training(model, model_dir, e,
                 print(error)
                 pass
         # Train on all samples and all proxies
-        embedder.fit_transform(
-            np.concatenate((embedding.detach().cpu().numpy(), stacked_proxies.cpu().numpy()), axis=0))
+        all_data = np.concatenate((embedding.detach().cpu().numpy(), stacked_proxies.cpu().numpy()), axis=0)
+        embedder.fit_transform(all_data)
         embedder.encoder.save('{}/Epoch_{}/parametric_model/encoder'.format(model_dir, e + 1))
-    else:
-        embedder.encoder = tf.keras.models.load_model('{}/Epoch_{}/parametric_model/encoder'.format(model_dir, e + 1))
+    embedder.encoder = tf.keras.models.load_model('{}/Epoch_{}/parametric_model/encoder'.format(model_dir, e + 1))
 
     return embedder, embedding, label, indices, gt_prob, gt_D_weighted, base_loss, p2p_sim
+
+def visualize_interactive(images,
+                          low_dim_emb_sub, low_dim_proxy_sub,
+                          label_sub, subclasses, label_cmap,
+                          base_loss_sub,
+                          gt_D_weighted_sub,
+                          gt_prob_sub,
+                          low_dim_proxy_p2psim,
+                          plot_dir, i,
+                          interactive=False):
+    # # Visualize
+    fig, ax = plt.subplots()
+    # For embedding points
+    x, y = low_dim_emb_sub[:, 0], low_dim_emb_sub[:, 1]
+    px, py = low_dim_proxy_sub[:, 0], low_dim_proxy_sub[:, 1]
+
+    scatter4sample = ax.scatter(x, y, c=[label_cmap[x] for x in label_sub],
+                                cmap='tab10', s=5)
+    plt.legend(handles=scatter4sample.legend_elements()[0], labels=subclasses.tolist())
+    scatter4proxy = ax.scatter(px, py, c=[label_cmap[x] for x in low_dim_proxy_labels],
+                               cmap='tab10', marker=(5, 1), edgecolors='black', linewidths=0.5)
+
+    if interactive:
+        imagebox = OffsetImage(images[0], zoom=0.2)
+        xybox = (32., 32.)
+        ab = AnnotationBbox(imagebox, (0, 0),
+                            xybox=xybox,
+                            xycoords='data',
+                            boxcoords="offset points",
+                            arrowprops=dict(arrowstyle="->"))
+        ax.add_artist(ab)
+        ab.set_visible(False)  # invisible
+        xybox_ac = (50., 50.)
+        ac = ax.annotate("", xy=(0, 0),
+                         xytext=xybox_ac, textcoords="offset points",
+                         bbox=dict(boxstyle='round4', fc='linen', ec='k', lw=1),
+                         arrowprops=dict(arrowstyle='->'))
+        ax.add_artist(ac)
+        ac.set_visible(False)  # invisible
+
+        xybox_ad = (-20, -20)
+        ad = ax.annotate("", xy=(0, 0), xytext=xybox_ad,
+                         xycoords='data', textcoords="offset points",
+                         bbox=dict(boxstyle='round4', fc='linen', ec='k', lw=1),
+                         arrowprops=dict(arrowstyle='->'))
+        ax.add_artist(ad)
+        ad.set_visible(False)  # invisible
+
+        def hover(event):
+            # if the mouse is over the scatter points
+            if scatter4sample.contains(event)[0]:
+                # find out the index within the array from the event
+                ind, = scatter4sample.contains(event)[1]["ind"]
+                # get the figure size
+                w, h = fig.get_size_inches() * fig.dpi
+                ws = (event.x > w / 2.) * -1 + (event.x <= w / 2.)
+                hs = (event.y > h / 2.) * -1 + (event.y <= h / 2.)
+                # if event occurs in the top or right quadrant of the figure,
+                # change the annotation box position relative to mouse.
+                ab.xybox = (xybox[0] * ws, xybox[1] * hs)
+                ab.set_visible(True)
+                # place it at the position of the hovered scatter point
+                ab.xy = (x[ind], y[ind])
+                # set the image corresponding to that point
+                imagebox.set_data(images[ind])
+
+                ac.xybox = (xybox_ac[0] * ws, xybox_ac[1] * hs)
+                ac.xy = (x[ind], y[ind])
+                text = "Indices={} \n Loss={:.4f} \n S_yi={:.4f} \n Weight2Proxy={}".format(indices[ind],
+                                                                                            base_loss_sub[ind],
+                                                                                            gt_D_weighted_sub[ind],
+                                                                                            gt_prob_sub[ind])
+                ac.set_visible(True)
+                ac.set_text(text)
+
+            else:
+                # if the mouse is not over a scatter point
+                ab.set_visible(False)
+                ac.set_visible(False)
+            fig.canvas.draw_idle()
+
+            # if the mouse is over the scatter points
+            if scatter4proxy.contains(event)[0]:
+                # find out the index within the array from the event
+                ind, = scatter4proxy.contains(event)[1]["ind"]
+                w, h = fig.get_size_inches() * fig.dpi
+                ws = (event.x > w / 2.) * -1 + (event.x <= w / 2.)
+                hs = (event.y > h / 2.) * -1 + (event.y <= h / 2.)
+                ad.xybox = (xybox_ad[0] * ws, xybox_ad[1] * hs)
+                ad.xy = (px[ind], py[ind])
+                text = "Proxy2Proxy Similarity:\n{}".format(low_dim_proxy_p2psim[ind])
+                ad.set_visible(True)
+                ad.set_text(text)
+            else:
+                ad.set_visible(False)
+            fig.canvas.draw_idle()
+
+        # # add callback for mouse moves
+        fig.canvas.mpl_connect('motion_notify_event', hover)
+        plt.draw()
+        plt.show()
+
+    else:
+        os.makedirs('{}/{}th_batch'.format(plot_dir, str(i)), exist_ok=True)
+        fig.savefig('{}/{}th_batch/Epoch_{}.png'.format(plot_dir, str(i), e + 1))
+
 
 if __name__ == '__main__':
 
     dataset_name = 'logo2k'
     dynamic_proxy = False
     sz_embedding = 2048
-    presaved = False
-    pretrained = False
-    initial_proxy_num = 1
-    interactive = False
+    tau = 0.2
+    presaved = True
+    pretrained = True
+    initial_proxy_num = 2
+    interactive = True
 
-    # folder = 'dvi_data_{}_{}_t0.1_proxy{}/'.format(dataset_name, dynamic_proxy, initial_proxy_num)
-    folder = 'dvi_data_logo2k_False'
+    folder = 'dvi_data_{}_{}_t0.1_proxy{}/'.format(dataset_name, dynamic_proxy, initial_proxy_num, tau)
+    # folder = 'dvi_data_logo2k_False'
     model_dir = '{}/ResNet_{}_Model'.format(folder, sz_embedding)
     plot_dir = '{}/resnet_{}_umap_plots'.format(folder, sz_embedding)
     os.makedirs(folder, exist_ok=True)
@@ -189,8 +295,8 @@ if __name__ == '__main__':
 
     for i in range(1, 2):
         subclasses = np.asarray(list(range(5*(i-1), 5*i)))
-        for e in tqdm(range(40)):
-
+        # for e in tqdm(range(40)):
+        for e in tqdm([38]):
             model.load_state_dict(torch.load('{}/Epoch_{}/{}_{}_trainval_{}_0.pth'.format(model_dir, e+1, dataset_name, dataset_name, sz_embedding)))
             proxies = torch.load('{}/Epoch_{}/proxy.pth'.format(model_dir, e+1), map_location='cpu')['proxies'].detach()
             reshape_proxies = proxies.view(criterion.nb_classes, criterion.max_proxy_per_class, -1)
@@ -240,101 +346,15 @@ if __name__ == '__main__':
 
             low_dim_proxy_sub = np.asarray(low_dim_proxy_sub)
 
-            # # Visualize
-            fig, ax = plt.subplots()
-            # For embedding points
-            x, y = low_dim_emb_sub[:, 0], low_dim_emb_sub[:, 1]
-            px, py = low_dim_proxy_sub[:, 0], low_dim_proxy_sub[:, 1]
-
-            scatter4sample = ax.scatter(x, y, c=[label_cmap[x] for x in label_sub],
-                                        cmap='tab10', s=5)
-            plt.legend(handles=scatter4sample.legend_elements()[0], labels=subclasses.tolist())
-            scatter4proxy = ax.scatter(px, py, c=[label_cmap[x] for x in low_dim_proxy_labels],
-                                       cmap='tab10', marker=(5,1), edgecolors='black', linewidths=0.5)
-
-            if interactive:
-                imagebox = OffsetImage(images[0], zoom=0.2)
-                xybox = (32., 32.)
-                ab = AnnotationBbox(imagebox, (0, 0),
-                                    xybox=xybox,
-                                    xycoords='data',
-                                    boxcoords="offset points",
-                                    arrowprops=dict(arrowstyle="->"))
-                ax.add_artist(ab)
-                ab.set_visible(False) # invisible
-                xybox_ac = (50., 50.)
-                ac = ax.annotate("", xy=(0, 0),
-                                 xytext=xybox_ac, textcoords="offset points",
-                                 bbox=dict(boxstyle='round4', fc='linen', ec='k', lw=1),
-                                 arrowprops=dict(arrowstyle='->'))
-                ax.add_artist(ac)
-                ac.set_visible(False) # invisible
-
-                xybox_ad = (-20, -20)
-                ad = ax.annotate("", xy=(0, 0), xytext=xybox_ad,
-                                 xycoords='data',textcoords="offset points",
-                                 bbox=dict(boxstyle='round4', fc='linen', ec='k', lw=1),
-                                 arrowprops=dict(arrowstyle='->'))
-                ax.add_artist(ad)
-                ad.set_visible(False) # invisible
-
-                def hover(event):
-                    # if the mouse is over the scatter points
-                    if scatter4sample.contains(event)[0]:
-                        # find out the index within the array from the event
-                        ind, = scatter4sample.contains(event)[1]["ind"]
-                        # get the figure size
-                        w, h = fig.get_size_inches() * fig.dpi
-                        ws = (event.x > w / 2.) * -1 + (event.x <= w / 2.)
-                        hs = (event.y > h / 2.) * -1 + (event.y <= h / 2.)
-                        # if event occurs in the top or right quadrant of the figure,
-                        # change the annotation box position relative to mouse.
-                        ab.xybox = (xybox[0]*ws, xybox[1]*hs)
-                        ab.set_visible(True)
-                        # place it at the position of the hovered scatter point
-                        ab.xy = (x[ind], y[ind])
-                        # set the image corresponding to that point
-                        imagebox.set_data(images[ind])
-
-                        ac.xybox = (xybox_ac[0] * ws, xybox_ac[1] * hs)
-                        ac.xy = (x[ind], y[ind])
-                        text = "Indices={} \n Loss={:.4f} \n S_yi={:.4f} \n Weight2Proxy={}".format(indices[ind],
-                                                                                                    base_loss_sub[ind],
-                                                                                                    gt_D_weighted_sub[ind],
-                                                                                                    gt_prob_sub[ind])
-                        ac.set_visible(True)
-                        ac.set_text(text)
-
-                    else:
-                        # if the mouse is not over a scatter point
-                        ab.set_visible(False)
-                        ac.set_visible(False)
-                    fig.canvas.draw_idle()
-
-                    # if the mouse is over the scatter points
-                    if scatter4proxy.contains(event)[0]:
-                        # find out the index within the array from the event
-                        ind, = scatter4proxy.contains(event)[1]["ind"]
-                        w, h = fig.get_size_inches() * fig.dpi
-                        ws = (event.x > w / 2.) * -1 + (event.x <= w / 2.)
-                        hs = (event.y > h / 2.) * -1 + (event.y <= h / 2.)
-                        ad.xybox = (xybox_ad[0] * ws, xybox_ad[1] * hs)
-                        ad.xy = (px[ind], py[ind])
-                        text = "Proxy2Proxy Similarity:\n{}".format(low_dim_proxy_p2psim[ind])
-                        ad.set_visible(True)
-                        ad.set_text(text)
-                    else:
-                        ad.set_visible(False)
-                    fig.canvas.draw_idle()
-
-                # # add callback for mouse moves
-                fig.canvas.mpl_connect('motion_notify_event', hover)
-                plt.draw()
-                plt.show()
-            
-            else:
-                os.makedirs('{}/{}th_batch'.format(plot_dir, str(i)), exist_ok=True)
-                fig.savefig('{}/{}th_batch/Epoch_{}.png'.format(plot_dir, str(i), e+1))
+            visualize_interactive(images,
+                                low_dim_emb_sub, low_dim_proxy_sub,
+                                label_sub, subclasses, label_cmap,
+                                base_loss_sub,
+                                gt_D_weighted_sub,
+                                gt_prob_sub,
+                                low_dim_proxy_p2psim,
+                                plot_dir, i,
+                                interactive)
 
 
     '''Line plot'''
