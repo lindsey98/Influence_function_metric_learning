@@ -139,7 +139,10 @@ class ProxyNCA_prob(torch.nn.Module):
         masked_proxyIP = torch.mul(block_mask, Proxy_IP)
         regularization = torch.sum(masked_proxyIP)
         nonzero_items = torch.count_nonzero(masked_proxyIP).item()
-        mean_regularization = regularization / (nonzero_items) # divide by 2 because proxy inner product was
+        if nonzero_items == 0:
+            mean_regularization = regularization * 0.0
+        else:
+            mean_regularization = regularization / (nonzero_items) # divide by 2 because proxy inner product was
 
         return mean_regularization
 

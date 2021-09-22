@@ -23,6 +23,8 @@ from utils import predict_batchwise, inner_product_sim
 from dataset.base import SubSampler
 from hard_detection import hard_potential, split_potential
 from torch.utils.data import Dataset, DataLoader
+os.environ["CUDA_VISIBLE_DEVICES"]="0"
+
 
 
 if __name__ == '__main__':
@@ -45,10 +47,10 @@ if __name__ == '__main__':
                 **dataset_config['transform_parameters']
             )
     tr_dataset = dataset.load(
-        name='logo2k_super500',
-        root=dataset_config['dataset']['logo2k_super500']['root'],
-        source=dataset_config['dataset']['logo2k_super500']['source'],
-        classes=dataset_config['dataset']['logo2k_super500']['classes']['trainval'],
+        name='logo2k',
+        root=dataset_config['dataset']['logo2k']['root'],
+        source=dataset_config['dataset']['logo2k']['source'],
+        classes=dataset_config['dataset']['logo2k']['classes']['trainval'],
         transform=train_transform
     )
 
@@ -70,10 +72,10 @@ if __name__ == '__main__':
     # training dataloader without shuffling and without transformation
     dl_tr_noshuffle = torch.utils.data.DataLoader(
             dataset=dataset.load(
-                    name='logo2k_super500',
-                    root=dataset_config['dataset']['logo2k_super500']['root'],
-                    source=dataset_config['dataset']['logo2k_super500']['source'],
-                    classes=dataset_config['dataset']['logo2k_super500']['classes']['trainval'],
+                    name='logo2k',
+                    root=dataset_config['dataset']['logo2k']['root'],
+                    source=dataset_config['dataset']['logo2k']['source'],
+                    classes=dataset_config['dataset']['logo2k']['classes']['trainval'],
                     transform=dataset.utils.make_transform(
                         **dataset_config['transform_parameters'],
                         is_train=False
@@ -104,7 +106,7 @@ if __name__ == '__main__':
         nb_classes = dl_tr.dataset.nb_classes(),
         sz_embed = sz_embedding,
         len_training = len(dl_tr.dataset),
-        initial_proxy_num=2,
+        initial_proxy_num=1,
         **config['criterion']['args']
     ).cuda()
 
