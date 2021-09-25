@@ -17,7 +17,7 @@ import json
 import torch.nn.functional as F
 from matplotlib.offsetbox import TextArea, DrawingArea, OffsetImage, \
     AnnotationBbox
-os.environ['CUDA_VISIBLE_DEVICES'] = "0"
+os.environ['CUDA_VISIBLE_DEVICES'] = "0, 1"
 
 def prepare_data(data_name='cub', root='dvi_data_cub200/', save=False):
     '''
@@ -216,10 +216,9 @@ def visualize_interactive(images,
 
                 ac.xybox = (xybox_ac[0] * ws, xybox_ac[1] * hs)
                 ac.xy = (x[ind], y[ind])
-                text = "Indices={} \n Loss={:.4f} \n S_yi={:.4f} \n Weight2Proxy={}".format(indices[ind],
-                                                                                            base_loss_sub[ind],
-                                                                                            gt_D_weighted_sub[ind],
-                                                                                            gt_prob_sub[ind])
+                text = "Indices={} \n Loss={:.4f} \n " \
+                       "S_yi={:.4f} \n Weight2Proxy={}".format(indices[ind], base_loss_sub[ind],
+                                                               gt_D_weighted_sub[ind], gt_prob_sub[ind])
                 ac.set_visible(True)
                 ac.set_text(text)
 
@@ -260,14 +259,13 @@ if __name__ == '__main__':
     dataset_name = 'logo2k'
     dynamic_proxy = False
     sz_embedding = 2048
-    tau = 0.2
-    presaved = True
-    pretrained = True
+    tau = 0.0
+    presaved = False
+    pretrained = False
     initial_proxy_num = 2
-    interactive = True
+    interactive = False
 
-    folder = 'dvi_data_{}_{}_t0.1_proxy{}/'.format(dataset_name, dynamic_proxy, initial_proxy_num, tau)
-    # folder = 'dvi_data_logo2k_False'
+    folder = 'dvi_data_{}_{}_t0.1_proxy{}_tau{}/'.format(dataset_name, dynamic_proxy, initial_proxy_num, tau)
     model_dir = '{}/ResNet_{}_Model'.format(folder, sz_embedding)
     plot_dir = '{}/resnet_{}_umap_plots'.format(folder, sz_embedding)
     os.makedirs(folder, exist_ok=True)
@@ -295,8 +293,8 @@ if __name__ == '__main__':
 
     for i in range(1, 2):
         subclasses = np.asarray(list(range(5*(i-1), 5*i)))
-        # for e in tqdm(range(40)):
-        for e in tqdm([38]):
+        for e in tqdm(range(40)):
+        # for e in tqdm([39]):
             model.load_state_dict(torch.load('{}/Epoch_{}/{}_{}_trainval_{}_0.pth'.format(model_dir, e+1, dataset_name, dataset_name, sz_embedding)))
             proxies = torch.load('{}/Epoch_{}/proxy.pth'.format(model_dir, e+1), map_location='cpu')['proxies'].detach()
             reshape_proxies = proxies.view(criterion.nb_classes, criterion.max_proxy_per_class, -1)

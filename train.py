@@ -23,7 +23,7 @@ from dataset.base import SubSampler
 from hard_detection import hard_potential, split_potential
 from torch.utils.data import Dataset, DataLoader
 import torch.nn.functional as F
-os.environ["CUDA_VISIBLE_DEVICES"]="1"
+os.environ["CUDA_VISIBLE_DEVICES"]="0"
 
 parser = argparse.ArgumentParser(description='Training ProxyNCA++')
 parser.add_argument('--embedding-size', default = 512, type=int, dest = 'sz_embedding')
@@ -44,11 +44,11 @@ parser.add_argument('--warmup_k', default=5, type=int)
 
 parser.add_argument('--dataset', default='logo2k')
 parser.add_argument('--config', default='config/logo2k.json')
-parser.add_argument('--mode', default='trainval', choices=['train', 'trainval', 'test', 'testontrain'],
+parser.add_argument('--mode', default='trainval', choices=['train', 'trainval', 'test', 'testontrain', 'testontrain_super'],
                     help='train with train data or train with trainval')
-parser.add_argument('--dynamic_proxy', default=False, action='store_true')
-parser.add_argument('--initial_proxy_num', default=2, type=int)
-parser.add_argument('--tau', default=0.2, type=float)
+parser.add_argument('--dynamic_proxy', default=True, action='store_true')
+parser.add_argument('--initial_proxy_num', default=1, type=int)
+parser.add_argument('--tau', default=0.0, type=float)
 parser.add_argument('--proxy_update_schedule', default=[0.5, 0.75], nargs='+', type=float)
 
 args = parser.parse_args()
@@ -112,7 +112,8 @@ if __name__ == '__main__':
         args.log_filename = args.log_filename.replace('test', 'trainval')
     elif args.mode == 'testontrain':
         args.log_filename = args.log_filename.replace('testontrain', 'trainval')
-
+    elif args.mode == 'testontrain_super':
+        args.log_filename = args.log_filename.replace('testontrain_super', 'trainval')
     best_epoch = args.nb_epochs
 
     '''Dataloader'''
@@ -203,7 +204,7 @@ if __name__ == '__main__':
                 transform = train_transform
             )
 
-    elif args.mode == 'trainval' or args.mode == 'test' or args.mode == 'testontrain':
+    elif args.mode == 'trainval' or args.mode == 'test' or args.mode == 'testontrain' or args.mode == 'testontrain_super':
         # print(dataset_config['dataset'][args.dataset]['root'])
         tr_dataset = dataset.load(
                 name = args.dataset,
@@ -356,6 +357,14 @@ if __name__ == '__main__':
             logging.info("**Evaluating...(test mode, test on training set)**")
             model = load_best_checkpoint(model)
             utils.evaluate(model, dl_tr_noshuffle, args.eval_nmi, args.recall)
+        exit() # exit the program
+    if args.mode == 'testontrain_super':
+        with torch.no_grad():
+            logging.info("**Evaluating with gt super 100 classes...(test mode, test on training set)**")
+            model = load_best_checkpoint(model)
+            with open("mnt/datasets/logo2ksuperclass0.01.json", 'rt') as handle:
+                labeldict = json.load(handle)
+            utils.evaluate_super(model, dl_tr_noshuffle, labeldict, args.eval_nmi, args.recall)
         exit() # exit the program
 
     if args.mode == 'train':

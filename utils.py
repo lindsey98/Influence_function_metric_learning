@@ -195,6 +195,57 @@ def evaluate(model, dataloader, eval_nmi=True, recall_list=[1, 2, 4, 8]):
     return nmi, recall
 
 
+def evaluate_super(model, dataloader,
+                   labeldict,
+                   eval_nmi=True, recall_list=[1, 2, 4, 8]):
+    '''
+        Evaluation on dataloader
+        :param model: embedding model
+        :param dataloader: dataloader
+        :param eval_nmi: evaluate NMI (Mutual information between clustering on embedding and the gt class labels) or not
+        :param recall_list: recall@K
+    '''
+    eval_time = time.time()
+    nb_classes = dataloader.dataset.nb_classes()
+    reverse_dict = {int(value): int(key) for key in labeldict for value in labeldict[key]}
+    # calculate embeddings with model and get targets
+    X, T, *_ = predict_batchwise(model, dataloader)
+    T = T.detach().cpu().numpy()
+    T = [reverse_dict[t] for t in T]
+    print('done collecting prediction')
+
+    if eval_nmi:
+        # calculate NMI with kmeans clustering
+        nmi = evaluation.calc_normalized_mutual_information(
+            T,
+            evaluation.cluster_by_kmeans(
+                X, nb_classes
+            )
+        )
+    else:
+        nmi = 1
+
+    logging.info("NMI: {:.3f}".format(nmi * 100))
+
+    # get predictions by assigning nearest 8 neighbors with euclidian
+    max_dist = max(recall_list)
+    Y = evaluation.assign_by_euclidian_at_k(X, T, max_dist)
+    Y = torch.from_numpy(Y)
+
+    # calculate recall @ 1, 2, 4, 8
+    recall = []
+    for k in recall_list:
+        r_at_k = evaluation.calc_recall_at_k(T, Y, k)
+        recall.append(r_at_k)
+        logging.info("R@{} : {:.3f}".format(k, 100 * r_at_k))
+
+    chmean = (2 * nmi * recall[0]) / (nmi + recall[0])
+    logging.info("hmean: %s", str(chmean))
+
+    eval_time = time.time() - eval_time
+    logging.info('Eval time: %.2f' % eval_time)
+    return nmi, recall
+
 def evaluate_inshop(model, dl_query, dl_gallery,
         K = [1, 10, 20, 30, 40, 50], with_nmi = False):
     '''
