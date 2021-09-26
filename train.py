@@ -42,11 +42,11 @@ parser.add_argument('--no_warmup', default=False, action='store_true')
 parser.add_argument('--apex', default=False, action='store_true')
 parser.add_argument('--warmup_k', default=5, type=int)
 
-parser.add_argument('--dataset', default='logo2k')
+parser.add_argument('--dataset', default='logo2k_super500')
 parser.add_argument('--config', default='config/logo2k.json')
-parser.add_argument('--mode', default='trainval', choices=['train', 'trainval', 'test', 'testontrain', 'testontrain_super'],
+parser.add_argument('--mode', default='testontrain_super', choices=['train', 'trainval', 'test', 'testontrain', 'testontrain_super'],
                     help='train with train data or train with trainval')
-parser.add_argument('--dynamic_proxy', default=True, action='store_true')
+parser.add_argument('--dynamic_proxy', default=False, action='store_true')
 parser.add_argument('--initial_proxy_num', default=1, type=int)
 parser.add_argument('--tau', default=0.0, type=float)
 parser.add_argument('--proxy_update_schedule', default=[0.5, 0.75], nargs='+', type=float)

@@ -256,13 +256,13 @@ def visualize_interactive(images,
 
 if __name__ == '__main__':
 
-    dataset_name = 'logo2k'
+    dataset_name = 'logo2k_super500'
     dynamic_proxy = False
     sz_embedding = 2048
     tau = 0.0
     presaved = False
     pretrained = False
-    initial_proxy_num = 2
+    initial_proxy_num = 1
     interactive = False
 
     folder = 'dvi_data_{}_{}_t0.1_proxy{}_tau{}/'.format(dataset_name, dynamic_proxy, initial_proxy_num, tau)
@@ -273,7 +273,7 @@ if __name__ == '__main__':
     os.makedirs(os.path.join(folder, 'Testing_data'), exist_ok=True)
     os.makedirs(plot_dir, exist_ok=True)
 
-    dl_tr, dl_ev = prepare_data(data_name=dataset_name, root=folder, save=False)
+    dl_tr, dl_ev = prepare_data(data_name=dataset_name.split('_')[0], root=folder, save=False)
 
     # load model
     feat = Feat_resnet50_max_n()

@@ -222,11 +222,14 @@ class ProxyNCA_prob(torch.nn.Module):
         target_probs = (torch.ones((X.shape[0], self.nb_classes)) * smoothing_const).to(T.device)
         target_probs.scatter_(1, T.unsqueeze(1), 1 - smoothing_const) # one-hot label
 
-        base_loss = torch.sum(- target_probs * F.log_softmax(-D_weighted, -1), -1).mean()
-        mean_regularization = self.regularization(Proxy_IP)
-        loss = base_loss + mean_regularization * self.tau
+        base_loss = torch.sum(- target_probs * F.log_softmax(-D_weighted+(1e-12), -1), -1).mean() # log underflow
+        if self.tau == 0.0:
+            return base_loss
+        else:
+            mean_regularization = self.regularization(Proxy_IP)
+            loss = base_loss + mean_regularization * self.tau
 
-        return loss
+            return loss
 
 
 class ProxyNCA_prob_orig(torch.nn.Module):
