@@ -241,7 +241,7 @@ class ProxyNCA_prob_orig(torch.nn.Module):
         self.proxies = torch.nn.Parameter(torch.randn(nb_classes, sz_embed) / 8)
         self.scale = scale
 
-    def forward(self, X, T):
+    def forward(self, X, indices, T):
         P = self.proxies
         # note: self.scale is equal to sqrt(1/T)
         # in the paper T = 1/9, therefore, scale = sart(1/(1/9)) = sqrt(9) = 3

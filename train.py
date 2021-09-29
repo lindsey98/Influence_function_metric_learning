@@ -42,9 +42,10 @@ parser.add_argument('--no_warmup', default=False, action='store_true')
 parser.add_argument('--apex', default=False, action='store_true')
 parser.add_argument('--warmup_k', default=5, type=int)
 
-parser.add_argument('--dataset', default='logo2k_super500')
-parser.add_argument('--config', default='config/logo2k.json')
-parser.add_argument('--mode', default='testontrain_super', choices=['train', 'trainval', 'test', 'testontrain', 'testontrain_super'],
+parser.add_argument('--dataset', default='logo2k_super100')
+parser.add_argument('--config', default='config/logo2k_orig.json')
+parser.add_argument('--mode', default='testontrain_super', choices=['train', 'trainval', 'test',
+                                                           'testontrain', 'testontrain_super'],
                     help='train with train data or train with trainval')
 parser.add_argument('--dynamic_proxy', default=False, action='store_true')
 parser.add_argument('--initial_proxy_num', default=1, type=int)
@@ -282,13 +283,18 @@ if __name__ == '__main__':
     model = model.cuda()
 
     '''Loss'''
+    # TODO
     criterion = config['criterion']['type'](
         nb_classes = dl_tr.dataset.nb_classes(),
         sz_embed = args.sz_embedding,
-        len_training = len(dl_tr.dataset),
         initial_proxy_num = args.initial_proxy_num,
         **config['criterion']['args']
     ).cuda()
+    # criterion = config['criterion']['type'](
+    #     nb_classes = dl_tr.dataset.nb_classes(),
+    #     sz_embed = args.sz_embedding,
+    #     **config['criterion']['args']
+    # ).cuda()
 
     # options for warmup
     opt_warmup = config['opt']['type'](
@@ -438,18 +444,19 @@ if __name__ == '__main__':
         cached_sim = np.zeros(len_training)  # cache the similarity to ground-truth proxy
         cached_cls = np.zeros(len_training) # cache the gt-class
 
-        if e == 0:
-            loss_recorder = {}
-            with open("{0}/{1}_ip.json".format('log', args.log_filename), 'wt') as handle:
-                json.dump(loss_recorder, handle)
-            label_recorder = {}
-            with open("{0}/{1}_cls.json".format('log', args.log_filename), 'wt') as handle:
-                json.dump(label_recorder, handle)
+        if args.dynamic_proxy:
+            if e == 0:
+                loss_recorder = {}
+                with open("{0}/{1}_ip.json".format('log', args.log_filename), 'wt') as handle:
+                    json.dump(loss_recorder, handle)
+                label_recorder = {}
+                with open("{0}/{1}_cls.json".format('log', args.log_filename), 'wt') as handle:
+                    json.dump(label_recorder, handle)
 
-        with open("{0}/{1}_ip.json".format('log', args.log_filename), 'rt') as handle:
-            loss_recorder = json.load(handle)
-        with open("{0}/{1}_cls.json".format('log', args.log_filename), 'rt') as handle:
-            label_recorder = json.load(handle)
+            with open("{0}/{1}_ip.json".format('log', args.log_filename), 'rt') as handle:
+                loss_recorder = json.load(handle)
+            with open("{0}/{1}_cls.json".format('log', args.log_filename), 'rt') as handle:
+                label_recorder = json.load(handle)
 
         # lr decay
         if args.mode == 'train':
@@ -479,18 +486,18 @@ if __name__ == '__main__':
         losses.append(np.mean(losses_per_epoch[-20:]))
 
         # save proxy-similarity and class labels
-        train_embs, train_cls, *_ = predict_batchwise(model, dl_tr_noshuffle)
-
-        cached_sim, cached_cls = inner_product_sim(X=train_embs, P=criterion.proxies, T=train_cls,
-                                                   mask=criterion.mask,
-                                                   nb_classes=criterion.nb_classes,
-                                                   max_proxy_per_class=criterion.max_proxy_per_class)
-        loss_recorder[e] = cached_sim.tolist()
-        with open("{0}/{1}_ip.json".format('log', args.log_filename), 'wt') as handle:
-            json.dump(loss_recorder, handle)
-        label_recorder[e] = cached_cls.tolist()
-        with open("{0}/{1}_cls.json".format('log', args.log_filename), 'wt') as handle:
-            json.dump(label_recorder, handle)
+        if args.dynamic_proxy:
+            train_embs, train_cls, *_ = predict_batchwise(model, dl_tr_noshuffle)
+            cached_sim, cached_cls = inner_product_sim(X=train_embs, P=criterion.proxies, T=train_cls,
+                                                       mask=criterion.mask,
+                                                       nb_classes=criterion.nb_classes,
+                                                       max_proxy_per_class=criterion.max_proxy_per_class)
+            loss_recorder[e] = cached_sim.tolist()
+            with open("{0}/{1}_ip.json".format('log', args.log_filename), 'wt') as handle:
+                json.dump(loss_recorder, handle)
+            label_recorder[e] = cached_cls.tolist()
+            with open("{0}/{1}_cls.json".format('log', args.log_filename), 'wt') as handle:
+                json.dump(label_recorder, handle)
 
         print('it: {}'.format(it))
         print(opt)
@@ -592,6 +599,8 @@ if __name__ == '__main__':
             handle.write(json.dumps(list(range(len(dl_tr_noshuffle.dataset)))))
         torch.save(model.state_dict(), '{}/Epoch_{}/{}_{}_{}_{}_{}.pth'.format(save_dir, e+1, args.dataset, args.dataset, args.mode, str(args.sz_embedding), str(args.seed)))
         torch.save({"proxies": criterion.proxies, "mask": criterion.mask}, '{}/Epoch_{}/proxy.pth'.format(save_dir, e+1))
+        # TODO
+        # torch.save({"proxies": criterion.proxies}, '{}/Epoch_{}/proxy.pth'.format(save_dir, e+1))
         ######################################################################################
 
         if args.mode == 'trainval':

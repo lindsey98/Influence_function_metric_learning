@@ -47,10 +47,10 @@ if __name__ == '__main__':
                 **dataset_config['transform_parameters']
             )
     tr_dataset = dataset.load(
-        name='logo2k',
-        root=dataset_config['dataset']['logo2k']['root'],
-        source=dataset_config['dataset']['logo2k']['source'],
-        classes=dataset_config['dataset']['logo2k']['classes']['trainval'],
+        name='logo2k_super100',
+        root=dataset_config['dataset']['logo2k_super100']['root'],
+        source=dataset_config['dataset']['logo2k_super100']['source'],
+        classes=dataset_config['dataset']['logo2k_super100']['classes']['trainval'],
         transform=train_transform
     )
 
@@ -72,10 +72,10 @@ if __name__ == '__main__':
     # training dataloader without shuffling and without transformation
     dl_tr_noshuffle = torch.utils.data.DataLoader(
             dataset=dataset.load(
-                    name='logo2k',
-                    root=dataset_config['dataset']['logo2k']['root'],
-                    source=dataset_config['dataset']['logo2k']['source'],
-                    classes=dataset_config['dataset']['logo2k']['classes']['trainval'],
+                    name='logo2k_super100',
+                    root=dataset_config['dataset']['logo2k_super100']['root'],
+                    source=dataset_config['dataset']['logo2k_super100']['source'],
+                    classes=dataset_config['dataset']['logo2k_super100']['classes']['trainval'],
                     transform=dataset.utils.make_transform(
                         **dataset_config['transform_parameters'],
                         is_train=False
@@ -135,25 +135,28 @@ if __name__ == '__main__':
         **config['opt']['args']['base']
     )
 
+    best_test_nmi, (best_test_r1, best_test_r2, best_test_r4, best_test_r8) = utils.evaluate(model, dl_tr_noshuffle,
+                                                                                             False)
+    print(best_test_r1, best_test_r2, best_test_r4, best_test_r8)
     # training!
-    losses = []
-    visited_indices = []
-    for e in range(0, 100): # train for 5 epochs for example
-        losses_per_epoch = []
-        for ct, (x, y, indices) in tqdm(enumerate(dl_tr)):
-            # print(indices)
-            visited_indices.extend(indices.detach().cpu().numpy())
-            x = x.cuda()
-            m = model(x)
-            # FIXME: loss not improving
-
-            loss = criterion(m, indices, y.cuda())
-
-            opt.zero_grad()
-            loss.backward()
-            opt.step()
-
-            losses_per_epoch.append(loss.data.cpu().numpy())
+    # losses = []
+    # visited_indices = []
+    # for e in range(0, 100): # train for 5 epochs for example
+    #     losses_per_epoch = []
+    #     for ct, (x, y, indices) in tqdm(enumerate(dl_tr)):
+    #         # print(indices)
+    #         visited_indices.extend(indices.detach().cpu().numpy())
+    #         x = x.cuda()
+    #         m = model(x)
+    #         # FIXME: loss not improving
+    #
+    #         loss = criterion(m, indices, y.cuda())
+    #
+    #         opt.zero_grad()
+    #         loss.backward()
+    #         opt.step()
+    #
+    #         losses_per_epoch.append(loss.data.cpu().numpy())
 
             # cached_sim, cached_cls = inner_product_sim(X=train_embs, P=criterion.proxies, T=train_cls,
             #                                            mask=criterion.mask,

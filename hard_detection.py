@@ -1,11 +1,6 @@
-import json
-import numpy as np
 from sklearn.cluster import KMeans
-import torch
 import scipy.stats
-from sklearn.metrics import pairwise_distances
-from utils import predict_batchwise
-from parametric_umap import *
+from visualize.parametric_umap import *
 
 def hard_potential(sim_dict, cls_dict, current_t, rolling_t=5, ts_sim=0.5, ts_ratio=[0.4, 1]):
     '''

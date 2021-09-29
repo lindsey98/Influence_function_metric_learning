@@ -19,7 +19,7 @@ from matplotlib.offsetbox import TextArea, DrawingArea, OffsetImage, \
     AnnotationBbox
 os.environ['CUDA_VISIBLE_DEVICES'] = "0, 1"
 
-def prepare_data(data_name='cub', root='dvi_data_cub200/', save=False):
+def prepare_data(data_name, config_file, root, save=False):
     '''
         Prepare dataloader
         :param data_name: dataset used
@@ -28,7 +28,7 @@ def prepare_data(data_name='cub', root='dvi_data_cub200/', save=False):
     '''
     dataset_config = utils.load_config('dataset/config.json')
 
-    config = utils.load_config('config/{}.json'.format(data_name))
+    config = utils.load_config('config/{}.json'.format(config_file))
     transform_key = 'transform_parameters'
     if 'transform_key' in config.keys():
         transform_key = config['transform_key']
@@ -97,6 +97,24 @@ def encoder_model(n_components=2):
         ])
     return encoder
 
+def encoder_trainer(model_dir, all_data, pretrained ,e):
+    # Parametric Umap model
+    encoder = encoder_model()
+    embedder = ParametricUMAP(encoder=encoder, verbose=False, batch_size=64)
+
+    if not pretrained:
+        if e > 0:
+            try:
+                # Initialize by last visualization model
+                embedder.encoder = tf.keras.models.load_model('{}/Epoch_{}/parametric_model/encoder'.format(model_dir, e))
+            except OSError as error:  # saved model file does not exist
+                print(error)
+                pass
+        # Train on all samples and all proxies
+        embedder.fit_transform(all_data)
+        embedder.encoder.save('{}/Epoch_{}/parametric_model/encoder'.format(model_dir, e + 1))
+    embedder.encoder = tf.keras.models.load_model('{}/Epoch_{}/parametric_model/encoder'.format(model_dir, e + 1))
+    return embedder
 
 def pumap_training(model, model_dir, e,
                    criterion,
@@ -128,26 +146,12 @@ def pumap_training(model, model_dir, e,
     stacked_proxies = F.normalize(stacked_proxies, dim=-1)
     print('Embedding of shape: ', embedding.shape,
           'Current proxies of shape: ', stacked_proxies.shape)
-
-    # Parametric Umap model
-    encoder = encoder_model()
-    embedder = ParametricUMAP(encoder=encoder, verbose=False, batch_size=64)
-
-    if not pretrained:
-        if e > 0:
-            try:
-                # Initialize by last visualization model
-                embedder.encoder = tf.keras.models.load_model('{}/Epoch_{}/parametric_model/encoder'.format(model_dir, e))
-            except OSError as error:  # saved model file does not exist
-                print(error)
-                pass
-        # Train on all samples and all proxies
-        all_data = np.concatenate((embedding.detach().cpu().numpy(), stacked_proxies.cpu().numpy()), axis=0)
-        embedder.fit_transform(all_data)
-        embedder.encoder.save('{}/Epoch_{}/parametric_model/encoder'.format(model_dir, e + 1))
-    embedder.encoder = tf.keras.models.load_model('{}/Epoch_{}/parametric_model/encoder'.format(model_dir, e + 1))
+    all_data = np.concatenate((embedding.detach().cpu().numpy(), stacked_proxies.cpu().numpy()), axis=0)
+    embedder = encoder_trainer(model_dir, all_data, pretrained, e)
 
     return embedder, embedding, label, indices, gt_prob, gt_D_weighted, base_loss, p2p_sim
+
+
 
 def visualize_interactive(images,
                           low_dim_emb_sub, low_dim_proxy_sub,
@@ -257,6 +261,7 @@ def visualize_interactive(images,
 if __name__ == '__main__':
 
     dataset_name = 'logo2k_super500'
+    config_name = 'logo2k_orig'
     dynamic_proxy = False
     sz_embedding = 2048
     tau = 0.0
@@ -273,7 +278,7 @@ if __name__ == '__main__':
     os.makedirs(os.path.join(folder, 'Testing_data'), exist_ok=True)
     os.makedirs(plot_dir, exist_ok=True)
 
-    dl_tr, dl_ev = prepare_data(data_name=dataset_name.split('_')[0], root=folder, save=False)
+    dl_tr, dl_ev = prepare_data(data_name=dataset_name.split('_')[0], config_file=config_name, root=folder, save=False)
 
     # load model
     feat = Feat_resnet50_max_n()
