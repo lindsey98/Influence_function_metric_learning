@@ -264,3 +264,96 @@ class ProxyNCA_prob_orig(torch.nn.Module):
         loss = torch.sum(- T * F.log_softmax(-D, -1), -1)
         loss = loss.mean()
         return loss
+
+
+class ProxyNCA_prob_kd(torch.nn.Module):
+    '''
+        Original loss in ProxyNCA++
+    '''
+    def __init__(self, nb_classes, sz_embed, scale, **kwargs):
+        torch.nn.Module.__init__(self)
+        self.proxies = torch.nn.Parameter(torch.randn(nb_classes, sz_embed) / 8)
+        self.scale = scale
+
+    def forward(self, X, indices, T):
+        P = self.proxies
+        # note: self.scale is equal to sqrt(1/T)
+        # in the paper T = 1/9, therefore, scale = sart(1/(1/9)) = sqrt(9) = 3
+        #  we need to apply sqrt because the pairwise distance is calculated as norm^2
+
+        P = self.scale * F.normalize(P, p=2, dim=-1)
+        X = self.scale * F.normalize(X, p=2, dim=-1)
+
+        D = pairwise_distance(
+            torch.cat(
+                [X, P]
+            ),
+            squared=True
+        )[0][:X.size()[0], X.size()[0]:] # of shape (N,C)
+        D_sim = F.softmax(-D, -1) # of shape (N,C)
+        logD_sim = torch.log(D_sim) # of shape (N,C)
+
+        # compute between-instance CE
+        label_equal_mask = (T == T.unsqueeze(0).T) * (1-torch.eye(X.size()[0]).to(T.device)) # of shape (N, N)
+        innerCE = torch.einsum('ij,bj->ibj', D_sim, logD_sim) # of shape (N, N, C)
+        innerCE_loss = torch.sum(-innerCE, -1) # of shape (N, N)
+        innerCE_loss = label_equal_mask * innerCE_loss # mask different class pairs # of shape (N, N)
+        innerCE_loss = innerCE_loss[innerCE_loss.nonzero(as_tuple=True)] # take non-zero
+        innerCE_loss = torch.mean(innerCE_loss) # take mean
+
+        T = binarize_and_smooth_labels(
+            T=T, nb_classes=len(P), smoothing_const=0
+        )
+
+        loss = torch.sum(- T * logD_sim, -1) # -ylog(yhat)
+        loss = loss.mean() + 0.3*innerCE_loss
+        return loss
+
+
+class ProxyNCA_prob_multiloss(torch.nn.Module):
+    '''
+        Original loss in ProxyNCA++
+    '''
+    def __init__(self, nb_classes, sz_embed, scale, **kwargs):
+        torch.nn.Module.__init__(self)
+        self.proxies = torch.nn.Parameter(torch.randn(nb_classes, sz_embed) / 8)
+        self.scale = scale
+
+    def forward(self, X, indices, T, type='euclidean'):
+        P = self.proxies
+        # note: self.scale is equal to sqrt(1/T)
+        # in the paper T = 1/9, therefore, scale = sart(1/(1/9)) = sqrt(9) = 3
+        #  we need to apply sqrt because the pairwise distance is calculated as norm^2
+
+        P = self.scale * F.normalize(P, p=2, dim=-1)
+        X = self.scale * F.normalize(X, p=2, dim=-1)
+
+        T = binarize_and_smooth_labels(
+            T=T, nb_classes=len(P), smoothing_const=0
+        )
+
+        if type == 'euclidean':
+            D = pairwise_distance(
+                torch.cat(
+                    [X, P]
+                ),
+                squared=True
+            )[0][:X.size()[0], X.size()[0]:]
+
+            loss = torch.sum(- T * F.log_softmax(-D, -1), -1)
+
+        elif type == 'cosine':
+            IP = pairwise_distance(
+                torch.cat(
+                    [X, P]
+                ),
+                squared=True
+            )[1][:X.size()[0], X.size()[0]:]
+
+            loss = torch.sum(- T * F.log_softmax(IP, -1), -1)
+
+        else:
+            raise NotImplementedError
+
+        loss = loss.mean()
+        return loss

@@ -23,6 +23,7 @@ from dataset.base import SubSampler
 from hard_detection import hard_potential, split_potential
 from torch.utils.data import Dataset, DataLoader
 import torch.nn.functional as F
+from loss import ProxyNCA_prob_multiloss
 os.environ["CUDA_VISIBLE_DEVICES"]="0"
 
 parser = argparse.ArgumentParser(description='Training ProxyNCA++')
@@ -32,7 +33,7 @@ parser.add_argument('--epochs', default = 40, type=int, dest = 'nb_epochs')
 parser.add_argument('--log-filename', default = 'example')
 parser.add_argument('--workers', default = 16, type=int, dest = 'nb_workers')
 parser.add_argument('--seed', default=0, type=int)
-parser.add_argument('--lr_steps', default=[1000], nargs='+', type=int)
+parser.add_argument('--lr_steps', default=[], nargs='+', type=int)
 parser.add_argument('--source_dir', default='', type=str)
 parser.add_argument('--root_dir', default='', type=str)
 parser.add_argument('--eval_nmi', default=False, action='store_true')
@@ -77,11 +78,7 @@ if __name__ == '__main__':
     os.makedirs('log', exist_ok=True)
 
     curr_fn = os.path.basename(args.config).split(".")[0]
-
-    # out_results_fn = "log/%s_%s_%s_%d_%s_t0.1_proxy%d_tau%0.2f.json" % (args.dataset, curr_fn, args.mode,
-    #                                                                     args.seed, args.dynamic_proxy,
-    #                                                                     args.initial_proxy_num, args.tau)
-    out_results_fn = "log/%s_kd.json" % (args.dataset)
+    out_results_fn = "log/%s_multiloss.json" % (args.dataset)
 
     config = utils.load_config(args.config)
     dataset_config = utils.load_config('dataset/config.json')
@@ -111,8 +108,7 @@ if __name__ == '__main__':
         transform_key = config['transform_key']
     print('Transformation: ', transform_key)
 
-    # args.log_filename = '%s_%s_%s_%d_%d_%s_t0.1_proxy%d_tau%0.2f' % (args.dataset, curr_fn, args.mode, args.sz_embedding, args.seed, args.dynamic_proxy, args.initial_proxy_num, args.tau)
-    args.log_filename = '%s_kd' % (args.dataset)
+    args.log_filename = '%s_multiloss' % (args.dataset)
 
     if args.mode == 'test':
         args.log_filename = args.log_filename.replace('test', 'trainval')
@@ -124,8 +120,7 @@ if __name__ == '__main__':
 
     '''Dataloader'''
     if args.mode == 'trainval':
-        # train_results_fn = "log/%s_%s_%s_%d_%d_%s_t0.1_proxy%d_tau%0.2f.json" % (args.dataset, curr_fn, 'train', args.sz_embedding, args.seed, args.dynamic_proxy, args.initial_proxy_num, args.tau)
-        train_results_fn = "log/%s_kd.json" % (args.dataset)
+        train_results_fn = "log/%s_multiloss.json" % (args.dataset)
 
         if os.path.exists(train_results_fn):
             with open(train_results_fn, 'r') as f:
@@ -232,7 +227,6 @@ if __name__ == '__main__':
         batch_sampler = dataset.utils.BalancedBatchSampler(torch.Tensor(tr_dataset.ys), num_class_per_batch,
                                                            int(args.sz_batch / num_class_per_batch))
 
-
     dl_tr = torch.utils.data.DataLoader(
         tr_dataset,
         batch_sampler = batch_sampler,
@@ -291,12 +285,12 @@ if __name__ == '__main__':
 
     '''Loss'''
     # TODO
-    criterion = config['criterion']['type'](
+    criterion = ProxyNCA_prob_multiloss(
         nb_classes = dl_tr.dataset.nb_classes(),
         sz_embed = args.sz_embedding,
-        initial_proxy_num = args.initial_proxy_num,
         **config['criterion']['args']
     ).cuda()
+
 
     # options for warmup
     opt_warmup = config['opt']['type'](
@@ -446,20 +440,6 @@ if __name__ == '__main__':
         cached_sim = np.zeros(len_training)  # cache the similarity to ground-truth proxy
         cached_cls = np.zeros(len_training) # cache the gt-class
 
-        if args.dynamic_proxy:
-            if e == 0:
-                loss_recorder = {}
-                with open("{0}/{1}_ip.json".format('log', args.log_filename), 'wt') as handle:
-                    json.dump(loss_recorder, handle)
-                label_recorder = {}
-                with open("{0}/{1}_cls.json".format('log', args.log_filename), 'wt') as handle:
-                    json.dump(label_recorder, handle)
-
-            with open("{0}/{1}_ip.json".format('log', args.log_filename), 'rt') as handle:
-                loss_recorder = json.load(handle)
-            with open("{0}/{1}_cls.json".format('log', args.log_filename), 'rt') as handle:
-                label_recorder = json.load(handle)
-
         # lr decay
         if args.mode == 'train':
             curr_lr = opt.param_groups[0]['lr']
@@ -476,7 +456,11 @@ if __name__ == '__main__':
             it += 1
             x, y = x.cuda(), y.cuda()
             m = model(x)
-            loss = criterion(m, indices, y)
+            if e <= args.nb_epochs * 0.5:
+                loss = criterion(m, indices, y, type='euclidean')
+            else:
+                loss = criterion(m, indices, y, type='cosine')
+
             opt.zero_grad()
             loss.backward() # backprop
             torch.nn.utils.clip_grad_value_(model.parameters(), 10) # clip gradient?
@@ -486,20 +470,6 @@ if __name__ == '__main__':
 
         time_per_epoch_2 = time.time()
         losses.append(np.mean(losses_per_epoch[-20:]))
-
-        # save proxy-similarity and class labels
-        if args.dynamic_proxy:
-            train_embs, train_cls, *_ = predict_batchwise(model, dl_tr_noshuffle)
-            cached_sim, cached_cls = inner_product_sim(X=train_embs, P=criterion.proxies, T=train_cls,
-                                                       mask=criterion.mask,
-                                                       nb_classes=criterion.nb_classes,
-                                                       max_proxy_per_class=criterion.max_proxy_per_class)
-            loss_recorder[e] = cached_sim.tolist()
-            with open("{0}/{1}_ip.json".format('log', args.log_filename), 'wt') as handle:
-                json.dump(loss_recorder, handle)
-            label_recorder[e] = cached_cls.tolist()
-            with open("{0}/{1}_cls.json".format('log', args.log_filename), 'wt') as handle:
-                json.dump(label_recorder, handle)
 
         print('it: {}'.format(it))
         print(opt)
@@ -559,51 +529,6 @@ if __name__ == '__main__':
             logging.info('Best val nmi: %s', str(best_val_nmi))
             logging.info('Best val r1: %s', str(best_val_r1))
             logging.info(str(lr_steps))
-
-        # add new proxy
-        if args.dynamic_proxy:
-            update_epoch_schedule = [int(x * args.nb_epochs) for x in args.proxy_update_schedule]
-            if e in update_epoch_schedule:
-                update, bad_indices = hard_potential(loss_recorder,
-                                                     label_recorder,
-                                                     current_t=e,
-                                                     rolling_t=5,
-                                                     ts_sim=config['ts_sim'], # larger ts_sim catches more hard examples
-                                                     ts_ratio=config['ts_ratio'], # higher lower bound catches less hard examples
-                                                     ) #FIXME: rolling_t=5 is ok, you need to adjust ts_ratio, ts_sim
-                if update == True:
-                    for k, v in bad_indices.items():
-                        sampler = SubSampler(v)
-                        tr_loader_temp = DataLoader(
-                                            dataset=dataset.load(
-                                                        name=args.dataset,
-                                                        root=dataset_config['dataset'][args.dataset]['root'],
-                                                        source=dataset_config['dataset'][args.dataset]['source'],
-                                                        classes=dataset_config['dataset'][args.dataset]['classes']['trainval'],
-                                                        transform=dataset.utils.make_transform(
-                                                            **dataset_config[transform_key],
-                                                            is_train=False
-                                                      )
-                                                   ),
-                                            batch_size=64,
-                                            shuffle=False,
-                                            sampler=sampler,
-                                            drop_last=False)
-                        feature_emb = predict_batchwise(model, tr_loader_temp)[0]  # shape (N, nz_embedding)
-                        centroid_emb = F.normalize(torch.mean(feature_emb, dim=0), p=2, dim=-1) # shape (nz_embedding,)
-                        criterion.add_proxy(k, centroid_emb.to(criterion.proxies.device))
-                        logging.info('Class {} update no. proxies to be {}'.format(k, criterion.current_proxy[k]))
-
-        #TODO: this is for umap visualization -- save intermediate models and proxies
-        # save_dir = 'dvi_data_{}_{}_t0.1_proxy{}_tau{}/ResNet_{}_Model'.format(args.dataset, args.dynamic_proxy, str(args.initial_proxy_num), str(args.tau), str(args.sz_embedding))
-        # os.makedirs('{}/Epoch_{}'.format(save_dir, e+1), exist_ok=True)
-        # with open('{}/Epoch_{}/index.json'.format(save_dir, e + 1), 'wt') as handle:
-        #     handle.write(json.dumps(list(range(len(dl_tr_noshuffle.dataset)))))
-        # torch.save(model.state_dict(), '{}/Epoch_{}/{}_{}_{}_{}_{}.pth'.format(save_dir, e+1, args.dataset, args.dataset, args.mode, str(args.sz_embedding), str(args.seed)))
-        # torch.save({"proxies": criterion.proxies, "mask": criterion.mask}, '{}/Epoch_{}/proxy.pth'.format(save_dir, e+1))
-        # # TODO
-        # torch.save({"proxies": criterion.proxies}, '{}/Epoch_{}/proxy.pth'.format(save_dir, e+1))
-        ######################################################################################
 
         if args.mode == 'trainval':
             scheduler.step(e) # adjust learning rate

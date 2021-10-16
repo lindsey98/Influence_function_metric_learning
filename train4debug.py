@@ -23,6 +23,7 @@ from utils import predict_batchwise, inner_product_sim
 from dataset.base import SubSampler
 from hard_detection import hard_potential, split_potential
 from torch.utils.data import Dataset, DataLoader
+from loss import ProxyNCA_prob_kd, ProxyNCA_prob_multiloss
 os.environ["CUDA_VISIBLE_DEVICES"]="0"
 
 
@@ -31,9 +32,9 @@ if __name__ == '__main__':
     batch_size = 32
     num_cls_per_batch = 8
     sz_embedding = 2048
-    config = utils.load_config('config/logo2k.json')
-    print(config['ts_sim'])
-    print(config['ts_ratio'])
+    config = utils.load_config('config/cub.json')
+    # print(config['ts_sim'])
+    # print(config['ts_ratio'])
 
     # set random seed for all gpus
     random.seed(0)
@@ -47,10 +48,10 @@ if __name__ == '__main__':
                 **dataset_config['transform_parameters']
             )
     tr_dataset = dataset.load(
-        name='logo2k_super100',
-        root=dataset_config['dataset']['logo2k_super100']['root'],
-        source=dataset_config['dataset']['logo2k_super100']['source'],
-        classes=dataset_config['dataset']['logo2k_super100']['classes']['trainval'],
+        name='cub',
+        root=dataset_config['dataset']['cub']['root'],
+        source=dataset_config['dataset']['cub']['source'],
+        classes=dataset_config['dataset']['cub']['classes']['trainval'],
         transform=train_transform
     )
 
@@ -72,10 +73,10 @@ if __name__ == '__main__':
     # training dataloader without shuffling and without transformation
     dl_tr_noshuffle = torch.utils.data.DataLoader(
             dataset=dataset.load(
-                    name='logo2k_super100',
-                    root=dataset_config['dataset']['logo2k_super100']['root'],
-                    source=dataset_config['dataset']['logo2k_super100']['source'],
-                    classes=dataset_config['dataset']['logo2k_super100']['classes']['trainval'],
+                    name='cub',
+                    root=dataset_config['dataset']['cub']['root'],
+                    source=dataset_config['dataset']['cub']['source'],
+                    classes=dataset_config['dataset']['cub']['classes']['trainval'],
                     transform=dataset.utils.make_transform(
                         **dataset_config['transform_parameters'],
                         is_train=False
@@ -102,13 +103,16 @@ if __name__ == '__main__':
     model = model.cuda()
 
     # load loss
-    criterion = config['criterion']['type'](
-        nb_classes = dl_tr.dataset.nb_classes(),
-        sz_embed = sz_embedding,
-        len_training = len(dl_tr.dataset),
-        initial_proxy_num=1,
-        **config['criterion']['args']
-    ).cuda()
+    # criterion = config['criterion']['type'](
+    #     nb_classes = dl_tr.dataset.nb_classes(),
+    #     sz_embed = sz_embedding,
+    #     len_training = len(dl_tr.dataset),
+    #     initial_proxy_num=1,
+    #     **config['criterion']['args']
+    # ).cuda()
+    criterion = ProxyNCA_prob_multiloss(nb_classes = dl_tr.dataset.nb_classes(),
+                                 sz_embed=sz_embedding,
+                                **config['criterion']['args']).cuda()
 
     # load optimizer
     opt = config['opt']['type'](
@@ -135,26 +139,26 @@ if __name__ == '__main__':
         **config['opt']['args']['base']
     )
 
-    best_test_nmi, (best_test_r1, best_test_r2, best_test_r4, best_test_r8) = utils.evaluate(model, dl_tr_noshuffle,
-                                                                                             False)
-    print(best_test_r1, best_test_r2, best_test_r4, best_test_r8)
+    # best_test_nmi, (best_test_r1, best_test_r2, best_test_r4, best_test_r8) = utils.evaluate(model, dl_tr_noshuffle,
+    #                                                                                          False)
+    # print(best_test_r1, best_test_r2, best_test_r4, best_test_r8)
     # training!
-    # losses = []
-    # visited_indices = []
-    # for e in range(0, 100): # train for 5 epochs for example
-    #     losses_per_epoch = []
-    #     for ct, (x, y, indices) in tqdm(enumerate(dl_tr)):
+    losses = []
+    visited_indices = []
+    for e in range(0, 100): # train for 5 epochs for example
+        losses_per_epoch = []
+        for ct, (x, y, indices) in tqdm(enumerate(dl_tr)):
     #         # print(indices)
     #         visited_indices.extend(indices.detach().cpu().numpy())
-    #         x = x.cuda()
-    #         m = model(x)
+            x = x.cuda()
+            m = model(x)
     #         # FIXME: loss not improving
     #
-    #         loss = criterion(m, indices, y.cuda())
+            loss = criterion(m, indices, y.cuda(), type='cosine')
     #
-    #         opt.zero_grad()
-    #         loss.backward()
-    #         opt.step()
+            opt.zero_grad()
+            loss.backward()
+            opt.step()
     #
     #         losses_per_epoch.append(loss.data.cpu().numpy())
 
@@ -166,7 +170,7 @@ if __name__ == '__main__':
             # print(cached_cls)
             # print(loss) # you can print out the loss
             # break # set breakpoint here to only run on first 1st batch
-        # break
+        break
 
         # losses.append(np.mean(losses_per_epoch))
         # print(opt)
