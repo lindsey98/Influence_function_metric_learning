@@ -23,7 +23,8 @@ from utils import predict_batchwise, inner_product_sim
 from dataset.base import SubSampler
 from hard_detection import hard_potential, split_potential
 from torch.utils.data import Dataset, DataLoader
-from loss import ProxyNCA_prob_kd, ProxyNCA_prob_multiloss
+from loss import *
+from similarity import mahanobis_distance
 os.environ["CUDA_VISIBLE_DEVICES"]="0"
 
 
@@ -110,7 +111,7 @@ if __name__ == '__main__':
     #     initial_proxy_num=1,
     #     **config['criterion']['args']
     # ).cuda()
-    criterion = ProxyNCA_prob_multiloss(nb_classes = dl_tr.dataset.nb_classes(),
+    criterion = ProxyNCA_distribution_loss(nb_classes = dl_tr.dataset.nb_classes(),
                                  sz_embed=sz_embedding,
                                 **config['criterion']['args']).cuda()
 
@@ -154,11 +155,18 @@ if __name__ == '__main__':
             m = model(x)
     #         # FIXME: loss not improving
     #
-            loss = criterion(m, indices, y.cuda(), type='cosine')
+            loss = criterion(m, indices, y.cuda())
+
     #
             opt.zero_grad()
+            print(criterion.sigmas_inv.grad)
             loss.backward()
             opt.step()
+            print(criterion.sigmas_inv.grad)
+
+            print('haha')
+            exit()
+
     #
     #         losses_per_epoch.append(loss.data.cpu().numpy())
 
@@ -170,7 +178,7 @@ if __name__ == '__main__':
             # print(cached_cls)
             # print(loss) # you can print out the loss
             # break # set breakpoint here to only run on first 1st batch
-        break
+        # break
 
         # losses.append(np.mean(losses_per_epoch))
         # print(opt)

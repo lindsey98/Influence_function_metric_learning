@@ -306,9 +306,8 @@ class ProxyNCA_prob_kd(torch.nn.Module):
         )
 
         loss = torch.sum(- T * logD_sim, -1) # -ylog(yhat)
-        loss = loss.mean() + 0.3*innerCE_loss
+        loss = loss.mean() + 0.2*innerCE_loss
         return loss
-
 
 class ProxyNCA_prob_multiloss(torch.nn.Module):
     '''
@@ -356,4 +355,64 @@ class ProxyNCA_prob_multiloss(torch.nn.Module):
             raise NotImplementedError
 
         loss = loss.mean()
+        return loss
+
+
+class ProxyNCA_distribution_loss(torch.nn.Module):
+    '''
+        ProxyNCA distribution based loss
+    '''
+    def __init__(self, nb_classes, sz_embed, scale, **kwargs):
+        torch.nn.Module.__init__(self)
+        self.proxies = torch.nn.Parameter(torch.randn(nb_classes, sz_embed) / 8)
+        # self.sigmas = torch.ones(nb_classes, sz_embed); self.sigmas.requires_grad = False # FIXME: initial test
+        self.sigmas_inv = torch.nn.Parameter(torch.ones(nb_classes, sz_embed))
+
+        self.sz_embed = sz_embed
+        self.nb_classes = nb_classes
+        self.scale = scale
+
+    def forward(self, X, indices, T):
+        P = self.proxies
+        Sigma_inv = torch.diag_embed(torch.clamp(torch.abs(self.sigmas_inv), min=1e-8)**2) # of shape (C, sz_embed, sz_embed)
+
+        P = self.scale * F.normalize(P, p=2, dim=-1)
+        X = self.scale * F.normalize(X, p=2, dim=-1) # (N, sz_embed)
+
+        # D = pairwise_distance(
+        #     torch.cat(
+        #         [X, P]
+        #     ),
+        #     squared=True
+        # )[0][:X.size()[0], X.size()[0]:]
+        #
+        # T = binarize_and_smooth_labels(
+        #     T=T, nb_classes=len(P), smoothing_const=0
+        # )
+        #
+        # loss = torch.sum(- T * F.log_softmax(-D, -1), -1)
+        # loss = loss.mean()
+        # print(loss)
+
+        trace_Sigma = Sigma_inv[:, torch.arange(self.sz_embed), torch.arange(self.sz_embed)] # (C, sz_embed)
+        det_Sigma = torch.sqrt(torch.prod(trace_Sigma, -1)) # (C, )
+        xPdist = X.unsqueeze(1) - P # (N, C, sz_embed)
+        xPdist2 = xPdist * xPdist # Hadamard product (N, C, sz_embed)
+
+        xSx = torch.matmul(xPdist2, trace_Sigma.T) # (N, C, C)
+        xSx = xSx[:, torch.arange(self.nb_classes), torch.arange(self.nb_classes)] # (N, C)
+        D = xSx # compute the -(x-mu)'Sigma^-1(x-mu) of shape (N, C)
+
+        D_sim = F.softmax(-D, -1) # of shape (N, C)
+        D_sim = torch.mul(D_sim, det_Sigma.unsqueeze(0)) # of shape (N, C)
+        logD_sim = torch.log(D_sim) # of shape (N, C)
+
+        T = binarize_and_smooth_labels(
+            T=T, nb_classes=len(P), smoothing_const=0
+        )
+
+        loss = torch.sum(- T * logD_sim, -1) # -ylog(yhat)
+        loss = loss.mean()
+        # print(loss)
+
         return loss

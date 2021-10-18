@@ -2,7 +2,7 @@
     "name": "str('example')",
     "gpu_id": "int(0)",
     "criterion": {
-        "type": "loss.ProxyNCA_prob_kd",
+        "type": "loss.ProxyNCA_distribution_loss",
         "args": {
             "scale": "3"
         }
@@ -22,7 +22,7 @@
     "nb_epochs": "40*1",
     "sz_batch": "32*1",
     "sz_embedding": "2048",
-    "num_class_per_batch": "16",
+    "num_class_per_batch": "8",
     "num_gradcum": "1",
     "is_random_sampler":"False",
     "transform_key": "str('transform_parameters')",

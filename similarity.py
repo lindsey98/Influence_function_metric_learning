@@ -50,4 +50,18 @@ def pairwise_distance(a, squared=False):
 
     return pairwise_distances, inner_prod
 
+def mahanobis_distance(x, mu, Sigma):
+    '''
+        Computes the mahanobis distance matrix with numerical stability
+        :param x: torch.Tensor (N, sz_embed)
+        :param mu: torch.Tensor (C, sz_embed)
+        :param Sigma: torch.Tensor (C, sz_embed, sz_embed)
+    '''
+
+    x = F.normalize(x, p=2, dim=-1) # (N, sz_embed)
+    mu = F.normalize(mu, p=2, dim=-1) # (C, sz_embed)
+
+    dist = torch.cdist(x, mu) # (N, C)
+
+    print(dist.shape)
 
