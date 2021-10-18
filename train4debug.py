@@ -1,30 +1,16 @@
-
-import logging
 import dataset
-import networks
 import utils
-import loss
 
 import os
 
-import torch
-import numpy as np
 import matplotlib
 matplotlib.use('agg', force=True)
-import matplotlib.pyplot as plt
-import time
-import argparse
-import json
 import random
 from tqdm import tqdm
 # from apex import amp
-from utils import JSONEncoder, json_dumps
-from utils import predict_batchwise, inner_product_sim
-from dataset.base import SubSampler
-from hard_detection import hard_potential, split_potential
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset
 from loss import *
-from similarity import mahanobis_distance
+
 os.environ["CUDA_VISIBLE_DEVICES"]="0"
 
 

@@ -2,7 +2,6 @@
 import logging
 import dataset
 import utils
-import loss
 
 import os
 
@@ -10,17 +9,15 @@ import torch
 import numpy as np
 import matplotlib
 matplotlib.use('agg', force=True)
-import matplotlib.pyplot as plt
 import time
 import argparse
 import json
 import random
 from tqdm import tqdm
 # from apex import amp
-from utils import JSONEncoder, json_dumps
 from utils import predict_batchwise, inner_product_sim
 from dataset.base import SubSampler
-from hard_detection import hard_potential, split_potential
+from hard_sample_detection.hard_detection import hard_potential
 from torch.utils.data import Dataset, DataLoader
 import torch.nn.functional as F
 os.environ["CUDA_VISIBLE_DEVICES"]="1"
@@ -49,7 +46,8 @@ parser.add_argument('--dynamic_proxy', default=False, action='store_true')
 parser.add_argument('--initial_proxy_num', default=1, type=int)
 parser.add_argument('--tau', default=0.0, type=float)
 parser.add_argument('--proxy_update_schedule', default=[0.5, 0.75], nargs='+', type=float)
-parser.add_argument('--no_warmup', default=True, action='store_true')
+parser.add_argument('--no_warmup', default=False, action='store_true')
+parser.add_argument('--loss-type', default='ProxyNCA_distribution_loss_lr4e-1_quad_initialize', type=str)
 
 args = parser.parse_args()
 
@@ -108,13 +106,13 @@ if __name__ == '__main__':
     out_results_fn = "log/%s_%s_%s_%d_%s_loss%s_proxy%d_tau%0.2f.json" % (args.dataset, curr_fn, args.mode,
                                                                         args.seed,
                                                                         args.dynamic_proxy,
-                                                                        str(config['criterion']['type']).split('.')[1],
+                                                                        args.loss_type,
                                                                         args.initial_proxy_num, args.tau)
 
     args.log_filename = '%s_%s_%s_%d_%d_%s_loss%s_proxy%d_tau%0.2f' % (args.dataset, curr_fn, args.mode, args.sz_embedding,
                                                                      args.seed,
                                                                      args.dynamic_proxy,
-                                                                     str(config['criterion']['type']).split('.')[1],
+                                                                     args.loss_type,
                                                                      args.initial_proxy_num, args.tau)
 
     if args.mode == 'test':
@@ -130,7 +128,7 @@ if __name__ == '__main__':
         train_results_fn = "log/%s_%s_%s_%d_%d_%s_loss%s_proxy%d_tau%0.2f.json" % (args.dataset, curr_fn, 'train',
                                                                                  args.sz_embedding, args.seed,
                                                                                  args.dynamic_proxy,
-                                                                                 str(config['criterion']['type']).split('.')[1],
+                                                                                 args.loss_type,
                                                                                  args.initial_proxy_num, args.tau)
         # train_results_fn = "log/%s_kd.json" % (args.dataset)
 
@@ -244,7 +242,6 @@ if __name__ == '__main__':
         tr_dataset,
         batch_sampler = batch_sampler,
         num_workers = args.nb_workers,
-        #pin_memory = True
     )
 
     # training dataloader without shuffling and without transformation
@@ -281,8 +278,6 @@ if __name__ == '__main__':
             batch_size = args.sz_batch,
             shuffle = False,
             num_workers = args.nb_workers,
-            #drop_last=True
-            #pin_memory = True
         )
 
     '''Model'''
@@ -612,7 +607,7 @@ if __name__ == '__main__':
         #TODO: this is for umap visualization -- save intermediate models and proxies
         save_dir = 'dvi_data_{}_{}_loss{}_proxy{}_tau{}/ResNet_{}_Model'.format(args.dataset,
                                                                               args.dynamic_proxy,
-                                                                              str(config['criterion']['type']).split('.')[1],
+                                                                              args.loss_type,
                                                                               str(args.initial_proxy_num),
                                                                               str(args.tau),
                                                                               str(args.sz_embedding))
@@ -623,9 +618,16 @@ if __name__ == '__main__':
         torch.save(model.state_dict(), '{}/Epoch_{}/{}_{}_{}_{}_{}.pth'.format(save_dir, e+1, args.dataset,
                                                                                args.dataset, args.mode,
                                                                                str(args.sz_embedding), str(args.seed)))
-        # torch.save({"proxies": criterion.proxies, "mask": criterion.mask}, '{}/Epoch_{}/proxy.pth'.format(save_dir, e+1))
         # # TODO
-        torch.save({"proxies": criterion.proxies}, '{}/Epoch_{}/proxy.pth'.format(save_dir, e+1))
+        if 'ProxyNCA_prob' in args.loss_type:
+            torch.save({"proxies": criterion.proxies, "mask": criterion.mask},
+                       '{}/Epoch_{}/proxy.pth'.format(save_dir, e+1))
+        elif 'ProxyNCA_distribution_loss' in args.loss_type:
+            torch.save({"proxies": criterion.proxies, "sigma_inv": criterion.sigmas_inv},
+                       '{}/Epoch_{}/proxy.pth'.format(save_dir, e+1))
+        elif 'ProxyNCA_prob_orig' in args.loss_type:
+            torch.save({"proxies": criterion.proxies},
+                   '{}/Epoch_{}/proxy.pth'.format(save_dir, e+1))
         ######################################################################################
 
         if args.mode == 'trainval':

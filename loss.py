@@ -10,6 +10,7 @@ from torch.utils.data import DataLoader
 from typing import Union, List
 import sklearn.preprocessing
 
+
 def masked_softmax(A, t=1.0):
     '''
         Apply softmax but ignore zeros
@@ -365,6 +366,7 @@ class ProxyNCA_distribution_loss(torch.nn.Module):
     def __init__(self, nb_classes, sz_embed, scale, **kwargs):
         torch.nn.Module.__init__(self)
         self.proxies = torch.nn.Parameter(torch.randn(nb_classes, sz_embed) / 8)
+        # self.sigmas_inv = torch.nn.Parameter(torch.ones(nb_classes, sz_embed)*math.log(math.e-1))
         self.sigmas_inv = torch.nn.Parameter(torch.ones(nb_classes, sz_embed))
         # self.sigmas_inv.requires_grad = False # FIXME: initial test
 
@@ -374,7 +376,7 @@ class ProxyNCA_distribution_loss(torch.nn.Module):
 
     def forward(self, X, indices, T):
         P = self.proxies
-        Sigma_inv = torch.diag_embed(F.softplus(self.sigmas_inv)**2) # of shape (C, sz_embed, sz_embed)
+        Sigma_inv = torch.diag_embed(self.sigmas_inv**2) # of shape (C, sz_embed, sz_embed)
 
         P = self.scale * F.normalize(P, p=2, dim=-1)
         X = self.scale * F.normalize(X, p=2, dim=-1) # (N, sz_embed)
