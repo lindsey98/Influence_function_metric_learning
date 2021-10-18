@@ -6,6 +6,7 @@ import numpy as np
 from math import pi
 from scipy.special import logsumexp
 import matplotlib.pyplot as plt
+from sklearn.covariance import LedoitWolf
 
 def calculate_matmul_n_times(n_components, mat_a, mat_b):
     """
@@ -37,6 +38,80 @@ def calculate_matmul(mat_a, mat_b):
     return torch.sum(mat_a.squeeze(-2) * mat_b.squeeze(-1), dim=2, keepdim=True)
 
 
+
+def euclidean_metric_np(X, centroids):
+    X = np.expand_dims(X, 1)
+    centroids = np.expand_dims(centroids, 0)
+    dists = (X - centroids) ** 2
+    dists = np.sum(dists, axis=2)
+    return dists
+
+
+def euclidean_metric_gpu(X, centers):
+    X = X.unsqueeze(1)
+    centers = centers.unsqueeze(0)
+
+    dist = torch.sum((X - centers) ** 2, dim=-1)
+    return dist
+
+
+def kmeans_fun_gpu(X, K=10, max_iter=1000, batch_size=512, tol=1e-40):
+    N = X.shape[0]
+
+    indices = torch.randperm(N)[:K]
+    init_centers = X[indices]
+
+    batchs = N // batch_size
+    last = 1 if N % batch_size != 0 else 0
+
+    choice_cluster = torch.zeros([N])
+    for _ in range(max_iter):
+        for bn in range(batchs + last):
+            if bn == batchs and last == 1:
+                _end = -1
+            else:
+                _end = (bn + 1) * batch_size
+            X_batch = X[bn * batch_size: _end]
+
+            dis_batch = euclidean_metric_gpu(X_batch, init_centers)
+            choice_cluster[bn * batch_size: _end] = torch.argmin(dis_batch, dim=1)
+
+        init_centers_pre = init_centers.clone()
+        for index in range(K):
+            selected = torch.nonzero(choice_cluster == index).squeeze()
+            selected = torch.index_select(X, 0, selected)
+            init_centers[index] = selected.mean(dim=0)
+
+        center_shift = torch.sum(
+            torch.sqrt(
+                torch.sum((init_centers - init_centers_pre) ** 2, dim=1)
+            ))
+        if center_shift < tol:
+            break
+
+    k_mean = init_centers
+    choice_cluster = choice_cluster
+    return k_mean, choice_cluster
+
+def cal_var(X, centers=None, K=10, choice_cluster=None):
+    '''From https://github.com/smiler96/GMM-KMeans-PyTorch/blob/e76abc9b944f5622d79c68149eb1bf99f9d72924/GMM-Pytorch.py#L61'''
+    D = X.shape[1]
+    k_var = np.zeros([K, D, D])
+    eps = np.eye(D) * 1e-10
+    if centers is not None:
+        _dist = euclidean_metric_np(X, centers)
+        choice_cluster = np.argmin(_dist, axis=1)
+
+    for k in range(K):
+        samples = X[choice_cluster == k]
+        if samples is None or len(samples) == 0:
+            k_var[k] = eps
+        else:
+            _m = np.mean(samples, axis=0)
+            k_var[k] = LedoitWolf().fit(samples).covariance_ + eps
+    return k_var
+
+
 class GaussianMixture(torch.nn.Module):
     """
     Fits a mixture of k=1,..,K Gaussians to the input data (K is supplied via n_components).
@@ -47,7 +122,8 @@ class GaussianMixture(torch.nn.Module):
     or (1, k, 1) if they assign membership probabilities to one of the mixture components.
     """
 
-    def __init__(self, n_components, n_features, covariance_type="full", eps=1.e-6, init_params="kmeans", mu_init=None,
+    def __init__(self, n_components, n_features, covariance_type="full", eps=1.e-6,
+                 init_params="kmeans", mu_init=None,
                  var_init=None):
         """
         Initializes the model and brings all tensors into their required shape.
@@ -93,6 +169,7 @@ class GaussianMixture(torch.nn.Module):
         self._init_params()
 
     def _init_params(self):
+
         if self.mu_init is not None:
             assert self.mu_init.size() == (1, self.n_components,
                                            self.n_features), "Input mu_init does not have required tensor dimensions (1, %i, %i)" % (
@@ -153,7 +230,11 @@ class GaussianMixture(torch.nn.Module):
         # Free parameters for covariance, means and mixture components
         free_params = self.n_features * self.n_components + self.n_features + self.n_components - 1
 
-        aic = -2. * self.__score(x, as_average=False).mean() * n + (free_params)*2
+        if adjusted:
+            aic = -2. * self.__score(x, as_average=False).mean() * n + ((free_params)**2)*2
+
+        else:
+            aic = -2. * self.__score(x, as_average=False).mean() * n + (free_params)*2
 
         return aic
 
@@ -179,7 +260,7 @@ class GaussianMixture(torch.nn.Module):
 
         return bic
 
-    def fit(self, x, delta=1e-3, n_iter=100, warm_start=False):
+    def fit(self, x, delta=1e-3, n_iter=100, warm_start=True):
         """
         Fits model to the data.
         args:
@@ -197,6 +278,8 @@ class GaussianMixture(torch.nn.Module):
         if self.init_params == "kmeans" and self.mu_init is None:
             mu = self.get_kmeans_mu(x, n_centers=self.n_components)
             self.mu.data = mu
+            var = _cal_var(x.squeeze(1).detach().cpu().numpy(), centers=mu.squeeze(0).squeeze(0).detach().cpu().numpy(), K=self.n_components)
+            self.var.data = torch.from_numpy(var).unsqueeze(0)
 
         i = 0
         j = np.inf
@@ -223,6 +306,9 @@ class GaussianMixture(torch.nn.Module):
                     p.data = p.data.to(device)
                 if self.init_params == "kmeans":
                     self.mu.data, = self.get_kmeans_mu(x, n_centers=self.n_components)
+                    var = _cal_var(x.squeeze(1).detach().cpu().numpy(),
+                                   centers=self.mu.data.squeeze(0).squeeze(0).detach().cpu().numpy(), K=self.n_components)
+                    self.var.data = torch.from_numpy(var).unsqueeze(0)
 
             i += 1
             j = self.log_likelihood - log_likelihood_old
@@ -515,20 +601,26 @@ class GaussianMixture(torch.nn.Module):
 
 
 if __name__ == '__main__':
-
-    n1 = torch.distributions.MultivariateNormal(torch.tensor([2,2,2,2,2]), torch.eye(5))
-    n2 = torch.distributions.MultivariateNormal(torch.tensor([10,10,10,10,10]), torch.eye(5))
+    torch.random.manual_seed(0)
+    n1 = torch.distributions.MultivariateNormal(torch.rand(5), torch.eye(5))
+    n2 = torch.distributions.MultivariateNormal(torch.rand(5), torch.eye(5))
     x1 = n1.sample(torch.Size([100]))
     x2 = n2.sample(torch.Size([100]))
 
     x = torch.cat([x1, x2])
     n_components = range(1, 11)
     bics = []
+    aics = []
     for component in n_components:
-        model = GaussianMixture(component, x.size()[1], covariance_type='diag')
+        model = GaussianMixture(component, x.size()[1], covariance_type='full')
         model.fit(x)
-        bics.append(model.bic(x))
+        bics.append(model.bic(x, adjusted=True))
+        aics.append(model.aic(x, adjusted=True))
 
-    plt.plot(bics)
+
+    plt.plot(bics, label='bic')
+    plt.plot(aics, label='aic')
+    plt.legend()
+
     plt.show()
 

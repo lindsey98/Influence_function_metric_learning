@@ -44,7 +44,7 @@
             },
             "proxynca_sigma": {
                 "weight_decay": "0",
-                "lr": "4e-1"
+                "lr": "4e-2"
             },
             "base": {
                 "lr": "4e-3",

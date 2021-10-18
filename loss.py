@@ -9,7 +9,7 @@ from dataset.base import SubSampler
 from torch.utils.data import DataLoader
 from typing import Union, List
 import sklearn.preprocessing
-
+from hard_sample_detection.gmm import *
 
 def masked_softmax(A, t=1.0):
     '''
@@ -366,7 +366,6 @@ class ProxyNCA_distribution_loss(torch.nn.Module):
     def __init__(self, nb_classes, sz_embed, scale, **kwargs):
         torch.nn.Module.__init__(self)
         self.proxies = torch.nn.Parameter(torch.randn(nb_classes, sz_embed) / 8)
-        # self.sigmas_inv = torch.nn.Parameter(torch.ones(nb_classes, sz_embed)*math.log(math.e-1))
         self.sigmas_inv = torch.nn.Parameter(torch.ones(nb_classes, sz_embed))
         # self.sigmas_inv.requires_grad = False # FIXME: initial test
 
@@ -374,15 +373,31 @@ class ProxyNCA_distribution_loss(torch.nn.Module):
         self.nb_classes = nb_classes
         self.scale = scale
 
+    def center_init(self, AllX, AllY):
+        initial_centers = torch.tensor([])
+        for cls in range(self.nb_classes):
+            selectedX = AllX[AllY == cls]
+            if len(selectedX) == 0:
+                selectedX_mean = torch.randn(self.sz_embed)
+                initial_centers = torch.cat((initial_centers, selectedX_mean.unsqueeze(0)), dim=0)
+            else:
+                selectedX_mean = selectedX.mean(0)
+                # print(selectedX_mean.shape)
+                initial_centers = torch.cat((initial_centers, selectedX_mean.unsqueeze(0)), dim=0)
+        self.proxies.data = initial_centers.data
+
+    def kmeans_init(self, AllX):
+        initial_centers, _ = kmeans_fun_gpu(AllX, K=self.nb_classes)
+        self.proxies.data = initial_centers.data
+
     def forward(self, X, indices, T):
         P = self.proxies
-        Sigma_inv = torch.diag_embed(self.sigmas_inv**2) # of shape (C, sz_embed, sz_embed)
+        Sigma_inv = torch.diag_embed(F.softplus(self.sigmas_inv)**2) # of shape (C, sz_embed, sz_embed)
 
         P = self.scale * F.normalize(P, p=2, dim=-1)
         X = self.scale * F.normalize(X, p=2, dim=-1) # (N, sz_embed)
 
         trace_Sigma = Sigma_inv[:, torch.arange(self.sz_embed), torch.arange(self.sz_embed)] # (C, sz_embed)
-        # det_Sigma = torch.sqrt(torch.prod(trace_Sigma, -1)) # (C, )
         xPdist = X.unsqueeze(1) - P # (N, C, sz_embed)
         xPdist2 = xPdist * xPdist # Hadamard product (N, C, sz_embed)
 
@@ -391,6 +406,7 @@ class ProxyNCA_distribution_loss(torch.nn.Module):
         D = xSx # compute the -(x-mu)'Sigma^-1(x-mu) of shape (N, C)
 
         D_sim = F.softmax(-D, -1) # of shape (N, C)
+        # det_Sigma = torch.sqrt(torch.prod(trace_Sigma, -1)) # (C, )
         # D_sim = torch.mul(D_sim, det_Sigma.unsqueeze(0)) # of shape (N, C) FIXME: due to overflow issue, do not compuate determinant
         logD_sim = torch.log(D_sim) # of shape (N, C)
 

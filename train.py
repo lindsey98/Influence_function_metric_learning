@@ -47,7 +47,7 @@ parser.add_argument('--initial_proxy_num', default=1, type=int)
 parser.add_argument('--tau', default=0.0, type=float)
 parser.add_argument('--proxy_update_schedule', default=[0.5, 0.75], nargs='+', type=float)
 parser.add_argument('--no_warmup', default=False, action='store_true')
-parser.add_argument('--loss-type', default='ProxyNCA_distribution_loss_lr4e-1_quad_initialize', type=str)
+parser.add_argument('--loss-type', default='ProxyNCA_distribution_loss_lr4e-2_kmeansinitialize', type=str)
 
 args = parser.parse_args()
 
@@ -299,6 +299,12 @@ if __name__ == '__main__':
         initial_proxy_num = args.initial_proxy_num,
         **config['criterion']['args']
     ).cuda()
+
+    ## Kmeans initialization
+    X, *_ = predict_batchwise(model, dl_tr_noshuffle)
+    # criterion.center_init(X, T)
+    criterion.kmeans_init(X)
+    criterion = criterion.cuda()
 
     # options for warmup
     opt_warmup = config['opt']['type'](
