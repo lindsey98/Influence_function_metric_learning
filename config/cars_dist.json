@@ -42,6 +42,10 @@
                 "weight_decay": "0", 
                 "lr": "4e2"
             },
+            "proxynca_sigma": {
+                "weight_decay": "0",
+                "lr": "4e-3"
+            },
             "base": {
                 "lr": "4e-3",
                 "eps": "1.0"

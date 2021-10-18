@@ -33,9 +33,7 @@ if __name__ == '__main__':
     batch_size = 32
     num_cls_per_batch = 8
     sz_embedding = 2048
-    config = utils.load_config('config/cub.json')
-    # print(config['ts_sim'])
-    # print(config['ts_ratio'])
+    config = utils.load_config('config/cub_dist.json')
 
     # set random seed for all gpus
     random.seed(0)
@@ -69,8 +67,6 @@ if __name__ == '__main__':
         shuffle=False, # TODO: disable shuffling for debugging purpose
     )
 
-    # v = [0, 1, 2, 3, 4, 5, 6, 7]
-    # sampler = SubSampler(v)
     # training dataloader without shuffling and without transformation
     dl_tr_noshuffle = torch.utils.data.DataLoader(
             dataset=dataset.load(
@@ -132,32 +128,32 @@ if __name__ == '__main__':
             },
 
             {
-                **{'params': criterion.parameters()},
+                **{'params': criterion.proxies}
+                ,
                 **config['opt']['args']['proxynca']
+
+            },
+            {
+                **{'params': criterion.sigmas_inv},
+                **config['opt']['args']['proxynca_sigma']
             },
 
         ],
         **config['opt']['args']['base']
     )
 
-    # best_test_nmi, (best_test_r1, best_test_r2, best_test_r4, best_test_r8) = utils.evaluate(model, dl_tr_noshuffle,
-    #                                                                                          False)
-    # print(best_test_r1, best_test_r2, best_test_r4, best_test_r8)
     # training!
     losses = []
     visited_indices = []
     for e in range(0, 100): # train for 5 epochs for example
         losses_per_epoch = []
         for ct, (x, y, indices) in tqdm(enumerate(dl_tr)):
-    #         # print(indices)
-    #         visited_indices.extend(indices.detach().cpu().numpy())
             x = x.cuda()
             m = model(x)
     #         # FIXME: loss not improving
     #
             loss = criterion(m, indices, y.cuda())
-
-    #
+            print(loss)  #
             opt.zero_grad()
             print(criterion.sigmas_inv.grad)
             loss.backward()
@@ -165,35 +161,4 @@ if __name__ == '__main__':
             print(criterion.sigmas_inv.grad)
 
             print('haha')
-            exit()
 
-    #
-    #         losses_per_epoch.append(loss.data.cpu().numpy())
-
-            # cached_sim, cached_cls = inner_product_sim(X=train_embs, P=criterion.proxies, T=train_cls,
-            #                                            mask=criterion.mask,
-            #                                            nb_classes=criterion.nb_classes,
-            #                                            max_proxy_per_class=criterion.max_proxy_per_class)
-            # print(cached_sim)
-            # print(cached_cls)
-            # print(loss) # you can print out the loss
-            # break # set breakpoint here to only run on first 1st batch
-        # break
-
-        # losses.append(np.mean(losses_per_epoch))
-        # print(opt)
-        # print(
-        #     "Epoch: {}, loss: {:.3f}.".format(
-        #         e,
-        #         losses[-1],
-        #     )
-        # )
-
-        # save proxy-similarity and class labels
-        # train_embs, train_cls, *_ = predict_batchwise(model, dl_tr_noshuffle)
-        # count_proxy = torch.sum(criterion.mask, -1).detach().cpu().numpy()
-        # update, bad_indices = split_potential(train_embs.detach().cpu().numpy(), train_cls.detach().cpu().numpy(),
-        #                                       count_proxy)
-        # print(update, bad_indices)
-    # print(set(visited_indices))
-    # print(set(range(len(dl_tr.dataset))) - )

@@ -365,8 +365,8 @@ class ProxyNCA_distribution_loss(torch.nn.Module):
     def __init__(self, nb_classes, sz_embed, scale, **kwargs):
         torch.nn.Module.__init__(self)
         self.proxies = torch.nn.Parameter(torch.randn(nb_classes, sz_embed) / 8)
-        # self.sigmas = torch.ones(nb_classes, sz_embed); self.sigmas.requires_grad = False # FIXME: initial test
         self.sigmas_inv = torch.nn.Parameter(torch.ones(nb_classes, sz_embed))
+        # self.sigmas_inv.requires_grad = False # FIXME: initial test
 
         self.sz_embed = sz_embed
         self.nb_classes = nb_classes
@@ -374,28 +374,13 @@ class ProxyNCA_distribution_loss(torch.nn.Module):
 
     def forward(self, X, indices, T):
         P = self.proxies
-        Sigma_inv = torch.diag_embed(torch.clamp(torch.abs(self.sigmas_inv), min=1e-8)**2) # of shape (C, sz_embed, sz_embed)
+        Sigma_inv = torch.diag_embed(F.softplus(self.sigmas_inv)**2) # of shape (C, sz_embed, sz_embed)
 
         P = self.scale * F.normalize(P, p=2, dim=-1)
         X = self.scale * F.normalize(X, p=2, dim=-1) # (N, sz_embed)
 
-        # D = pairwise_distance(
-        #     torch.cat(
-        #         [X, P]
-        #     ),
-        #     squared=True
-        # )[0][:X.size()[0], X.size()[0]:]
-        #
-        # T = binarize_and_smooth_labels(
-        #     T=T, nb_classes=len(P), smoothing_const=0
-        # )
-        #
-        # loss = torch.sum(- T * F.log_softmax(-D, -1), -1)
-        # loss = loss.mean()
-        # print(loss)
-
         trace_Sigma = Sigma_inv[:, torch.arange(self.sz_embed), torch.arange(self.sz_embed)] # (C, sz_embed)
-        det_Sigma = torch.sqrt(torch.prod(trace_Sigma, -1)) # (C, )
+        # det_Sigma = torch.sqrt(torch.prod(trace_Sigma, -1)) # (C, )
         xPdist = X.unsqueeze(1) - P # (N, C, sz_embed)
         xPdist2 = xPdist * xPdist # Hadamard product (N, C, sz_embed)
 
@@ -404,7 +389,7 @@ class ProxyNCA_distribution_loss(torch.nn.Module):
         D = xSx # compute the -(x-mu)'Sigma^-1(x-mu) of shape (N, C)
 
         D_sim = F.softmax(-D, -1) # of shape (N, C)
-        D_sim = torch.mul(D_sim, det_Sigma.unsqueeze(0)) # of shape (N, C)
+        # D_sim = torch.mul(D_sim, det_Sigma.unsqueeze(0)) # of shape (N, C) FIXME: due to overflow issue, do not compuate determinant
         logD_sim = torch.log(D_sim) # of shape (N, C)
 
         T = binarize_and_smooth_labels(
@@ -413,6 +398,5 @@ class ProxyNCA_distribution_loss(torch.nn.Module):
 
         loss = torch.sum(- T * logD_sim, -1) # -ylog(yhat)
         loss = loss.mean()
-        # print(loss)
 
         return loss
