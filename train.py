@@ -20,7 +20,7 @@ from dataset.base import SubSampler
 from hard_sample_detection.hard_detection import hard_potential
 from torch.utils.data import Dataset, DataLoader
 import torch.nn.functional as F
-os.environ["CUDA_VISIBLE_DEVICES"]="1"
+os.environ["CUDA_VISIBLE_DEVICES"]="0"
 
 parser = argparse.ArgumentParser(description='Training ProxyNCA++')
 parser.add_argument('--embedding-size', default = 2048, type=int, dest = 'sz_embedding')
@@ -39,7 +39,8 @@ parser.add_argument('--warmup_k', default=5, type=int)
 
 parser.add_argument('--dataset', default='cub')
 parser.add_argument('--config', default='config/cub_dist.json')
-parser.add_argument('--mode', default='trainval', choices=['train', 'trainval', 'test', 'testontrain', 'testontrain_super'],
+parser.add_argument('--mode', default='testontrain', choices=['train', 'trainval', 'test',
+                                                              'testontrain', 'testontrain_super'],
                     help='train with train data or train with trainval')
 parser.add_argument('--batch-size', default = 32, type=int, dest = 'sz_batch')
 parser.add_argument('--dynamic_proxy', default=False, action='store_true')
@@ -301,7 +302,7 @@ if __name__ == '__main__':
     ).cuda()
 
     ## Kmeans initialization
-    X, *_ = predict_batchwise(model, dl_tr_noshuffle)
+    X, T, *_ = predict_batchwise(model, dl_tr_noshuffle)
     # criterion.center_init(X, T)
     criterion.kmeans_init(X)
     criterion = criterion.cuda()

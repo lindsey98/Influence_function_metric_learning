@@ -8,37 +8,6 @@ from scipy.special import logsumexp
 import matplotlib.pyplot as plt
 from sklearn.covariance import LedoitWolf
 
-def calculate_matmul_n_times(n_components, mat_a, mat_b):
-    """
-    Calculate matrix product of two matrics with mat_a[0] >= mat_b[0].
-    Bypasses torch.matmul to reduce memory footprint.
-    args:
-        mat_a:      torch.Tensor (n, k, 1, d)
-        mat_b:      torch.Tensor (1, k, d, d)
-    """
-    res = torch.zeros(mat_a.shape).double().to(mat_a.device)
-
-    for i in range(n_components):
-        mat_a_i = mat_a[:, i, :, :].squeeze(-2)
-        mat_b_i = mat_b[0, i, :, :].squeeze()
-        res[:, i, :, :] = mat_a_i.mm(mat_b_i).unsqueeze(1)
-
-    return res
-
-
-def calculate_matmul(mat_a, mat_b):
-    """
-    Calculate matrix product of two matrics with mat_a[0] >= mat_b[0].
-    Bypasses torch.matmul to reduce memory footprint.
-    args:
-        mat_a:      torch.Tensor (n, k, 1, d)
-        mat_b:      torch.Tensor (n, k, d, 1)
-    """
-    assert mat_a.shape[-2] == 1 and mat_b.shape[-1] == 1
-    return torch.sum(mat_a.squeeze(-2) * mat_b.squeeze(-1), dim=2, keepdim=True)
-
-
-
 def euclidean_metric_np(X, centroids):
     X = np.expand_dims(X, 1)
     centroids = np.expand_dims(centroids, 0)
@@ -93,23 +62,35 @@ def kmeans_fun_gpu(X, K=10, max_iter=1000, batch_size=512, tol=1e-40):
     choice_cluster = choice_cluster
     return k_mean, choice_cluster
 
-def cal_var(X, centers=None, K=10, choice_cluster=None):
-    '''From https://github.com/smiler96/GMM-KMeans-PyTorch/blob/e76abc9b944f5622d79c68149eb1bf99f9d72924/GMM-Pytorch.py#L61'''
-    D = X.shape[1]
-    k_var = np.zeros([K, D, D])
-    eps = np.eye(D) * 1e-10
-    if centers is not None:
-        _dist = euclidean_metric_np(X, centers)
-        choice_cluster = np.argmin(_dist, axis=1)
+def calculate_matmul_n_times(n_components, mat_a, mat_b):
+    """
+    Calculate matrix product of two matrics with mat_a[0] >= mat_b[0].
+    Bypasses torch.matmul to reduce memory footprint.
+    args:
+        mat_a:      torch.Tensor (n, k, 1, d)
+        mat_b:      torch.Tensor (1, k, d, d)
+    """
+    res = torch.zeros(mat_a.shape).double().to(mat_a.device)
 
-    for k in range(K):
-        samples = X[choice_cluster == k]
-        if samples is None or len(samples) == 0:
-            k_var[k] = eps
-        else:
-            _m = np.mean(samples, axis=0)
-            k_var[k] = LedoitWolf().fit(samples).covariance_ + eps
-    return k_var
+    for i in range(n_components):
+        mat_a_i = mat_a[:, i, :, :].squeeze(-2)
+        mat_b_i = mat_b[0, i, :, :].squeeze()
+        res[:, i, :, :] = mat_a_i.mm(mat_b_i).unsqueeze(1)
+
+    return res
+
+
+def calculate_matmul(mat_a, mat_b):
+    """
+    Calculate matrix product of two matrics with mat_a[0] >= mat_b[0].
+    Bypasses torch.matmul to reduce memory footprint.
+    args:
+        mat_a:      torch.Tensor (n, k, 1, d)
+        mat_b:      torch.Tensor (n, k, d, 1)
+    """
+    assert mat_a.shape[-2] == 1 and mat_b.shape[-1] == 1
+    return torch.sum(mat_a.squeeze(-2) * mat_b.squeeze(-1), dim=2, keepdim=True)
+
 
 
 class GaussianMixture(torch.nn.Module):
@@ -278,8 +259,6 @@ class GaussianMixture(torch.nn.Module):
         if self.init_params == "kmeans" and self.mu_init is None:
             mu = self.get_kmeans_mu(x, n_centers=self.n_components)
             self.mu.data = mu
-            var = _cal_var(x.squeeze(1).detach().cpu().numpy(), centers=mu.squeeze(0).squeeze(0).detach().cpu().numpy(), K=self.n_components)
-            self.var.data = torch.from_numpy(var).unsqueeze(0)
 
         i = 0
         j = np.inf
@@ -306,9 +285,6 @@ class GaussianMixture(torch.nn.Module):
                     p.data = p.data.to(device)
                 if self.init_params == "kmeans":
                     self.mu.data, = self.get_kmeans_mu(x, n_centers=self.n_components)
-                    var = _cal_var(x.squeeze(1).detach().cpu().numpy(),
-                                   centers=self.mu.data.squeeze(0).squeeze(0).detach().cpu().numpy(), K=self.n_components)
-                    self.var.data = torch.from_numpy(var).unsqueeze(0)
 
             i += 1
             j = self.log_likelihood - log_likelihood_old
@@ -602,25 +578,36 @@ class GaussianMixture(torch.nn.Module):
 
 if __name__ == '__main__':
     torch.random.manual_seed(0)
-    n1 = torch.distributions.MultivariateNormal(torch.rand(5), torch.eye(5))
-    n2 = torch.distributions.MultivariateNormal(torch.rand(5), torch.eye(5))
+    n1 = torch.distributions.MultivariateNormal(torch.tensor([1.,1.]), torch.eye(2))
+    n2 = torch.distributions.MultivariateNormal(torch.tensor([5.,5.]), torch.eye(2))
     x1 = n1.sample(torch.Size([100]))
     x2 = n2.sample(torch.Size([100]))
 
     x = torch.cat([x1, x2])
-    n_components = range(1, 11)
     bics = []
     aics = []
-    for component in n_components:
-        model = GaussianMixture(component, x.size()[1], covariance_type='full')
-        model.fit(x)
-        bics.append(model.bic(x, adjusted=True))
-        aics.append(model.aic(x, adjusted=True))
+    model = GaussianMixture(5, x.size()[1], covariance_type='full')
+    model.fit(x)
+    pi = model.pi
+    sorted_pi, _ = torch.sort(pi, dim=1, descending=True)
 
-
-    plt.plot(bics, label='bic')
-    plt.plot(aics, label='aic')
-    plt.legend()
-
+    print(np.where(np.cumsum(sorted_pi.squeeze(-1).numpy()) > 0.6))
+    plt.plot(np.cumsum(sorted_pi.squeeze(-1).numpy()))
+    plt.title('Pi sorted in descending order')
     plt.show()
+
+    # predicted_prob = model.predict_proba(x)
+    # print(predicted_prob)
+    # plt.scatter(x[:, 0], x[:, 1], c=predicted_prob[:, 1].numpy())
+    # plt.show()
+    # print(sorted_pi)
+    # bics.append(model.bic(x, adjusted=False))
+    # aics.append(model.aic(x, adjusted=False))
+
+
+    # plt.plot(bics, label='bic')
+    # plt.plot(aics, label='aic')
+    # plt.legend()
+    #
+    # plt.show()
 

@@ -366,7 +366,8 @@ class ProxyNCA_distribution_loss(torch.nn.Module):
     def __init__(self, nb_classes, sz_embed, scale, **kwargs):
         torch.nn.Module.__init__(self)
         self.proxies = torch.nn.Parameter(torch.randn(nb_classes, sz_embed) / 8)
-        self.sigmas_inv = torch.nn.Parameter(torch.ones(nb_classes, sz_embed))
+        # self.sigmas_inv = torch.nn.Parameter(torch.ones(nb_classes, sz_embed))
+        self.sigmas_inv = torch.nn.Parameter(torch.ones(nb_classes, sz_embed)*math.log(math.e-1)) # if softplus activation is used
         # self.sigmas_inv.requires_grad = False # FIXME: initial test
 
         self.sz_embed = sz_embed
@@ -390,22 +391,32 @@ class ProxyNCA_distribution_loss(torch.nn.Module):
         initial_centers, _ = kmeans_fun_gpu(AllX, K=self.nb_classes)
         self.proxies.data = initial_centers.data
 
+    def kl_divergence(self, trace_Sigma):
+        Sigmas = 1 / trace_Sigma # (C, sz_embed)
+        mus = F.normalize(self.proxies, p=2, dim=-1) # (C, sz_embed)
+        mus2 = torch.square(mus)
+        KL = 0.5*(Sigmas + mus2 - 1 - torch.log(Sigmas)) # (C, sz_embed)
+        KL = KL.sum(-1).mean()
+        return KL
+
     def forward(self, X, indices, T):
         P = self.proxies
         Sigma_inv = torch.diag_embed(F.softplus(self.sigmas_inv)**2) # of shape (C, sz_embed, sz_embed)
 
+        # mixupX = self.informative_mixup(X, P)
+
         P = self.scale * F.normalize(P, p=2, dim=-1)
         X = self.scale * F.normalize(X, p=2, dim=-1) # (N, sz_embed)
 
-        trace_Sigma = Sigma_inv[:, torch.arange(self.sz_embed), torch.arange(self.sz_embed)] # (C, sz_embed)
+        trace_Sigma_inv = Sigma_inv[:, torch.arange(self.sz_embed), torch.arange(self.sz_embed)] # (C, sz_embed)
         xPdist = X.unsqueeze(1) - P # (N, C, sz_embed)
         xPdist2 = xPdist * xPdist # Hadamard product (N, C, sz_embed)
 
-        xSx = torch.matmul(xPdist2, trace_Sigma.T) # (N, C, C)
+        xSx = torch.matmul(xPdist2, trace_Sigma_inv.T) # (N, C, C)
         xSx = xSx[:, torch.arange(self.nb_classes), torch.arange(self.nb_classes)] # (N, C)
         D = xSx # compute the -(x-mu)'Sigma^-1(x-mu) of shape (N, C)
 
-        D_sim = F.softmax(-D, -1) # of shape (N, C)
+        D_sim = F.softmax(-D, -1) # similarity to proxies of shape (N, C)
         # det_Sigma = torch.sqrt(torch.prod(trace_Sigma, -1)) # (C, )
         # D_sim = torch.mul(D_sim, det_Sigma.unsqueeze(0)) # of shape (N, C) FIXME: due to overflow issue, do not compuate determinant
         logD_sim = torch.log(D_sim) # of shape (N, C)
@@ -416,5 +427,12 @@ class ProxyNCA_distribution_loss(torch.nn.Module):
 
         loss = torch.sum(- T * logD_sim, -1) # -ylog(yhat)
         loss = loss.mean()
+        # kl_loss = self.kl_divergence(trace_Sigma_inv)
+        # loss = loss + kl_loss # KL regularization on prior N(0, I)
 
         return loss
+
+    def informative_mixup(self, X, P):
+        pass # TODO
+
+

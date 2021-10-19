@@ -131,8 +131,8 @@ if __name__ == '__main__':
         **config['opt']['args']['base']
     )
 
-    X, T, *_ = predict_batchwise(model, dl_tr_noshuffle)
-    criterion.kmeans_init(X, T)
+    # X, T, *_ = predict_batchwise(model, dl_tr_noshuffle)
+    # criterion.kmeans_init(X, T)
 
     # training!
     losses = []
