@@ -356,40 +356,40 @@ class ProxyNCA_prob_mixup(torch.nn.Module):
         # loss = torch.sum(- Tall * F.log_softmax(-Dall, -1), -1)
         # loss = loss.mean()
 
-        # virtual_classes, virtual_samples = self.informative_mixup(X=X, T=T, IP=IP, P=P)
-        # Xall = torch.cat((X, self.scale * virtual_samples), dim=0) # (N+|V|, sz_embed)
-        # T = binarize_and_smooth_labels(
-        #    T=T, nb_classes=self.nb_classes, smoothing_const=0 # FIXME
-        # ) # (N, C)
-        # Tall = torch.cat([T, virtual_classes], 0) # (N+|V|, C)
-        #
-        # Dall = pairwise_distance(
-        #         torch.cat(
-        #             [Xall, P]
-        #         ),
-        #         squared=True
-        # )[0][: Xall.size()[0], Xall.size()[0]:] # (N+|V|, C)
-        #
-        # loss = torch.sum(- Tall * F.log_softmax(-Dall, -1), -1)
-        # loss = loss.mean()
-
-        virtual_classes, virtual_samples, virtual_proxies = self.informative_mixup(X=X, T=T, IP=IP, P=P)
+        virtual_classes, virtual_samples = self.informative_mixup(X=X, T=T, IP=IP, P=P)
         Xall = torch.cat((X, self.scale * virtual_samples), dim=0) # (N+|V|, sz_embed)
-        Tall = torch.cat([T, virtual_classes], 0) # (N+|V|, C)
-        Pall = torch.cat([P, virtual_proxies]) # (C+C', sz_embed)
-
-        Tall = binarize_and_smooth_labels(
-           T=Tall, nb_classes=len(Pall), smoothing_const=0 # FIXME
+        T = binarize_and_smooth_labels(
+           T=T, nb_classes=self.nb_classes, smoothing_const=0
         ) # (N, C)
+        Tall = torch.cat([T, virtual_classes], 0) # (N+|V|, C)
+
         Dall = pairwise_distance(
                 torch.cat(
-                    [Xall, Pall]
+                    [Xall, P]
                 ),
                 squared=True
         )[0][: Xall.size()[0], Xall.size()[0]:] # (N+|V|, C)
 
         loss = torch.sum(- Tall * F.log_softmax(-Dall, -1), -1)
         loss = loss.mean()
+
+        # virtual_classes, virtual_samples, virtual_proxies = self.informative_mixup(X=X, T=T, IP=IP, P=P)
+        # Xall = torch.cat((X, self.scale * virtual_samples), dim=0) # (N+|V|, sz_embed)
+        # Tall = torch.cat([T, virtual_classes], 0) # (N+|V|, C)
+        # Pall = torch.cat([P, virtual_proxies]) # (C+C', sz_embed)
+        #
+        # Tall = binarize_and_smooth_labels(
+        #    T=Tall, nb_classes=len(Pall), smoothing_const=0 
+        # ) # (N, C)
+        # Dall = pairwise_distance(
+        #         torch.cat(
+        #             [Xall, Pall]
+        #         ),
+        #         squared=True
+        # )[0][: Xall.size()[0], Xall.size()[0]:] # (N+|V|, C)
+        #
+        # loss = torch.sum(- Tall * F.log_softmax(-Dall, -1), -1)
+        # loss = loss.mean()
 
         return loss
 
@@ -406,7 +406,8 @@ class ProxyNCA_prob_mixup(torch.nn.Module):
         X1P1, X1P2 = torch.clamp(IP[index1s, C1], min=-1., max=1.), torch.clamp(IP[index1s, C2], min=-1., max=1.) # (n_samples, )
         X2P1, X2P2 = torch.clamp(IP[index2s, C1], min=-1., max=1.), torch.clamp(IP[index2s, C2], min=-1., max=1.)
         lambdas = (X2P2-X2P1)/((X2P2-X2P1) + (X1P1-X1P2))
-        lambdas = torch.clamp(lambdas, min=0.3, max=0.7)
+        lambdas = lambdas + torch.from_numpy((np.random.uniform(size=len(index1s))*0.4-0.2)).to(lambdas.device) # add small random noises e~unif(-0.2, 0.2)
+        lambdas = torch.clamp(lambdas, min=0.2, max=0.8)
 
         return lambdas
 
@@ -547,12 +548,12 @@ class ProxyNCA_prob_mixup(torch.nn.Module):
         '''
 
         # between different class (keep uncertain only)
-        # virtual_classes, virtual_samples = self.intercls_mixup(X, T, P, IP)
-        # return virtual_classes, virtual_samples
+        virtual_classes, virtual_samples = self.intercls_mixup(X, T, P, IP)
+        return virtual_classes, virtual_samples
 
         # between dfferent class (with synthetic proxy)
-        virtual_classes, virtual_samples, virtual_proxies_reduced = self.intercls_mixup_proxy(X, T, P, IP)
-        return virtual_classes, virtual_samples, virtual_proxies_reduced
+        # virtual_classes, virtual_samples, virtual_proxies_reduced = self.intercls_mixup_proxy(X, T, P, IP)
+        # return virtual_classes, virtual_samples, virtual_proxies_reduced
 
         # between same class (high confidence only)
         # T_sub, virtual_samples = self.intracls_mixup(X, T, IP, pairs_per_cls=4)
