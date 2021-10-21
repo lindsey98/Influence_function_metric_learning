@@ -25,8 +25,8 @@ if __name__ == '__main__':
     config = utils.load_config('config/cub_dist.json')
 
     # set random seed for all gpus
-    random.seed(0)
-    np.random.seed(0)
+    # random.seed(0)
+    # np.random.seed(0)
     torch.manual_seed(0)
     torch.cuda.manual_seed_all(0)
 
@@ -96,7 +96,7 @@ if __name__ == '__main__':
     #     initial_proxy_num=1,
     #     **config['criterion']['args']
     # ).cuda()
-    criterion = ProxyNCA_distribution_loss(nb_classes = dl_tr.dataset.nb_classes(),
+    criterion = ProxyNCA_prob_mixup(nb_classes = dl_tr.dataset.nb_classes(),
                                  sz_embed=sz_embedding,
                                 **config['criterion']['args']).cuda()
 
@@ -122,10 +122,10 @@ if __name__ == '__main__':
                 **config['opt']['args']['proxynca']
 
             },
-            {
-                **{'params': criterion.sigmas_inv},
-                **config['opt']['args']['proxynca_sigma']
-            },
+            # {
+            #     **{'params': criterion.sigmas_inv},
+            #     **config['opt']['args']['proxynca_sigma']
+            # },
 
         ],
         **config['opt']['args']['base']

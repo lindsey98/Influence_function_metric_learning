@@ -11,7 +11,7 @@ from typing import Union, List
 import sklearn.preprocessing
 from hard_sample_detection.gmm import *
 
-def masked_softmax(A, t=1.0):
+def masked_softmax(A, dim, t=1.0):
     '''
         Apply softmax but ignore zeros
         :param A: torch.tensor of shape (N, C)
@@ -21,7 +21,7 @@ def masked_softmax(A, t=1.0):
     A_exp = torch.exp(A)
     A_exp = A_exp * (A != 0).float()  # this step masks zero entries
     temp_A = (A_exp)**(1/t)
-    A_softmax = temp_A / torch.sum(temp_A, dim=-1, keepdim=True)
+    A_softmax = temp_A / torch.sum(temp_A, dim=dim, keepdim=True)
     return A_softmax
 
 def binarize_and_smooth_labels(T, nb_classes, smoothing_const=0):
@@ -310,16 +310,20 @@ class ProxyNCA_prob_kd(torch.nn.Module):
         loss = loss.mean() + 0.2*innerCE_loss
         return loss
 
-class ProxyNCA_prob_multiloss(torch.nn.Module):
+
+class ProxyNCA_prob_mixup(torch.nn.Module):
     '''
-        Original loss in ProxyNCA++
+        Uncertainty-guided MixUp
     '''
+
     def __init__(self, nb_classes, sz_embed, scale, **kwargs):
         torch.nn.Module.__init__(self)
         self.proxies = torch.nn.Parameter(torch.randn(nb_classes, sz_embed) / 8)
         self.scale = scale
+        self.sz_embed = sz_embed
+        self.nb_classes = nb_classes
 
-    def forward(self, X, indices, T, type='euclidean'):
+    def forward(self, X, indices, T):
         P = self.proxies
         # note: self.scale is equal to sqrt(1/T)
         # in the paper T = 1/9, therefore, scale = sart(1/(1/9)) = sqrt(9) = 3
@@ -328,36 +332,209 @@ class ProxyNCA_prob_multiloss(torch.nn.Module):
         P = self.scale * F.normalize(P, p=2, dim=-1)
         X = self.scale * F.normalize(X, p=2, dim=-1)
 
-        T = binarize_and_smooth_labels(
-            T=T, nb_classes=len(P), smoothing_const=0
+        _, IP = pairwise_distance(
+            torch.cat(
+                [X, P]
+            ),
+            squared=True
         )
+        IP = IP[: X.size()[0], X.size()[0]:]
 
-        if type == 'euclidean':
-            D = pairwise_distance(
+        # T_sub, virtual_X = self.informative_mixup(X=X, T=T, IP=IP, P=P)
+        # Xall = torch.cat((X, self.scale * virtual_X), dim=0)
+        # Tall = torch.cat([T, T_sub])
+        # Dall = pairwise_distance(
+        #     torch.cat(
+        #         [Xall, P]
+        #     ),
+        #     squared=True
+        # )[0][: Xall.size()[0], Xall.size()[0]:]
+        #
+        # Tall = binarize_and_smooth_labels(
+        #     T=Tall, nb_classes=len(P), smoothing_const=0
+        # )
+        # loss = torch.sum(- Tall * F.log_softmax(-Dall, -1), -1)
+        # loss = loss.mean()
+
+        virtual_classes, virtual_samples = self.informative_mixup(X=X, T=T, IP=IP, P=P)
+        Xall = torch.cat((X, self.scale * virtual_samples), dim=0) # (N+|V|, sz_embed)
+        T = binarize_and_smooth_labels(
+           T=T, nb_classes=self.nb_classes, smoothing_const=0 # FIXME
+        ) # (N, C)
+        Tall = torch.cat([T, virtual_classes], 0) # (N+|V|, C)
+
+        Dall = pairwise_distance(
                 torch.cat(
-                    [X, P]
+                    [Xall, P]
                 ),
                 squared=True
-            )[0][:X.size()[0], X.size()[0]:]
+        )[0][: Xall.size()[0], Xall.size()[0]:] # (N+|V|, C)
 
-            loss = torch.sum(- T * F.log_softmax(-D, -1), -1)
+        loss = torch.sum(- Tall * F.log_softmax(-Dall, -1), -1)
+        loss = loss.mean()
 
-        elif type == 'cosine':
-            IP = pairwise_distance(
-                torch.cat(
-                    [X, P]
-                ),
-                squared=True
-            )[1][:X.size()[0], X.size()[0]:]
+        return loss
 
-            loss = torch.sum(- T * F.log_softmax(IP, -1), -1)
+    @staticmethod
+    def random_lambdas(n_samples, alpha=1.0):
+        lambdas = []
+        for _ in range(n_samples):
+            lambdas.append(np.random.beta(alpha, alpha))
+        return torch.tensor(lambdas)
+
+    @staticmethod
+    def uncertainty_lambdas(index1s, index2s, T, IP):
+        C1, C2 = T[index1s], T[index2s]
+        X1P1, X1P2 = torch.clamp(IP[index1s, C1], min=-1., max=1.), torch.clamp(IP[index1s, C2], min=-1., max=1.) # (n_samples, )
+        X2P1, X2P2 = torch.clamp(IP[index2s, C1], min=-1., max=1.), torch.clamp(IP[index2s, C2], min=-1., max=1.)
+        lambdas = (X2P2-X2P1)/((X2P2-X2P1) + (X1P1-X1P2))
+        lambdas = torch.clamp(lambdas, min=0.3, max=0.7)
+
+        return lambdas
+
+    def intracls_mixup(self, X, T, IP, pairs_per_cls, method=1):
+
+        T = binarize_and_smooth_labels(
+            T=T, nb_classes=len(self.proxies), smoothing_const=0
+        )
+        D2T = IP * T  # (N, C) sparse matrix
+        non_empty_mask = D2T.abs().sum(dim=0).bool()
+        T_sub = torch.where(non_empty_mask == True)[0]  # record the class labels
+        if pairs_per_cls > 1:
+            T_sub = torch.repeat_interleave(T_sub, pairs_per_cls)
+
+        D2T_normalize = D2T[:, non_empty_mask]  # (N, C_sub) filter out non-zero columns which are the classes not sampled in this batch
+        D2T_normalize = masked_softmax(D2T_normalize, dim=0)  # normalize for each class to find highest confidence samples to mix (N, C_sub)
+
+        # weighted sampling weighted by confidence
+        if method == 1:
+            mixup_ind_samecls = torch.tensor([])
+            for j in range(D2T_normalize.size()[1]):
+                for _ in range(pairs_per_cls):
+                    pair_ind = np.random.choice(D2T_normalize.size()[0], 2,
+                                                p=D2T_normalize[:, j].detach().cpu().numpy(),
+                                                replace=False).tolist()
+                    mixup_ind_samecls = torch.cat((mixup_ind_samecls, torch.tensor([pair_ind]).T), dim=-1)
+            mixup_ind_samecls = mixup_ind_samecls.long() # (2, C_sub*pairs_percls)
+
+        elif method == 2:
+            # purely random sampling
+            mixup_ind_samecls = torch.tensor([])
+            for j in range(D2T_normalize.size()[1]):
+                for _ in range(pairs_per_cls):
+                    pair_ind = np.random.choice(D2T_normalize.size()[0], 2,
+                                                replace=False).tolist()
+                    mixup_ind_samecls = torch.cat((mixup_ind_samecls, torch.tensor([pair_ind]).T), dim=-1)
+            mixup_ind_samecls = mixup_ind_samecls.long() # (2, C_sub*pairs_percls)
 
         else:
             raise NotImplementedError
 
-        loss = loss.mean()
-        return loss
+        selectedX_samecls = torch.cat([X[index, :].unsqueeze(-1) for index in mixup_ind_samecls], dim=-1)  # of shape (C_sub*pairs_percls, sz_embed, 2)
+        # sample lambda coefficients (diff lambda for diff samples)
+        lambda_samecls = self.random_lambdas(selectedX_samecls.size()[0])
+        lambda_samecls = lambda_samecls.unsqueeze(-1).repeat(1, self.sz_embed)
+        lambda_samecls = torch.stack((lambda_samecls, 1.-lambda_samecls), dim=-1).to(selectedX_samecls.device)  # (C_sub*pairs_percls, sz_embed, 2)
 
+        # mixup
+        virtual_samples = torch.sum(selectedX_samecls * lambda_samecls, dim=-1)  # (C_sub*pairs_percls, sz_embed)
+        virtual_samples = F.normalize(virtual_samples, p=2, dim=-1)
+        assert T_sub.size()[0] == virtual_samples.size()[0]
+        return T_sub, virtual_samples
+
+    def intercls_mixup(self, X, T, P, IP, method=1):
+        # we only sythesize samples and interpolating class labels
+        # get all inter-class pairs to mixup
+        index1s, index2s = torch.tensor([]), torch.tensor([])
+        for index1 in range(X.size()[0]):
+            for index2 in range(index1, X.size()[0]):
+                if index1 == index2 or T[index1] == T[index2]:
+                    continue
+                index1s = torch.cat((index1s, torch.tensor([index1])))
+                index2s = torch.cat((index2s, torch.tensor([index2])))
+
+        index1s, index2s = index1s.long(), index2s.long()
+        cls_index1s, cls_index2s = T[index1s], T[index2s]
+
+        if method == 1:
+            # uncertainty-based sampling
+            lambdas_diffcls = self.uncertainty_lambdas(index1s, index2s, T, IP).unsqueeze(-1).repeat(1, self.sz_embed)
+        elif method == 2:
+            # pure random sampling
+            lambdas_diffcls = self.random_lambdas(len(index1s)).unsqueeze(-1).repeat(1, self.sz_embed)
+        else:
+            raise NotImplementedError
+
+        selectedX_diffcls = torch.stack([X[index1s, :], X[index2s, :]], dim=-1) # of shape (n_samples, sz_embed, 2)
+        lambdas_diffcls = torch.stack((lambdas_diffcls, 1.-lambdas_diffcls), dim=-1).to(selectedX_diffcls.device) # (n_samples, sz_embed, 2)
+        virtual_samples = torch.sum(selectedX_diffcls * lambdas_diffcls, dim=-1) # (n_samples, sz_embed)
+        virtual_samples = F.normalize(virtual_samples, p=2, dim=-1)
+
+        # virtual class
+        C1 = binarize_and_smooth_labels( T=cls_index1s, nb_classes=self.nb_classes, smoothing_const=0 ) # (n_samples, C)
+        C2 = binarize_and_smooth_labels( T=cls_index2s, nb_classes=self.nb_classes, smoothing_const=0 ) # (n_samples, C)
+        C = torch.stack((C1, C2), dim=-1) # (n_samples, C, 2)
+        lambdas_diffcls = lambdas_diffcls[:, :self.nb_classes, :] # same lambdas used as when creating virtual proxies
+        virtual_classes = torch.sum(C * lambdas_diffcls, dim=-1) # (n_samples, C)
+
+        assert virtual_classes.size()[0] == virtual_samples.size()[0]
+        return virtual_classes, virtual_samples
+
+    def intercls_mixup_proxy(self, X, T, P, IP, method=2):
+        # We synthesize proxies as well as samples, where the new proxies are treated as new classes
+        # get all inter-class pairs to mixup
+        index1s, index2s = torch.tensor([]), torch.tensor([])
+        for index1 in range(X.size()[0]):
+            for index2 in range(index1, X.size()[0]):
+                if index1 == index2 or T[index1] == T[index2]:
+                    continue
+                index1s = torch.cat((index1s, torch.tensor([index1])))
+                index2s = torch.cat((index2s, torch.tensor([index2])))
+
+        index1s, index2s = index1s.long(), index2s.long()
+        cls_index1s, cls_index2s = T[index1s], T[index2s]
+
+        # virtual proxies and virtual class labels
+        P_pairs = torch.stack((P[cls_index1s, :], P[cls_index2s, :]), dim=0)  # (2, n_samples, sz_embed)
+        lambdas = 0.5 * torch.ones((1, P_pairs.size()[1], P_pairs.size()[2]))  # universal lambdas = 0.5
+        lambdas = torch.cat((lambdas, 1. - lambdas), dim=0)  # (2, n_samples, sz_embed)
+        virtual_proxies = torch.sum(P_pairs * lambdas, dim=0)  # (n_samples, sz_embed)
+        virtual_proxies = F.normalize(virtual_proxies, p=2, dim=-1) # (n_samples, sz_embed)
+        virtual_proxies_reduced, virtual_classes = torch.unique(virtual_proxies, dim=0, return_inverse=True, sorted=False)
+        virtual_classes = self.nb_classes + virtual_classes # new class labels
+
+        # virtual samples
+        if method == 1:
+            lambdas_diffcls = self.uncertainty_lambdas(index1s, index2s, T, IP).unsqueeze(-1).repeat(1, self.sz_embed)
+        elif method == 2:
+            lambdas_diffcls = self.random_lambdas(len(index1s)).unsqueeze(-1).repeat(1, self.sz_embed)
+        else:
+            raise NotImplementedError
+
+        selectedX_diffcls = torch.stack([X[index1s, :], X[index2s, :]], dim=-1)  # of shape (n_samples, sz_embed, 2)
+        lambdas_diffcls = torch.stack((lambdas_diffcls, 1.-lambdas_diffcls), dim=-1).to(selectedX_diffcls.device)  # (n_samples, sz_embed, 2)
+        virtual_samples = torch.sum(selectedX_diffcls * lambdas_diffcls, dim=-1)  # (n_samples, sz_embed)
+        virtual_samples = F.normalize(virtual_samples, p=2, dim=-1)
+
+        assert virtual_classes.size()[0] == virtual_samples.size()[0]
+        return virtual_proxies_reduced, virtual_samples, virtual_classes
+
+    def informative_mixup(self, X, T, IP, P):
+        '''
+            Perform informative MixUp
+                :param X:
+                :param IP:
+                :param T: (N, )
+                :param mixup_ratio:
+        '''
+
+        # between different class (keep uncertain only)
+        virtual_classes, virtual_samples = self.intercls_mixup(X, T, P, IP)
+        return virtual_classes, virtual_samples
+
+        # between same class (high confidence only)
+        # T_sub, virtual_samples = self.intracls_mixup(X, T, IP, pairs_per_cls=4)
+        # return T_sub, virtual_samples
 
 class ProxyNCA_distribution_loss(torch.nn.Module):
     '''
@@ -417,8 +594,6 @@ class ProxyNCA_distribution_loss(torch.nn.Module):
         D = xSx # compute the -(x-mu)'Sigma^-1(x-mu) of shape (N, C)
 
         D_sim = F.softmax(-D, -1) # similarity to proxies of shape (N, C)
-        # det_Sigma = torch.sqrt(torch.prod(trace_Sigma, -1)) # (C, )
-        # D_sim = torch.mul(D_sim, det_Sigma.unsqueeze(0)) # of shape (N, C) FIXME: due to overflow issue, do not compuate determinant
         logD_sim = torch.log(D_sim) # of shape (N, C)
 
         T = binarize_and_smooth_labels(
@@ -427,12 +602,11 @@ class ProxyNCA_distribution_loss(torch.nn.Module):
 
         loss = torch.sum(- T * logD_sim, -1) # -ylog(yhat)
         loss = loss.mean()
-        # kl_loss = self.kl_divergence(trace_Sigma_inv)
-        # loss = loss + kl_loss # KL regularization on prior N(0, I)
+        kl_loss = self.kl_divergence(trace_Sigma_inv)
+        loss = loss + 0.2*kl_loss # KL regularization on prior N(0, I)
 
         return loss
 
-    def informative_mixup(self, X, P):
-        pass # TODO
+
 
 

@@ -38,8 +38,8 @@ parser.add_argument('--apex', default=False, action='store_true')
 parser.add_argument('--warmup_k', default=5, type=int)
 
 parser.add_argument('--dataset', default='cub')
-parser.add_argument('--config', default='config/cub_dist.json')
-parser.add_argument('--mode', default='testontrain', choices=['train', 'trainval', 'test',
+parser.add_argument('--config', default='config/cub_mixup.json')
+parser.add_argument('--mode', default='trainval', choices=['train', 'trainval', 'test',
                                                               'testontrain', 'testontrain_super'],
                     help='train with train data or train with trainval')
 parser.add_argument('--batch-size', default = 32, type=int, dest = 'sz_batch')
@@ -48,7 +48,7 @@ parser.add_argument('--initial_proxy_num', default=1, type=int)
 parser.add_argument('--tau', default=0.0, type=float)
 parser.add_argument('--proxy_update_schedule', default=[0.5, 0.75], nargs='+', type=float)
 parser.add_argument('--no_warmup', default=False, action='store_true')
-parser.add_argument('--loss-type', default='ProxyNCA_distribution_loss_lr4e-2_kmeansinitialize', type=str)
+parser.add_argument('--loss-type', default='ProxyNCA_prob_mixup_interonly_uncertainsampling_noproxy', type=str)
 
 args = parser.parse_args()
 
@@ -66,8 +66,8 @@ def load_best_checkpoint(model):
 if __name__ == '__main__':
 
     # set random seed for all gpus
-    random.seed(args.seed)
-    np.random.seed(args.seed)
+    # random.seed(args.seed)
+    # np.random.seed(args.seed) # FIXME: to not set seed
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed_all(args.seed)
 
@@ -131,7 +131,6 @@ if __name__ == '__main__':
                                                                                  args.dynamic_proxy,
                                                                                  args.loss_type,
                                                                                  args.initial_proxy_num, args.tau)
-        # train_results_fn = "log/%s_kd.json" % (args.dataset)
 
         if os.path.exists(train_results_fn):
             with open(train_results_fn, 'r') as f:
@@ -302,10 +301,10 @@ if __name__ == '__main__':
     ).cuda()
 
     ## Kmeans initialization
-    X, T, *_ = predict_batchwise(model, dl_tr_noshuffle)
+    # X, T, *_ = predict_batchwise(model, dl_tr_noshuffle)
     # criterion.center_init(X, T)
-    criterion.kmeans_init(X)
-    criterion = criterion.cuda()
+    # criterion.kmeans_init(X)
+    # criterion = criterion.cuda()
 
     # options for warmup
     opt_warmup = config['opt']['type'](
@@ -330,10 +329,10 @@ if __name__ == '__main__':
                 **config['opt']['args']['proxynca']
 
             },
-            {
-                **{'params': criterion.sigmas_inv},
-                **config['opt']['args']['proxynca_sigma']
-            },
+            # {
+            #     **{'params': criterion.sigmas_inv},
+            #     **config['opt']['args']['proxynca_sigma']
+            # },
 
         ],
         **config['opt']['args']['base']
@@ -359,10 +358,10 @@ if __name__ == '__main__':
                 **{'params': criterion.proxies},
                 **config['opt']['args']['proxynca']
             },
-            {
-                **{'params': criterion.sigmas_inv},
-                **config['opt']['args']['proxynca_sigma']
-            },
+            # {
+            #     **{'params': criterion.sigmas_inv},
+            #     **config['opt']['args']['proxynca_sigma']
+            # },
 
         ],
         **config['opt']['args']['base']
@@ -626,7 +625,10 @@ if __name__ == '__main__':
                                                                                args.dataset, args.mode,
                                                                                str(args.sz_embedding), str(args.seed)))
         # # TODO
-        if 'ProxyNCA_prob' in args.loss_type:
+        if 'ProxyNCA_prob_mixup' in args.loss_type:
+            torch.save({"proxies": criterion.proxies},
+                       '{}/Epoch_{}/proxy.pth'.format(save_dir, e + 1))
+        elif 'ProxyNCA_prob' in args.loss_type:
             torch.save({"proxies": criterion.proxies, "mask": criterion.mask},
                        '{}/Epoch_{}/proxy.pth'.format(save_dir, e+1))
         elif 'ProxyNCA_distribution_loss' in args.loss_type:
