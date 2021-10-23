@@ -22,7 +22,7 @@ if __name__ == '__main__':
     batch_size = 32
     num_cls_per_batch = 8
     sz_embedding = 2048
-    config = utils.load_config('config/cub_dist.json')
+    config = utils.load_config('config/cub_mixup_dist.json')
 
     # set random seed for all gpus
     # random.seed(0)
@@ -96,7 +96,7 @@ if __name__ == '__main__':
     #     initial_proxy_num=1,
     #     **config['criterion']['args']
     # ).cuda()
-    criterion = ProxyNCA_prob_mixup(nb_classes = dl_tr.dataset.nb_classes(),
+    criterion = ProxyNCA_prob_distribution_mixup(nb_classes = dl_tr.dataset.nb_classes(),
                                  sz_embed=sz_embedding,
                                 **config['criterion']['args']).cuda()
 
@@ -122,10 +122,10 @@ if __name__ == '__main__':
                 **config['opt']['args']['proxynca']
 
             },
-            # {
-            #     **{'params': criterion.sigmas_inv},
-            #     **config['opt']['args']['proxynca_sigma']
-            # },
+            {
+                **{'params': criterion.sigmas_inv},
+                **config['opt']['args']['proxynca_sigma']
+            },
 
         ],
         **config['opt']['args']['base']
