@@ -38,8 +38,8 @@ parser.add_argument('--apex', default=False, action='store_true')
 parser.add_argument('--warmup_k', default=5, type=int)
 
 parser.add_argument('--dataset', default='cub')
-parser.add_argument('--config', default='config/cub_dist.json')
-parser.add_argument('--mode', default='test', choices=['train', 'trainval', 'test',
+parser.add_argument('--config', default='config/cub_mixup.json')
+parser.add_argument('--mode', default='trainval', choices=['train', 'trainval', 'test',
                                                            'testontrain', 'testontrain_super'],
                     help='train with train data or train with trainval')
 parser.add_argument('--batch-size', default = 32, type=int, dest = 'sz_batch')
@@ -48,7 +48,7 @@ parser.add_argument('--initial_proxy_num', default=1, type=int)
 parser.add_argument('--tau', default=0.0, type=float)
 parser.add_argument('--proxy_update_schedule', default=[0.5, 0.75], nargs='+', type=float)
 parser.add_argument('--no_warmup', default=False, action='store_true')
-parser.add_argument('--loss-type', default='ProxyNCA_distribution_loss_lr4e-1_KL', type=str)
+parser.add_argument('--loss-type', default='ProxyNCA_prob_mixup_both_weightedsampling', type=str)
 
 args = parser.parse_args()
 
@@ -329,10 +329,10 @@ if __name__ == '__main__':
                 **config['opt']['args']['proxynca']
 
             },
-            {
-                **{'params': criterion.sigmas_inv},
-                **config['opt']['args']['proxynca_sigma']
-            },
+            # {
+            #     **{'params': criterion.sigmas_inv},
+            #     **config['opt']['args']['proxynca_sigma']
+            # },
 
         ],
         **config['opt']['args']['base']
@@ -358,10 +358,10 @@ if __name__ == '__main__':
                 **{'params': criterion.proxies},
                 **config['opt']['args']['proxynca']
             },
-            {
-                **{'params': criterion.sigmas_inv},
-                **config['opt']['args']['proxynca_sigma']
-            },
+            # {
+            #     **{'params': criterion.sigmas_inv},
+            #     **config['opt']['args']['proxynca_sigma']
+            # },
 
         ],
         **config['opt']['args']['base']

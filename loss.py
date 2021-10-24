@@ -294,13 +294,12 @@ class ProxyNCA_prob_mixup(torch.nn.Module):
             X1P1, X1P2 = torch.clamp(IP[index1s, C1], min=-1., max=1.), torch.clamp(IP[index1s, C2], min=-1., max=1.) # (n_samples, )
             X2P1, X2P2 = torch.clamp(IP[index2s, C1], min=-1., max=1.), torch.clamp(IP[index2s, C2], min=-1., max=1.)
             lambdas = (X2P2-X2P1) / ((X2P2-X2P1) + (X1P1-X1P2))
-            # TODO: torch.randn
             lambdas = lambdas + torch.from_numpy((np.random.uniform(size=len(index1s))*0.4-0.2)).to(lambdas.device) # add small random noises e~unif(-0.2, 0.2)
             lambdas = torch.clamp(lambdas, min=0.2, max=0.8) # clamp
 
             return lambdas
 
-    def intracls_mixup(self, X, T, IP, pairs_per_cls, method=2):
+    def intracls_mixup(self, X, T, IP, pairs_per_cls, method=1):
 
         T = binarize_and_smooth_labels(
             T=T, nb_classes=len(self.proxies), smoothing_const=0
@@ -318,8 +317,10 @@ class ProxyNCA_prob_mixup(torch.nn.Module):
             mixup_ind_samecls = torch.tensor([])
             for j in range(D2T_normalize.size()[1]):
                 for _ in range(pairs_per_cls):
+                    prob_vec = D2T_normalize[:, j].detach().cpu().numpy()
+                    prob_vec = ((1.-prob_vec) * (prob_vec != 0)) / np.sum((1.-prob_vec) * (prob_vec != 0))
                     pair_ind = np.random.choice(D2T_normalize.size()[0], 2,
-                                                p=D2T_normalize[:, j].detach().cpu().numpy(),
+                                                p=prob_vec, # inverse probability
                                                 replace=False).tolist()
                     mixup_ind_samecls = torch.cat((mixup_ind_samecls, torch.tensor([pair_ind]).T), dim=-1)
             mixup_ind_samecls = mixup_ind_samecls.long()  # (2, C_sub*pairs_percls)
@@ -352,7 +353,7 @@ class ProxyNCA_prob_mixup(torch.nn.Module):
         assert T_sub.size()[0] == virtual_samples.size()[0]
         return T_sub, virtual_samples
 
-    def intercls_mixup(self, X, T, IP, shifts=4, method=2):
+    def intercls_mixup(self, X, T, IP, shifts=4, method=1):
         # we only sythesize samples and interpolating class labels
         # get some inter-class pairs to mixup
         index1s = torch.arange(X.size()[0])
@@ -385,7 +386,7 @@ class ProxyNCA_prob_mixup(torch.nn.Module):
         assert virtual_classes.size()[0] == virtual_samples.size()[0]
         return virtual_classes, virtual_samples
 
-    def intercls_mixup_proxy(self, X, T, P, IP, shifts=4, method=2):
+    def intercls_mixup_proxy(self, X, T, P, IP, shifts=4, method=1):
         # We synthesize proxies as well as samples, where the new proxies are treated as new classes
         # get some inter-class pairs to mixup
         index1s = torch.arange(X.size()[0])
@@ -439,8 +440,8 @@ class ProxyNCA_prob_mixup(torch.nn.Module):
         D = D[:X.size()[0], X.size()[0]:] # (N, C)
         IP = IP[:X.size()[0], X.size()[0]:] # (N, C)
 
-        '''No mixup'''
         if self.mixup_method == 'none':
+            # no MixUp applied
             T = binarize_and_smooth_labels(
                 T=T, nb_classes=len(P), smoothing_const=0
             ) # (N, C)
@@ -449,7 +450,7 @@ class ProxyNCA_prob_mixup(torch.nn.Module):
             loss = loss.mean()
 
         elif self.mixup_method == 'intra':
-            '''Intraclass'''
+            # intra-class
             T_sub, virtual_X = self.intracls_mixup(X, T, IP, pairs_per_cls=4)
             Xall = torch.cat((X, self.scale * virtual_X), dim=0)
             Tall = torch.cat([T, T_sub])
@@ -467,7 +468,7 @@ class ProxyNCA_prob_mixup(torch.nn.Module):
             loss = loss.mean()
 
         elif self.mixup_method == 'inter_noproxy':
-            '''Interclass without synthetic proxy'''
+            # interclass without synthetic proxy
             virtual_classes, virtual_samples = self.intercls_mixup(X, T, IP)
             Xall = torch.cat((X, self.scale * virtual_samples), dim=0) # (N+N_inter, sz_embed)
             T = binarize_and_smooth_labels(
@@ -486,7 +487,7 @@ class ProxyNCA_prob_mixup(torch.nn.Module):
             loss = loss.mean()
 
         elif self.mixup_method == 'inter_proxy':
-            '''Interclass with synthetic proxy'''
+            # interclass with synthetic proxy
             virtual_classes, virtual_samples, virtual_proxies = self.intercls_mixup_proxy(X, T, P, IP)
             Xall = torch.cat((X, self.scale * virtual_samples), dim=0) # (N+N_inter, sz_embed)
             Tall = torch.cat([T, virtual_classes], 0) # (N+N_inter,)
@@ -506,7 +507,7 @@ class ProxyNCA_prob_mixup(torch.nn.Module):
             loss = loss.mean()
 
         elif self.mixup_method == 'both':
-            '''Both intra-class and inter-class'''
+            # Both intra-class and inter-class
             # between same class
             virtual_classes_intra, virtual_samples_intra = self.intracls_mixup(X, T, IP, pairs_per_cls=4)
             # between dfferent class
