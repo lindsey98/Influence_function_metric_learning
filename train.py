@@ -20,7 +20,7 @@ from dataset.base import SubSampler
 from hard_sample_detection.hard_detection import hard_potential
 from torch.utils.data import Dataset, DataLoader
 import torch.nn.functional as F
-os.environ["CUDA_VISIBLE_DEVICES"]="1"
+os.environ["CUDA_VISIBLE_DEVICES"]="0"
 
 parser = argparse.ArgumentParser(description='Training ProxyNCA++')
 parser.add_argument('--embedding-size', default = 2048, type=int, dest = 'sz_embedding')
@@ -37,8 +37,8 @@ parser.add_argument('--init_eval', default=False, action='store_true')
 parser.add_argument('--apex', default=False, action='store_true')
 parser.add_argument('--warmup_k', default=5, type=int)
 
-parser.add_argument('--dataset', default='cub')
-parser.add_argument('--config', default='config/cub_mixup.json')
+parser.add_argument('--dataset', default='vgg')
+parser.add_argument('--config', default='config/vggface.json')
 parser.add_argument('--mode', default='trainval', choices=['train', 'trainval', 'test',
                                                            'testontrain', 'testontrain_super'],
                     help='train with train data or train with trainval')
@@ -48,7 +48,7 @@ parser.add_argument('--initial_proxy_num', default=1, type=int)
 parser.add_argument('--tau', default=0.0, type=float)
 parser.add_argument('--proxy_update_schedule', default=[0.5, 0.75], nargs='+', type=float)
 parser.add_argument('--no_warmup', default=False, action='store_true')
-parser.add_argument('--loss-type', default='ProxyNCA_prob_mixup_both_weightedsampling', type=str)
+parser.add_argument('--loss-type', default='ProxyNCA_prob_orig', type=str)
 
 args = parser.parse_args()
 
@@ -71,8 +71,7 @@ if __name__ == '__main__':
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed_all(args.seed)
 
-    os.makedirs('results', exist_ok=True)
-    os.makedirs('log', exist_ok=True)
+    os.makedirs('results', exist_ok=True); os.makedirs('log', exist_ok=True)
 
     curr_fn = os.path.basename(args.config).split(".")[0]
     config = utils.load_config(args.config)
@@ -102,7 +101,6 @@ if __name__ == '__main__':
     if 'transform_key' in config.keys():
         transform_key = config['transform_key']
     print('Transformation: ', transform_key)
-
 
     out_results_fn = "log/%s_%s_%s_%d_%s_loss%s_proxy%d_tau%0.2f.json" % (args.dataset, curr_fn, args.mode,
                                                                         args.seed,
@@ -611,35 +609,36 @@ if __name__ == '__main__':
                         logging.info('Class {} update no. proxies to be {}'.format(k, criterion.current_proxy[k]))
 
         #TODO: this is for umap visualization -- save intermediate models and proxies
-        save_dir = 'dvi_data_{}_{}_loss{}_proxy{}_tau{}/ResNet_{}_Model'.format(args.dataset,
-                                                                              args.dynamic_proxy,
-                                                                              args.loss_type,
-                                                                              str(args.initial_proxy_num),
-                                                                              str(args.tau),
-                                                                              str(args.sz_embedding))
-        os.makedirs('{}'.format(save_dir), exist_ok=True)
-        os.makedirs('{}/Epoch_{}'.format(save_dir, e+1), exist_ok=True)
-        with open('{}/Epoch_{}/index.json'.format(save_dir, e + 1), 'wt') as handle:
-            handle.write(json.dumps(list(range(len(dl_tr_noshuffle.dataset)))))
-        torch.save(model.state_dict(), '{}/Epoch_{}/{}_{}_{}_{}_{}.pth'.format(save_dir, e+1, args.dataset,
-                                                                               args.dataset, args.mode,
-                                                                               str(args.sz_embedding), str(args.seed)))
-        # # TODO
-        if 'ProxyNCA_prob_mixup' in args.loss_type:
-            torch.save({"proxies": criterion.proxies},
-                       '{}/Epoch_{}/proxy.pth'.format(save_dir, e + 1))
-        elif 'ProxyNCA_prob' in args.loss_type:
-            torch.save({"proxies": criterion.proxies, "mask": criterion.mask},
+        if e % 10 == 0:
+            save_dir = 'dvi_data_{}_{}_loss{}_proxy{}_tau{}/ResNet_{}_Model'.format(args.dataset,
+                                                                                  args.dynamic_proxy,
+                                                                                  args.loss_type,
+                                                                                  str(args.initial_proxy_num),
+                                                                                  str(args.tau),
+                                                                                  str(args.sz_embedding))
+            os.makedirs('{}'.format(save_dir), exist_ok=True)
+            os.makedirs('{}/Epoch_{}'.format(save_dir, e+1), exist_ok=True)
+            with open('{}/Epoch_{}/index.json'.format(save_dir, e + 1), 'wt') as handle:
+                handle.write(json.dumps(list(range(len(dl_tr_noshuffle.dataset)))))
+            torch.save(model.state_dict(), '{}/Epoch_{}/{}_{}_{}_{}_{}.pth'.format(save_dir, e+1, args.dataset,
+                                                                                   args.dataset, args.mode,
+                                                                                   str(args.sz_embedding), str(args.seed)))
+            # # TODO
+            if 'ProxyNCA_prob_mixup' in args.loss_type:
+                torch.save({"proxies": criterion.proxies},
+                           '{}/Epoch_{}/proxy.pth'.format(save_dir, e + 1))
+            elif 'ProxyNCA_prob' in args.loss_type:
+                torch.save({"proxies": criterion.proxies, "mask": criterion.mask},
+                           '{}/Epoch_{}/proxy.pth'.format(save_dir, e+1))
+            elif 'ProxyNCA_distribution_loss' in args.loss_type:
+                torch.save({"proxies": criterion.proxies, "sigma_inv": criterion.sigmas_inv},
+                           '{}/Epoch_{}/proxy.pth'.format(save_dir, e+1))
+            elif 'ProxyNCA_dist_mixup' in args.loss_type:
+                torch.save({"proxies": criterion.proxies, "sigma_inv": criterion.sigmas_inv},
+                           '{}/Epoch_{}/proxy.pth'.format(save_dir, e+1))
+            elif 'ProxyNCA_prob_orig' in args.loss_type:
+                torch.save({"proxies": criterion.proxies},
                        '{}/Epoch_{}/proxy.pth'.format(save_dir, e+1))
-        elif 'ProxyNCA_distribution_loss' in args.loss_type:
-            torch.save({"proxies": criterion.proxies, "sigma_inv": criterion.sigmas_inv},
-                       '{}/Epoch_{}/proxy.pth'.format(save_dir, e+1))
-        elif 'ProxyNCA_dist_mixup' in args.loss_type:
-            torch.save({"proxies": criterion.proxies, "sigma_inv": criterion.sigmas_inv},
-                       '{}/Epoch_{}/proxy.pth'.format(save_dir, e+1))
-        elif 'ProxyNCA_prob_orig' in args.loss_type:
-            torch.save({"proxies": criterion.proxies},
-                   '{}/Epoch_{}/proxy.pth'.format(save_dir, e+1))
         ######################################################################################
 
         if args.mode == 'trainval':

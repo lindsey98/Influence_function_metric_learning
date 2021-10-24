@@ -24,6 +24,10 @@ class Identity(): # used for skipping transforms
     def __call__(self, im):
         return im
 
+class RGBAToRGB():
+    def __call__(self, im):
+        im = im.convert('RGB')
+        return im
 
 class RGBToBGR():
     def __call__(self, im):
@@ -60,6 +64,7 @@ def make_transform(sz_resize = 256, sz_crop = 227,
                    rgb_to_bgr = True, is_train = True,
                    intensity_scale = None, rotate = 0):
     return transforms.Compose([
+        RGBAToRGB(),
         RGBToBGR() if rgb_to_bgr else Identity(),
         transforms.RandomRotation(rotate) if is_train and (not isinstance(rotate, numbers.Number)) else Identity(),
         transforms.RandomResizedCrop(sz_crop) if is_train else Identity(),

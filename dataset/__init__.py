@@ -4,6 +4,7 @@ from .cub import CUBirds, CUBirds_hdf5, CUBirds_class, CUBirds_hdf5_alt, CUBirds
 from .sop import SOProducts, SOProducts_hdf5
 from .inshop import InShop, InShop_hdf5
 from .logo2k import Logo2k, Logo2k_class, Logo2k_super
+from .vggface import VggFace
 from . import utils
 
 
@@ -26,6 +27,7 @@ _type = {
     'logo2k': Logo2k,
     'logo2k_super100': Logo2k_super,
     'logo2k_super500': Logo2k_super,
+    'vgg': VggFace,
 }
 
 
