@@ -2,7 +2,7 @@
     "name": "str('example')",
     "gpu_id": "int(0)",
     "criterion": {
-        "type": "loss.ProxyNCA_prob",
+        "type": "loss.ProxyNCA_prob_orig",
         "args": {
             "scale": "3"
         }
@@ -21,7 +21,7 @@
    
     "nb_epochs": "40*1",
     "sz_batch": "32*1",
-    "sz_embedding": "2048",
+    "sz_embedding": "512",
     "num_class_per_batch": "8",
     "num_gradcum": "1",
     "is_random_sampler":"False",

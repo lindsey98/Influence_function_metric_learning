@@ -156,7 +156,7 @@ class BaseDatasetMod(torch.utils.data.Dataset):
     def __getitem__(self, index):
         im = PIL.Image.open(self.im_paths[index])
         # convert gray to rgb
-        if len(list(im.split())) == 1 : im = im.convert('RGB') 
+        # if len(list(im.split())) == 1 : im = im.convert('RGB')
         if self.transform is not None:
             im = self.transform(im)
         return im, self.ys[index], index

@@ -5,6 +5,8 @@ import torchvision
 from torchvision import transforms
 import PIL.Image
 import torch
+from PIL import ImageFile
+ImageFile.LOAD_TRUNCATED_IMAGES = True
 # from torch._six import int_classes as _int_classes
 _int_classes = int
 import numpy as np

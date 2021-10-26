@@ -23,7 +23,6 @@ import torch.nn.functional as F
 os.environ["CUDA_VISIBLE_DEVICES"]="0"
 
 parser = argparse.ArgumentParser(description='Training ProxyNCA++')
-parser.add_argument('--embedding-size', default = 2048, type=int, dest = 'sz_embedding')
 parser.add_argument('--epochs', default = 40, type=int, dest = 'nb_epochs')
 parser.add_argument('--log-filename', default = 'example')
 parser.add_argument('--workers', default = 16, type=int, dest = 'nb_workers')
@@ -37,8 +36,9 @@ parser.add_argument('--init_eval', default=False, action='store_true')
 parser.add_argument('--apex', default=False, action='store_true')
 parser.add_argument('--warmup_k', default=5, type=int)
 
-parser.add_argument('--dataset', default='vgg')
-parser.add_argument('--config', default='config/vggface.json')
+parser.add_argument('--dataset', default='cub')
+parser.add_argument('--embedding-size', default = 512, type=int, dest = 'sz_embedding')
+parser.add_argument('--config', default='config/cub.json')
 parser.add_argument('--mode', default='trainval', choices=['train', 'trainval', 'test',
                                                            'testontrain', 'testontrain_super'],
                     help='train with train data or train with trainval')
@@ -47,7 +47,7 @@ parser.add_argument('--dynamic_proxy', default=False, action='store_true')
 parser.add_argument('--initial_proxy_num', default=1, type=int)
 parser.add_argument('--tau', default=0.0, type=float)
 parser.add_argument('--proxy_update_schedule', default=[0.5, 0.75], nargs='+', type=float)
-parser.add_argument('--no_warmup', default=False, action='store_true')
+parser.add_argument('--no_warmup', default=True, action='store_true')
 parser.add_argument('--loss-type', default='ProxyNCA_prob_orig', type=str)
 
 args = parser.parse_args()
@@ -497,6 +497,8 @@ if __name__ == '__main__':
             opt.step() # gradient descent
 
             losses_per_epoch.append(loss.data.cpu().numpy())
+            if ct >= 2500: # TODO: too many data
+                break
 
         time_per_epoch_2 = time.time()
         losses.append(np.mean(losses_per_epoch[-20:]))
@@ -624,7 +626,10 @@ if __name__ == '__main__':
                                                                                    args.dataset, args.mode,
                                                                                    str(args.sz_embedding), str(args.seed)))
             # # TODO
-            if 'ProxyNCA_prob_mixup' in args.loss_type:
+            if 'ProxyNCA_prob_orig' in args.loss_type:
+                torch.save({"proxies": criterion.proxies},
+                       '{}/Epoch_{}/proxy.pth'.format(save_dir, e+1))
+            elif 'ProxyNCA_prob_mixup' in args.loss_type:
                 torch.save({"proxies": criterion.proxies},
                            '{}/Epoch_{}/proxy.pth'.format(save_dir, e + 1))
             elif 'ProxyNCA_prob' in args.loss_type:
@@ -636,9 +641,7 @@ if __name__ == '__main__':
             elif 'ProxyNCA_dist_mixup' in args.loss_type:
                 torch.save({"proxies": criterion.proxies, "sigma_inv": criterion.sigmas_inv},
                            '{}/Epoch_{}/proxy.pth'.format(save_dir, e+1))
-            elif 'ProxyNCA_prob_orig' in args.loss_type:
-                torch.save({"proxies": criterion.proxies},
-                       '{}/Epoch_{}/proxy.pth'.format(save_dir, e+1))
+
         ######################################################################################
 
         if args.mode == 'trainval':
