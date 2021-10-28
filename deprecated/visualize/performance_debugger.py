@@ -5,7 +5,7 @@ import evaluation
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
-from visualize.parametric_umap import prepare_data
+from deprecated.visualize.parametric_umap import prepare_data
 from networks import Feat_resnet50_max_n
 import os
 from tqdm import tqdm

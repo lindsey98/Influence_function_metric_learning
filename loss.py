@@ -1,15 +1,9 @@
-from similarity import pairwise_distance
-import torch
+from deprecated.hard_sample_detection.similarity import pairwise_distance
 import torch.nn.functional as F
-import numpy as np
-import torch.nn as nn
-import copy
 import math
-from dataset.base import SubSampler
-from torch.utils.data import DataLoader
-from typing import Union, List
+from typing import Union
 import sklearn.preprocessing
-from hard_sample_detection.gmm import *
+from deprecated.hard_sample_detection.gmm import *
 
 def masked_softmax(A, dim, t=1.0):
     '''
@@ -623,7 +617,7 @@ class ProxyNCA_prob_smooth(torch.nn.Module):
     '''
         Original loss in ProxyNCA++
     '''
-    def __init__(self, nb_classes, sz_embed, scale, k=2, method='none', **kwargs):
+    def __init__(self, nb_classes, sz_embed, scale, k=2, method='conf', **kwargs):
         torch.nn.Module.__init__(self)
         self.proxies = torch.nn.Parameter(torch.randn(nb_classes, sz_embed) / 8)
         self.scale = scale
@@ -662,9 +656,9 @@ class ProxyNCA_prob_smooth(torch.nn.Module):
             with torch.no_grad():
                 topk_ind = torch.topk(log_softmaxD, dim=-1, k=self.k).indices # (N, 2)
                 T_prob = smooth_labels(topk_ind, log_softmaxD.size()[0], self.nb_classes)
-            kl_loss = F.kl_div(log_softmaxD, T_prob, log_target=False)
+            kl_loss = F.kl_div(log_softmaxD, T_prob, log_target=False, reduction='batchmean')
 
-            lossall = loss + kl_loss
+            lossall = loss + float(self.k) * kl_loss
             return lossall
 
         elif self.method == 'none':

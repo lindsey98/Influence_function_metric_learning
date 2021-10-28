@@ -2,19 +2,14 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import os
-import utils
-import dataset
 from tqdm import tqdm
-from networks import bninception, Feat_resnet50_max_n
+from networks import Feat_resnet50_max_n
 from torch import nn
-import umap
-from umap.parametric_umap import ParametricUMAP
-import tensorflow as tf
-from loss import ProxyNCA_prob, ProxyNCA_prob_orig
-from utils import predict_batchwise, inner_product_sim, predict_batchwise_loss
+from loss import ProxyNCA_prob_orig
+from utils import predict_batchwise
 import torch.nn.functional as F
 os.environ['CUDA_VISIBLE_DEVICES'] = "0, 1"
-from visualize.parametric_umap import prepare_data, encoder_model, encoder_trainer
+from deprecated.visualize.parametric_umap import prepare_data, encoder_trainer
 
 def pumap_training_all(model, model_dir, e,
                    dl_tr, dl_ev,

@@ -1,6 +1,6 @@
 from sklearn.cluster import KMeans
 import scipy.stats
-from visualize.parametric_umap import *
+from deprecated.visualize.parametric_umap import *
 
 def hard_potential(sim_dict, cls_dict, current_t, rolling_t=5, ts_sim=0.5, ts_ratio=[0.4, 1]):
     '''

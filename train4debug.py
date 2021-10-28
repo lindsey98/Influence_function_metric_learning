@@ -1,8 +1,3 @@
-import shutil
-
-import PIL
-import torch
-
 import dataset
 import utils
 
@@ -10,14 +5,11 @@ import os
 
 import matplotlib
 matplotlib.use('agg', force=True)
-import random
 from tqdm import tqdm
 # from apex import amp
 from torch.utils.data import Dataset
 from loss import *
-from utils import predict_batchwise
-from PIL import Image
-from smoothness_regularize import regularizer
+
 os.environ["CUDA_VISIBLE_DEVICES"]="1"
 
 
@@ -195,8 +187,8 @@ if __name__ == '__main__':
     #
             loss = criterion(m, indices, y.cuda())
             # smoothness regularizer
-            regularize_term, grad_norm = regularizer(x, y, model, criterion)
-            loss += regularize_term
+            # regularize_term, grad_norm = regularizer(x, y, model, criterion)
+            # loss += regularize_term
             print(loss)  #
     #         opt.zero_grad()
     #         print(criterion.sigmas_inv.grad)

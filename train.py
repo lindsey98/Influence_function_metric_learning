@@ -12,15 +12,14 @@ matplotlib.use('agg', force=True)
 import time
 import argparse
 import json
-import random
 from tqdm import tqdm
 # from apex import amp
 from utils import predict_batchwise, inner_product_sim
 from dataset.base import SubSampler
-from hard_sample_detection.hard_detection import hard_potential
+from deprecated.hard_sample_detection.hard_detection import hard_potential
 from torch.utils.data import Dataset, DataLoader
 import torch.nn.functional as F
-from smoothness_regularize import regularizer
+
 os.environ["CUDA_VISIBLE_DEVICES"]="1"
 
 parser = argparse.ArgumentParser(description='Training ProxyNCA++')
@@ -300,13 +299,6 @@ if __name__ == '__main__':
         **config['criterion']['args']
     ).cuda()
 
-    ## Kmeans initialization
-    # X, T, *_ = predict_batchwise(model, dl_tr_noshuffle)
-    # criterion.center_init(X, T)
-    # criterion.kmeans_init(X)
-    # criterion = criterion.cuda()
-
-    # options for warmup
     opt_warmup = config['opt']['type'](
         [
             {

@@ -6,12 +6,10 @@ import evaluation
 import numpy as np
 import torch
 import logging
-import loss
 import json
-import networks
 import time
 #import margin_net
-import similarity
+from deprecated.hard_sample_detection import similarity
 import torch.nn.functional as F
 from tqdm import tqdm
 # __repr__ may contain `\n`, json replaces it by `\\n` + indent
