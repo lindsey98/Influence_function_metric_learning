@@ -1,4 +1,4 @@
-from deprecated.hard_sample_detection.similarity import pairwise_distance
+from similarity import pairwise_distance
 import torch.nn.functional as F
 import math
 from typing import Union

@@ -10,7 +10,7 @@ import torch.utils.model_zoo as model_zoo
 
 __all__ = ['BNInception', 'bninception',
            'Feat_resnet50_max', 'Feat_resnet50_avg',
-           'Feat_resnet50_max_n', 'Feat_resnet50_avg_n']
+           'Feat_resnet50_max_n', 'Feat_resnet50_avg_n', 'Feat_resnet50_max_n_intermediate']
 
 class Feature(nn.Module):
     '''
@@ -51,6 +51,46 @@ class Feature(nn.Module):
 
         return x
 
+
+class FeatureIntermediate(nn.Module):
+    '''
+        Feature embedding network
+    '''
+    def __init__(self, model='resnet50', pool='avg', use_lnorm=False):
+        nn.Module.__init__(self)
+        self.model = model
+
+        self.base = models.__dict__[model](pretrained=True)
+        if pool == 'avg':
+            self.pool = nn.AdaptiveAvgPool2d((1, 1))
+        elif pool == 'max':
+            self.pool = nn.AdaptiveMaxPool2d((1, 1))
+        else:
+            raise Exception('pool: %s pool must be avg or max', str(pool))
+
+        self.lnorm = None
+        if use_lnorm:
+            self.lnorm = nn.LayerNorm(2048, elementwise_affine=False).cuda()
+
+    def forward(self, x):
+        x = self.base.conv1(x)
+        x = self.base.bn1(x)
+        x = self.base.relu(x)
+        x = self.base.maxpool(x)
+
+        x1 = self.base.layer1(x)
+        x2 = self.base.layer2(x1)
+        x3 = self.base.layer3(x2)
+        x4 = self.base.layer4(x3)
+
+        x = self.pool(x4)
+        x = x.reshape(x.size(0), -1)
+
+        if self.lnorm != None:
+            x = self.lnorm(x)
+
+        return x, (x1, x2, x3, x4)
+
 class Feat_resnet50_max(Feature):
      def __init__(self):
         Feature.__init__(self, model='resnet50', pool='max')
@@ -66,6 +106,11 @@ class Feat_resnet50_max_n(Feature):
 class Feat_resnet50_avg_n(Feature):
      def __init__(self):
         Feature.__init__(self, model='resnet50', pool='avg', use_lnorm=True)
+
+
+class Feat_resnet50_max_n_intermediate(FeatureIntermediate):
+    def __init__(self):
+        FeatureIntermediate.__init__(self, model='resnet50', pool='max', use_lnorm=True)
 
 
 # modify from

@@ -9,9 +9,11 @@ import logging
 import json
 import time
 #import margin_net
-from deprecated.hard_sample_detection import similarity
+import similarity
 import torch.nn.functional as F
 from tqdm import tqdm
+import loss
+import networks
 # __repr__ may contain `\n`, json replaces it by `\\n` + indent
 json_dumps = lambda **kwargs: json.dumps(
     **kwargs
