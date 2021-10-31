@@ -143,10 +143,6 @@ class BaseDatasetMod(torch.utils.data.Dataset):
             print('done copying file: %.2fs', elapsed)
 
     def nb_classes(self):
-        #print(self.classes)
-        #print(len(set(self.ys)), len(set(self.classes)))
-        #print(type(self.ys))
-        #print(len(set(self.ys) & set(self.classes)))
         assert set(self.ys) == set(self.classes)
         return len(self.classes)
 
