@@ -19,10 +19,8 @@ from dataset.base import SubSampler
 from deprecated.hard_sample_detection.hard_detection import hard_potential
 from torch.utils.data import Dataset, DataLoader
 import torch.nn.functional as F
-import torchvision
-import random
 
-os.environ["CUDA_VISIBLE_DEVICES"]="0"
+os.environ["CUDA_VISIBLE_DEVICES"]="1"
 
 parser = argparse.ArgumentParser(description='Training ProxyNCA++')
 parser.add_argument('--epochs', default = 40, type=int, dest = 'nb_epochs')
@@ -37,17 +35,17 @@ parser.add_argument('--init_eval', default=False, action='store_true')
 parser.add_argument('--apex', default=False, action='store_true')
 parser.add_argument('--warmup_k', default=5, type=int)
 
-parser.add_argument('--dataset', default='cars')
-parser.add_argument('--config', default='config/cars.json')
-parser.add_argument('--data_root', default = '/home/ruofan/PycharmProjects/SoftTriple/datasets/cars196',
-                    type=str)
+parser.add_argument('--dataset', default='cub')
 parser.add_argument('--embedding-size', default = 512, type=int, dest = 'sz_embedding')
-parser.add_argument('--mode', default='test', choices=['trainval', 'test', 'testontrain'],
+parser.add_argument('--config', default='config/cub_dynamic_pool.json')
+parser.add_argument('--mode', default='trainval', choices=['train', 'trainval', 'test',
+                                                       'testontrain', 'testontrain_super'],
                     help='train with train data or train with trainval')
 parser.add_argument('--batch-size', default = 32, type=int, dest = 'sz_batch')
 parser.add_argument('--no_warmup', default=False, action='store_true')
-parser.add_argument('--loss-type', default='ProxyNCA_prob_orig', type=str)
+parser.add_argument('--loss-type', default='ProxyNCA_prob_orig_dynamicpool', type=str)
 parser.add_argument('--workers', default = 16, type=int, dest = 'nb_workers')
+
 
 args = parser.parse_args()
 
@@ -65,8 +63,8 @@ def load_best_checkpoint(model):
 if __name__ == '__main__':
 
     # set random seed for all gpus
-    random.seed(args.seed)
-    np.random.seed(args.seed) # FIXME: to not set seed
+    # random.seed(args.seed)
+    # np.random.seed(args.seed) # FIXME: to not set seed
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed_all(args.seed)
 
@@ -101,26 +99,27 @@ if __name__ == '__main__':
         transform_key = config['transform_key']
     print('Transformation: ', transform_key)
 
-    out_results_fn = "log/%s_%s_%s_%d_%d_loss%s_augmentdata.json" % (args.dataset, curr_fn, args.mode,args.sz_embedding,
+    out_results_fn = "log/%s_%s_%s_%d_%d_loss%s.json" % (args.dataset, curr_fn, args.mode, args.sz_embedding,
                                                                         args.seed,
                                                                         args.loss_type)
 
-    args.log_filename = '%s_%s_%s_%d_%d_loss%s_augmentdata' % (args.dataset, curr_fn, args.mode,
-                                                         args.sz_embedding,
-                                                         args.seed,
-                                                         args.loss_type)
+    args.log_filename = '%s_%s_%s_%d_%d_loss%s' % (args.dataset, curr_fn, args.mode, args.sz_embedding,
+                                                 args.seed,
+                                                 args.loss_type)
 
     if args.mode == 'test':
         args.log_filename = args.log_filename.replace('test', 'trainval')
     elif args.mode == 'testontrain':
         args.log_filename = args.log_filename.replace('testontrain', 'trainval')
+    elif args.mode == 'testontrain_super':
+        args.log_filename = args.log_filename.replace('testontrain_super', 'trainval')
     best_epoch = args.nb_epochs
 
     '''Dataloader'''
     if args.mode == 'trainval':
-        train_results_fn = "log/%s_%s_%s_%d_%d_loss%s_augmentdata.json" % (args.dataset, curr_fn, args.mode,args.sz_embedding,
-                                                                    args.seed,
-                                                                    args.loss_type)
+        train_results_fn = "log/%s_%s_%s_%d_%d_loss%s.json" % (args.dataset, curr_fn, args.mode, args.sz_embedding,
+                                                            args.seed,
+                                                            args.loss_type)
 
         if os.path.exists(train_results_fn):
             with open(train_results_fn, 'r') as f:
@@ -137,17 +136,21 @@ if __name__ == '__main__':
 
     if ('inshop' not in args.dataset ):
         dl_ev = torch.utils.data.DataLoader(
-            torchvision.datasets.ImageFolder(
-                root=os.path.join(args.data_root, 'test'),
-                transform=dataset.utils.make_transform(
+            dataset.load(
+                name = args.dataset,
+                root = dataset_config['dataset'][args.dataset]['root'],
+                source = dataset_config['dataset'][args.dataset]['source'],
+                classes = dataset_config['dataset'][args.dataset]['classes']['eval'],
+                transform = dataset.utils.make_transform(
                     **dataset_config[transform_key],
-                    is_train=False
-            )),
+                    is_train = False
+                )
+            ),
             batch_size = args.sz_batch,
             shuffle = False,
             num_workers = args.nb_workers,
+            #pin_memory = True
         )
-
     else:
         #inshop trainval mode
         dl_query = torch.utils.data.DataLoader(
@@ -191,86 +194,111 @@ if __name__ == '__main__':
         handlers=[
             logging.FileHandler("{0}/{1}.log".format('log', args.log_filename)),
             logging.StreamHandler()
-        ])
-
-    tr_dataset = torchvision.datasets.ImageFolder(
-            root=os.path.join(args.data_root, 'train_val_mix'),
-            transform=train_transform
+        ]
     )
+
+    if args.mode == 'train':
+        tr_dataset = dataset.load(
+                name = args.dataset,
+                root = dataset_config['dataset'][args.dataset]['root'],
+                source = dataset_config['dataset'][args.dataset]['source'],
+                classes = dataset_config['dataset'][args.dataset]['classes']['train'],
+                transform = train_transform
+            )
+
+    elif args.mode == 'trainval' or args.mode == 'test' or args.mode == 'testontrain' or args.mode == 'testontrain_super':
+        # print(dataset_config['dataset'][args.dataset]['root'])
+        tr_dataset = dataset.load(
+                name = args.dataset,
+                root = dataset_config['dataset'][args.dataset]['root'],
+                source = dataset_config['dataset'][args.dataset]['source'],
+                classes = dataset_config['dataset'][args.dataset]['classes']['trainval'],
+                transform = train_transform
+            )
 
     num_class_per_batch = config['num_class_per_batch']
     num_gradcum = config['num_gradcum']
     is_random_sampler = config['is_random_sampler']
     if is_random_sampler:
-        batch_sampler = dataset.utils.RandomBatchSampler(tr_dataset.targets, args.sz_batch, True, num_class_per_batch, num_gradcum)
+        batch_sampler = dataset.utils.RandomBatchSampler(tr_dataset.ys, args.sz_batch, True, num_class_per_batch, num_gradcum)
     else:
 
-        batch_sampler = dataset.utils.BalancedBatchSampler(torch.Tensor(tr_dataset.targets), num_class_per_batch,
+        batch_sampler = dataset.utils.BalancedBatchSampler(torch.Tensor(tr_dataset.ys), num_class_per_batch,
                                                            int(args.sz_batch / num_class_per_batch))
+
 
     dl_tr = torch.utils.data.DataLoader(
         tr_dataset,
         batch_sampler = batch_sampler,
         num_workers = args.nb_workers,
     )
+
+    # training dataloader without shuffling and without transformation
     dl_tr_noshuffle = torch.utils.data.DataLoader(
-        torchvision.datasets.ImageFolder(
-            root=os.path.join(args.data_root, 'train_val_mix'), # TODO: this is the original training set?
-            transform=dataset.utils.make_transform(
-                **dataset_config[transform_key],
-                is_train=False
-            )
-        ),
-        batch_sampler = batch_sampler,
-        num_workers = args.nb_workers,
-        shuffle=False,
+            dataset=dataset.load(
+                    name=args.dataset,
+                    root=dataset_config['dataset'][args.dataset]['root'],
+                    source=dataset_config['dataset'][args.dataset]['source'],
+                    classes=dataset_config['dataset'][args.dataset]['classes']['trainval'],
+                    transform=dataset.utils.make_transform(
+                        **dataset_config[transform_key],
+                        is_train=False
+                    )
+                ),
+            num_workers = args.nb_workers,
+            shuffle=False,
+            batch_size=64,
     )
 
-    '''Model'''
-    feat = config['model']['type']()
-    feat.eval()
-    in_sz = feat(torch.rand(1, 3, 256, 256)).squeeze().size(0)
-    feat.train()
-    emb = torch.nn.Linear(in_sz, args.sz_embedding)
-    model = torch.nn.Sequential(feat, emb)
 
-    model = torch.nn.DataParallel(model)
+    print("===")
+    if args.mode == 'train':
+        dl_val = torch.utils.data.DataLoader(
+            dataset.load(
+                name = args.dataset,
+                root = dataset_config['dataset'][args.dataset]['root'],
+                source = dataset_config['dataset'][args.dataset]['source'],
+                classes = dataset_config['dataset'][args.dataset]['classes']['val'],
+                transform = dataset.utils.make_transform(
+                    **dataset_config[transform_key],
+                    is_train = False
+                )
+            ),
+            batch_size = args.sz_batch,
+            shuffle = False,
+            num_workers = args.nb_workers,
+        )
+
+    '''Model'''
+    from loss_with_model import Encoder
+    model = Encoder(nb_classes=dl_tr.dataset.nb_classes(), sz_embed=args.sz_embedding)
     model = model.cuda()
 
     '''Loss'''
     # TODO
-    criterion = config['criterion']['type'](
-        nb_classes = len(dl_tr.dataset.classes),
-        sz_embed = args.sz_embedding,
-        **config['criterion']['args']
-    ).cuda()
+    # criterion = config['criterion']['type'](
+    #     nb_classes = dl_tr.dataset.nb_classes(),
+    #     sz_embed = args.sz_embedding,
+    #     initial_proxy_num = args.initial_proxy_num,
+    #     **config['criterion']['args']
+    # ).cuda()
 
     opt_warmup = config['opt']['type'](
         [
             {
-                **{'params': list(feat.parameters()
-                    )
-                },
+                **{'params': list(model.base.parameters()) + list(model.emb.parameters()) + list(
+                    model.lnorm.parameters())
+                   },
                 'lr': 0
             },
-            {
-                **{'params': list(emb.parameters()
-                    )
-                },
-                **config['opt']['args']['embedding']
-
-            },
 
             {
-                **{'params': criterion.proxies}
+                **{'params': model.proxies}
                 ,
                 **config['opt']['args']['proxynca']
 
             },
-            # {
-            #     **{'params': criterion.sigmas_inv},
-            #     **config['opt']['args']['proxynca_sigma']
-            # },
+
 
         ],
         **config['opt']['args']['base']
@@ -280,26 +308,16 @@ if __name__ == '__main__':
     opt = config['opt']['type'](
         [
             {
-                **{'params': list(feat.parameters()
-                    )
-                },
+                **{'params': list(model.base.parameters()) + list(model.emb.parameters()) + list(
+                    model.lnorm.parameters())
+                   },
                 **config['opt']['args']['backbone']
-            },
-            {
-                **{'params': list(emb.parameters()
-                    )
-                },
-                **config['opt']['args']['embedding']
             },
 
             {
-                **{'params': criterion.proxies},
+                **{'params': model.proxies},
                 **config['opt']['args']['proxynca']
             },
-            # {
-            #     **{'params': criterion.sigmas_inv},
-            #     **config['opt']['args']['proxynca_sigma']
-            # },
 
         ],
         **config['opt']['args']['base']
@@ -320,14 +338,26 @@ if __name__ == '__main__':
             model = load_best_checkpoint(model)
             utils.evaluate(model, dl_tr_noshuffle, args.eval_nmi, args.recall)
         exit() # exit the program
+    if args.mode == 'testontrain_super':
+        with torch.no_grad():
+            logging.info("**Evaluating with gt super 100 classes...(test mode, test on training set)**")
+            model = load_best_checkpoint(model)
+            with open("mnt/datasets/logo2ksuperclass0.01.json", 'rt') as handle:
+                labeldict = json.load(handle)
+            utils.evaluate_super(model, dl_tr_noshuffle, labeldict, args.eval_nmi, args.recall)
+        exit() # exit the program
 
-
-    scheduler = config['lr_scheduler2']['type'](
-        opt,
-        milestones=args.lr_steps,
-        gamma=0.1
-        #opt, **config['lr_scheduler2']['args']
-    )
+    if args.mode == 'train':
+        scheduler = config['lr_scheduler']['type'](
+            opt, **config['lr_scheduler']['args']
+        )
+    elif args.mode == 'trainval':
+        scheduler = config['lr_scheduler2']['type'](
+            opt,
+            milestones=args.lr_steps,
+            gamma=0.1
+            #opt, **config['lr_scheduler2']['args']
+        )
 
     logging.info("Training parameters: {}".format(vars(args)))
     logging.info("Training for {} epochs.".format(args.nb_epochs))
@@ -337,10 +367,15 @@ if __name__ == '__main__':
 
     t1 = time.time()
 
+
     if args.init_eval:
         logging.info("**Evaluating initial model...**")
         with torch.no_grad():
-            c_dl = dl_ev
+            if args.mode == 'train':
+                c_dl = dl_val
+            else:
+                c_dl = dl_ev
+
             utils.evaluate(model, c_dl, args.eval_nmi, args.recall) #dl_val
 
     it = 0
@@ -367,10 +402,11 @@ if __name__ == '__main__':
         #warm up training for 5 epochs
         logging.info("**warm up for %d epochs.**" % args.warmup_k)
         for e in range(0, args.warmup_k):
-            for ct, (x,y) in tqdm(enumerate(dl_tr)):
+            for ct, (x,y,_) in tqdm(enumerate(dl_tr)):
                 opt_warmup.zero_grad()
-                m = model(x.cuda())
-                loss = criterion(m, None, y.cuda())
+                # m = model(x.cuda())
+                # loss = criterion(m, None, y.cuda())
+                loss = model.calc_loss(x.cuda(), y.cuda())
                 loss.backward()
                 torch.nn.utils.clip_grad_value_(model.parameters(), 10)
                 opt_warmup.step()
@@ -379,16 +415,26 @@ if __name__ == '__main__':
 
     '''training loop'''
     for e in range(0, args.nb_epochs):
+        len_training = len(dl_tr_noshuffle.dataset)  # training
+        cached_sim = np.zeros(len_training)  # cache the similarity to ground-truth proxy
+        cached_cls = np.zeros(len_training) # cache the gt-class
+
+
+        if args.mode == 'train':
+            curr_lr = opt.param_groups[0]['lr']
+            print(prev_lr, curr_lr)
+            if curr_lr != prev_lr:
+                prev_lr = curr_lr
+                lr_steps.append(e)
 
         time_per_epoch_1 = time.time()
         losses_per_epoch = []
         tnmi = []
 
-        for ct, (x, y) in tqdm(enumerate(dl_tr)):
+        for ct, (x, y, indices) in tqdm(enumerate(dl_tr)):
             it += 1
             x, y = x.cuda(), y.cuda()
-            m = model(x)
-            loss = criterion(m, None, y)
+            loss = model.calc_loss(x, y)
             opt.zero_grad()
             loss.backward() # backprop
             torch.nn.utils.clip_grad_value_(model.parameters(), 10) # clip gradient?
@@ -415,11 +461,54 @@ if __name__ == '__main__':
         if e == best_epoch:
             break
 
-        #TODO: this is for umap visualization -- save intermediate models and proxies
-        if e % 10 == 0:
-            save_dir = 'dvi_data_{}_loss{}_augmentdata/ResNet_{}_Model'.format(args.dataset,
-                                                                         args.loss_type,
-                                                                        str(args.sz_embedding))
+        if args.mode == 'train':
+            with torch.no_grad():
+                logging.info("**Validation...**")
+                nmi, recall = utils.evaluate(model, dl_val, args.eval_nmi, args.recall)
+
+            chmean = (2 * nmi * recall[0]) / (nmi + recall[0])
+
+            scheduler.step(chmean)
+
+            if chmean > best_val_hmean:
+                best_val_hmean = chmean
+                best_val_nmi = nmi
+                best_val_r1 = recall[0]
+                best_val_r2 = recall[1]
+                best_val_r4 = recall[2]
+                best_val_r8 = recall[3]
+                best_val_epoch = e
+                best_tnmi = torch.Tensor(tnmi).mean()
+
+            if e == (args.nb_epochs - 1):
+                #saving last epoch
+                results['last_NMI'] = nmi
+                results['last_hmean'] = chmean
+                results['best_epoch'] = best_val_epoch
+                results['last_R1'] = recall[0]
+                results['last_R2'] = recall[1]
+                results['last_R4'] = recall[2]
+                results['last_R8'] = recall[3]
+
+                #saving best epoch
+                results['best_NMI'] = best_val_nmi
+                results['best_hmean'] = best_val_hmean
+                results['best_R1'] = best_val_r1
+                results['best_R2'] = best_val_r2
+                results['best_R4'] = best_val_r4
+                results['best_R8'] = best_val_r8
+
+            logging.info('Best val epoch: %s', str(best_val_epoch))
+            logging.info('Best val hmean: %s', str(best_val_hmean))
+            logging.info('Best val nmi: %s', str(best_val_nmi))
+            logging.info('Best val r1: %s', str(best_val_r1))
+            logging.info(str(lr_steps))
+
+
+        if e % 10 == 0 or e == args.nb_epochs-1:
+            save_dir = 'dvi_data_{}_loss{}/ResNet_{}_Model'.format(args.dataset,
+                                                                      args.loss_type,
+                                                                      str(args.sz_embedding))
             os.makedirs('{}'.format(save_dir), exist_ok=True)
             os.makedirs('{}/Epoch_{}'.format(save_dir, e+1), exist_ok=True)
             with open('{}/Epoch_{}/index.json'.format(save_dir, e + 1), 'wt') as handle:
@@ -428,19 +517,8 @@ if __name__ == '__main__':
                                                                                    args.dataset, args.mode,
                                                                                    str(args.sz_embedding), str(args.seed)))
             # # TODO
-            if 'ProxyNCA_prob_orig' in args.loss_type or 'ProxyNCA_prob_smooth' in args.loss_type \
-                or 'ProxyNCA_prob_mixup' in args.loss_type:
-                torch.save({"proxies": criterion.proxies},
+            torch.save({"proxies": model.proxies},
                        '{}/Epoch_{}/proxy.pth'.format(save_dir, e+1))
-            elif 'ProxyNCA_prob' in args.loss_type:
-                torch.save({"proxies": criterion.proxies, "mask": criterion.mask},
-                           '{}/Epoch_{}/proxy.pth'.format(save_dir, e+1))
-            elif 'ProxyNCA_distribution_loss' in args.loss_type:
-                torch.save({"proxies": criterion.proxies, "sigma_inv": criterion.sigmas_inv},
-                           '{}/Epoch_{}/proxy.pth'.format(save_dir, e+1))
-            elif 'ProxyNCA_dist_mixup' in args.loss_type:
-                torch.save({"proxies": criterion.proxies, "sigma_inv": criterion.sigmas_inv},
-                           '{}/Epoch_{}/proxy.pth'.format(save_dir, e+1))
 
         ######################################################################################
 
@@ -458,7 +536,6 @@ if __name__ == '__main__':
             else:
                 best_test_nmi, (best_test_r1, best_test_r2, best_test_r4, best_test_r8) = utils.evaluate(model, dl_ev, args.eval_nmi, args.recall)
             #logging.info('Best test r8: %s', str(best_test_r8))
-
         if 'inshop' in args.dataset:
             results['NMI'] = best_test_nmi
             results['R1']  = best_test_r1

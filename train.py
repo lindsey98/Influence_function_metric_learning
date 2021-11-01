@@ -20,7 +20,7 @@ from deprecated.hard_sample_detection.hard_detection import hard_potential
 from torch.utils.data import Dataset, DataLoader
 import torch.nn.functional as F
 
-os.environ["CUDA_VISIBLE_DEVICES"]="1"
+os.environ["CUDA_VISIBLE_DEVICES"]="0"
 
 parser = argparse.ArgumentParser(description='Training ProxyNCA++')
 parser.add_argument('--epochs', default = 40, type=int, dest = 'nb_epochs')
@@ -35,9 +35,9 @@ parser.add_argument('--init_eval', default=False, action='store_true')
 parser.add_argument('--apex', default=False, action='store_true')
 parser.add_argument('--warmup_k', default=5, type=int)
 
-parser.add_argument('--dataset', default='cub')
+parser.add_argument('--dataset', default='cars')
 parser.add_argument('--embedding-size', default = 512, type=int, dest = 'sz_embedding')
-parser.add_argument('--config', default='config/cub_smooth.json')
+parser.add_argument('--config', default='config/cars_mixup.json')
 parser.add_argument('--mode', default='trainval', choices=['train', 'trainval', 'test',
                                                            'testontrain', 'testontrain_super'],
                     help='train with train data or train with trainval')
@@ -47,7 +47,7 @@ parser.add_argument('--initial_proxy_num', default=1, type=int)
 parser.add_argument('--tau', default=0.0, type=float)
 parser.add_argument('--proxy_update_schedule', default=[0.5, 0.75], nargs='+', type=float)
 parser.add_argument('--no_warmup', default=False, action='store_true')
-parser.add_argument('--loss-type', default='ProxyNCA_prob_smooth_implicit', type=str)
+parser.add_argument('--loss-type', default='ProxyNCA_prob_orig_mixup_both', type=str)
 parser.add_argument('--workers', default = 16, type=int, dest = 'nb_workers')
 
 
@@ -216,7 +216,8 @@ if __name__ == '__main__':
                 transform = train_transform
             )
 
-    elif args.mode == 'trainval' or args.mode == 'test' or args.mode == 'testontrain' or args.mode == 'testontrain_super':
+    elif args.mode == 'trainval' or args.mode == 'test' \
+            or args.mode == 'testontrain' or args.mode == 'testontrain_super':
         # print(dataset_config['dataset'][args.dataset]['root'])
         tr_dataset = dataset.load(
                 name = args.dataset,
@@ -321,11 +322,6 @@ if __name__ == '__main__':
                 **config['opt']['args']['proxynca']
 
             },
-            # {
-            #     **{'params': criterion.sigmas_inv},
-            #     **config['opt']['args']['proxynca_sigma']
-            # },
-
         ],
         **config['opt']['args']['base']
     )
@@ -350,11 +346,6 @@ if __name__ == '__main__':
                 **{'params': criterion.proxies},
                 **config['opt']['args']['proxynca']
             },
-            # {
-            #     **{'params': criterion.sigmas_inv},
-            #     **config['opt']['args']['proxynca_sigma']
-            # },
-
         ],
         **config['opt']['args']['base']
     )
@@ -368,12 +359,14 @@ if __name__ == '__main__':
             else:
                 utils.evaluate(model, dl_ev, args.eval_nmi, args.recall)
         exit() # exit the program
+
     if args.mode == 'testontrain':
         with torch.no_grad():
             logging.info("**Evaluating...(test mode, test on training set)**")
             model = load_best_checkpoint(model)
             utils.evaluate(model, dl_tr_noshuffle, args.eval_nmi, args.recall)
         exit() # exit the program
+
     if args.mode == 'testontrain_super':
         with torch.no_grad():
             logging.info("**Evaluating with gt super 100 classes...(test mode, test on training set)**")
@@ -454,21 +447,6 @@ if __name__ == '__main__':
         cached_sim = np.zeros(len_training)  # cache the similarity to ground-truth proxy
         cached_cls = np.zeros(len_training) # cache the gt-class
 
-        if args.dynamic_proxy:
-            if e == 0:
-                loss_recorder = {}
-                with open("{0}/{1}_ip.json".format('log', args.log_filename), 'wt') as handle:
-                    json.dump(loss_recorder, handle)
-                label_recorder = {}
-                with open("{0}/{1}_cls.json".format('log', args.log_filename), 'wt') as handle:
-                    json.dump(label_recorder, handle)
-
-            with open("{0}/{1}_ip.json".format('log', args.log_filename), 'rt') as handle:
-                loss_recorder = json.load(handle)
-            with open("{0}/{1}_cls.json".format('log', args.log_filename), 'rt') as handle:
-                label_recorder = json.load(handle)
-
-        # lr decay
         if args.mode == 'train':
             curr_lr = opt.param_groups[0]['lr']
             print(prev_lr, curr_lr)
@@ -485,11 +463,6 @@ if __name__ == '__main__':
             x, y = x.cuda(), y.cuda()
             m = model(x)
             loss = criterion(m, indices, y)
-
-            # smoothness regularizer
-            # regularize_term, grad_norm = regularizer(x, y, model, criterion)
-            # loss += regularize_term
-
             opt.zero_grad()
             loss.backward() # backprop
             torch.nn.utils.clip_grad_value_(model.parameters(), 10) # clip gradient?
@@ -499,20 +472,6 @@ if __name__ == '__main__':
 
         time_per_epoch_2 = time.time()
         losses.append(np.mean(losses_per_epoch[-20:]))
-
-        # save proxy-similarity and class labels
-        if args.dynamic_proxy:
-            train_embs, train_cls, *_ = predict_batchwise(model, dl_tr_noshuffle)
-            cached_sim, cached_cls = inner_product_sim(X=train_embs, P=criterion.proxies, T=train_cls,
-                                                       mask=criterion.mask,
-                                                       nb_classes=criterion.nb_classes,
-                                                       max_proxy_per_class=criterion.max_proxy_per_class)
-            loss_recorder[e] = cached_sim.tolist()
-            with open("{0}/{1}_ip.json".format('log', args.log_filename), 'wt') as handle:
-                json.dump(loss_recorder, handle)
-            label_recorder[e] = cached_cls.tolist()
-            with open("{0}/{1}_cls.json".format('log', args.log_filename), 'wt') as handle:
-                json.dump(label_recorder, handle)
 
         print('it: {}'.format(it))
         print(opt)
@@ -573,42 +532,7 @@ if __name__ == '__main__':
             logging.info('Best val r1: %s', str(best_val_r1))
             logging.info(str(lr_steps))
 
-        # add new proxy
-        if args.dynamic_proxy:
-            update_epoch_schedule = [int(x * args.nb_epochs) for x in args.proxy_update_schedule]
-            if e in update_epoch_schedule:
-                update, bad_indices = hard_potential(loss_recorder,
-                                                     label_recorder,
-                                                     current_t=e,
-                                                     rolling_t=5,
-                                                     ts_sim=config['ts_sim'], # larger ts_sim catches more hard examples
-                                                     ts_ratio=config['ts_ratio'], # higher lower bound catches less hard examples
-                                                     ) #FIXME: rolling_t=5 is ok, you need to adjust ts_ratio, ts_sim
-                if update == True:
-                    for k, v in bad_indices.items():
-                        sampler = SubSampler(v)
-                        tr_loader_temp = DataLoader(
-                                            dataset=dataset.load(
-                                                        name=args.dataset,
-                                                        root=dataset_config['dataset'][args.dataset]['root'],
-                                                        source=dataset_config['dataset'][args.dataset]['source'],
-                                                        classes=dataset_config['dataset'][args.dataset]['classes']['trainval'],
-                                                        transform=dataset.utils.make_transform(
-                                                            **dataset_config[transform_key],
-                                                            is_train=False
-                                                      )
-                                                   ),
-                                            batch_size=64,
-                                            shuffle=False,
-                                            sampler=sampler,
-                                            drop_last=False)
-                        feature_emb = predict_batchwise(model, tr_loader_temp)[0]  # shape (N, nz_embedding)
-                        centroid_emb = F.normalize(torch.mean(feature_emb, dim=0), p=2, dim=-1) # shape (nz_embedding,)
-                        criterion.add_proxy(k, centroid_emb.to(criterion.proxies.device))
-                        logging.info('Class {} update no. proxies to be {}'.format(k, criterion.current_proxy[k]))
-
-        #TODO: this is for umap visualization -- save intermediate models and proxies
-        if e % 10 == 0:
+        if e % 10 == 0 or e == args.nb_epochs-1:
             save_dir = 'dvi_data_{}_{}_loss{}_proxy{}_tau{}/ResNet_{}_Model'.format(args.dataset,
                                                                                   args.dynamic_proxy,
                                                                                   args.loss_type,
@@ -624,7 +548,7 @@ if __name__ == '__main__':
                                                                                    str(args.sz_embedding), str(args.seed)))
             # # TODO
             if 'ProxyNCA_prob_orig' in args.loss_type or 'ProxyNCA_prob_smooth' in args.loss_type \
-                or 'ProxyNCA_prob_mixup' in args.loss_type:
+                or 'ProxyNCA_prob_mixup' in args.loss_type or 'ProxyNCA_prob_dynamic' in args.loss_type:
                 torch.save({"proxies": criterion.proxies},
                        '{}/Epoch_{}/proxy.pth'.format(save_dir, e+1))
             elif 'ProxyNCA_prob' in args.loss_type:

@@ -4,19 +4,18 @@ import utils
 import os
 
 import matplotlib
-matplotlib.use('agg', force=True)
 from tqdm import tqdm
-# from apex import amp
 from torch.utils.data import Dataset
 import loss
 from networks import *
 import torch
+import matplotlib.pyplot as plt
 
-os.environ["CUDA_VISIBLE_DEVICES"]="1"
+os.environ["CUDA_VISIBLE_DEVICES"]="0"
 
 
 if __name__ == '__main__':
-    batch_size = 32
+    batch_size = 16
     num_cls_per_batch = 8
     sz_embedding = 512
     config = utils.load_config('config/cub.json')
@@ -122,29 +121,31 @@ if __name__ == '__main__':
     #
     # # model
     # feat = config['model']['type']()
-    feat = Feat_resnet50_max_n()
-    feat.eval()
-    in_sz = feat(torch.rand(1, 3, 256, 256)).squeeze().size(0)
-    feat.train()
-    emb = torch.nn.Linear(in_sz, sz_embedding)
-    model = torch.nn.Sequential(feat, emb)
+    # feat.eval()
+    # in_sz = feat(torch.rand(1, 3, 256, 256))[0].squeeze().size(0)
+    # feat.train()
+    # emb = torch.nn.Linear(in_sz, sz_embedding)
+    # model = torch.nn.Sequential(feat, emb)
 
-    model = torch.nn.DataParallel(model)
+    from loss_with_model import Encoder
+    model = Encoder(100)
+    # model = torch.nn.DataParallel(model)
     model = model.cuda()
+    print(list(model.parameters()))
     #
     # # load loss
-    criterion = config['criterion']['type'](
-        nb_classes = dl_tr.dataset.nb_classes(),
-        sz_embed = sz_embedding,
-        len_training = len(dl_tr.dataset),
-        initial_proxy_num=1,
-        **config['criterion']['args']
-    ).cuda()
-    # criterion = ProxyNCA_prob_smooth(nb_classes = dl_tr.dataset.nb_classes(),
+    # criterion = config['criterion']['type'](
+    #     nb_classes = dl_tr.dataset.nb_classes(),
+    #     sz_embed = sz_embedding,
+    #     len_training = len(dl_tr.dataset),
+    #     initial_proxy_num=1,
+    #     **config['criterion']['args']
+    # ).cuda()
+    # criterion = loss.ProxyNCA_prob_dynamic(nb_classes = dl_tr.dataset.nb_classes(),
     #                              sz_embed=sz_embedding,
     #                             **config['criterion']['args']).cuda()
-    #
-    # # load optimizer
+
+    # load optimizer
     # opt = config['opt']['type'](
     #     [
     #         {
@@ -175,37 +176,50 @@ if __name__ == '__main__':
     #      **config['opt']['args']['base']
     # )
 
-    # X, T, *_ = predict_batchwise(model, dl_tr_noshuffle)
-    # criterion.kmeans_init(X, T)
+    # load optimizer
+    opt = config['opt']['type'](
+        [
+            {
+                **{'params': list(model.base.parameters()) + list(model.emb.parameters()) + list(model.lnorm.parameters())
+                },
+                **config['opt']['args']['backbone']
+            },
+
+            {
+                **{'params': model.proxies}
+                ,
+                **config['opt']['args']['proxynca']
+
+            },
+
+        ],
+         **config['opt']['args']['base']
+    )
+
+    # model.load_state_dict(torch.load('results/cub_cub_trainval_512_0_False_lossProxyNCA_prob_orig_proxy1_tau0.00.pt'))
+    # criterion.proxies.data = torch.load('checkpoints/dvi_data_cub_False_lossProxyNCA_prob_orig_proxy1_tau0.0/ResNet_512_Model/Epoch_31/proxy.pth')['proxies']
 
     # training!
-    # losses = []
-    # visited_indices = []
-    # for e in range(0, 100): # train for 5 epochs for example
-    #     losses_per_epoch = []
-    #     for ct, (x, y, indices) in tqdm(enumerate(dl_tr)):
-    #         x = x.cuda()
-    #         m = model(x)
-    #         # FIXME: loss not improving
-    #
+    losses = []
+    visited_indices = []
+    for e in range(0, 100): # train for 5 epochs for example
+        losses_per_epoch = []
+        for ct, (x, y, indices) in tqdm(enumerate(dl_tr)):
+            x = x.cuda()
+            y = y.cuda()
+            loss = model.calc_loss(x, y)
+            print(loss)  #
+
+            # FIXME: loss not improving
+
             # loss = criterion(m, indices, y.cuda())
             # smoothness regularizer
-            # regularize_term, grad_norm = regularizer(x, y, model, criterion)
-            # loss += regularize_term
             # print(loss)  #
-    #         opt.zero_grad()
-    #         print(criterion.sigmas_inv.grad)
-    #         loss.backward()
-    #         opt.step()
-    #         print(criterion.sigmas_inv.grad)
-    #
-    #         print('haha')
-    #
+            opt.zero_grad()
+            # print(criterion.sigmas_inv.grad)
+            loss.backward()
+            opt.step()
+            # print(criterion.sigmas_inv.grad)
+            #
+            # print('haha')
 
-    '''================================= '''
-    # visualize intermediate feature map
-    model.load_state_dict(torch.load('results/cub_cub_trainval_512_0_False_lossProxyNCA_prob_orig_proxy1_tau0.00.pt'))
-    model.eval()
-    # print(model)
-
-    # TODO

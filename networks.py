@@ -10,7 +10,7 @@ import torch.utils.model_zoo as model_zoo
 
 __all__ = ['BNInception', 'bninception',
            'Feat_resnet50_max', 'Feat_resnet50_avg',
-           'Feat_resnet50_max_n', 'Feat_resnet50_avg_n', 'Feat_resnet50_max_n_intermediate']
+           'Feat_resnet50_max_n', 'Feat_resnet50_avg_n']
 
 class Feature(nn.Module):
     '''
@@ -82,14 +82,13 @@ class FeatureIntermediate(nn.Module):
         x2 = self.base.layer2(x1)
         x3 = self.base.layer3(x2)
         x4 = self.base.layer4(x3)
+        # x = self.pool(x4)
+        # x = x.reshape(x.size(0), -1)
 
-        x = self.pool(x4)
-        x = x.reshape(x.size(0), -1)
+        # if self.lnorm != None:
+        #     x = self.lnorm(x)
 
-        if self.lnorm != None:
-            x = self.lnorm(x)
-
-        return x, (x1, x2, x3, x4)
+        return x4
 
 class Feat_resnet50_max(Feature):
      def __init__(self):
@@ -106,11 +105,6 @@ class Feat_resnet50_max_n(Feature):
 class Feat_resnet50_avg_n(Feature):
      def __init__(self):
         Feature.__init__(self, model='resnet50', pool='avg', use_lnorm=True)
-
-
-class Feat_resnet50_max_n_intermediate(FeatureIntermediate):
-    def __init__(self):
-        FeatureIntermediate.__init__(self, model='resnet50', pool='max', use_lnorm=True)
 
 
 # modify from

@@ -1,3 +1,5 @@
+import torch
+
 from similarity import pairwise_distance
 import torch.nn.functional as F
 import math
@@ -298,15 +300,14 @@ class ProxyNCA_prob_mixup(torch.nn.Module):
 
     @staticmethod
     def uncertainty_lambdas(index1s, index2s, T, IP):
-        with torch.no_grad():
-            C1, C2 = T[index1s], T[index2s]
-            X1P1, X1P2 = torch.clamp(IP[index1s, C1], min=-1., max=1.), torch.clamp(IP[index1s, C2], min=-1., max=1.) # (n_samples, )
-            X2P1, X2P2 = torch.clamp(IP[index2s, C1], min=-1., max=1.), torch.clamp(IP[index2s, C2], min=-1., max=1.)
-            lambdas = (X2P2-X2P1) / ((X2P2-X2P1) + (X1P1-X1P2))
-            lambdas = lambdas + torch.from_numpy((np.random.uniform(size=len(index1s))*0.4-0.2)).to(lambdas.device) # add small random noises e~unif(-0.2, 0.2)
-            lambdas = torch.clamp(lambdas, min=0.2, max=0.8) # clamp
+        C1, C2 = T[index1s], T[index2s]
+        X1P1, X1P2 = torch.clamp(IP[index1s, C1], min=-1., max=1.), torch.clamp(IP[index1s, C2], min=-1., max=1.) # (n_samples, )
+        X2P1, X2P2 = torch.clamp(IP[index2s, C1], min=-1., max=1.), torch.clamp(IP[index2s, C2], min=-1., max=1.)
+        lambdas = (X2P2-X2P1) / ((X2P2-X2P1) + (X1P1-X1P2))
+        lambdas = lambdas + torch.from_numpy((np.random.uniform(size=len(index1s))*0.4-0.2)).to(lambdas.device) # add small random noises e~unif(-0.2, 0.2)
+        lambdas = torch.clamp(lambdas, min=0.2, max=0.8) # clamp
 
-            return lambdas
+        return lambdas
 
     def intracls_mixup(self, X, T, IP, pairs_per_cls, method=1):
 
@@ -321,7 +322,7 @@ class ProxyNCA_prob_mixup(torch.nn.Module):
         D2T_normalize = D2T[:, non_empty_mask]  # (N, C_sub) filter out non-zero columns which are the classes not sampled in this batch
         D2T_normalize = masked_softmax(D2T_normalize, dim=0)  # normalize for each class to find highest confidence samples to mix (N, C_sub)
 
-        # weighted sampling weighted by confidence
+        # weighted sampling weighted by inverted confidence
         if method == 1:
             mixup_ind_samecls = torch.tensor([])
             for j in range(D2T_normalize.size()[1]):
@@ -519,7 +520,7 @@ class ProxyNCA_prob_mixup(torch.nn.Module):
             # Both intra-class and inter-class
             # between same class
             virtual_classes_intra, virtual_samples_intra = self.intracls_mixup(X, T, IP, pairs_per_cls=4)
-            # between dfferent class
+            # between dfferent class with proxy
             virtual_classes_inter, virtual_samples_inter, virtual_proxies_inter = self.intercls_mixup_proxy(X, T, P, IP)
 
             Xall = torch.cat((X, self.scale * virtual_samples_inter, self.scale * virtual_samples_intra), dim=0) # (N+N_inter+N_intra, sz_embed)
@@ -663,5 +664,65 @@ class ProxyNCA_prob_smooth(torch.nn.Module):
 
         elif self.method == 'none':
             return loss
+
+class ProxyNCA_prob_dynamic(torch.nn.Module):
+    '''
+        Original loss in ProxyNCA++
+    '''
+    def __init__(self, nb_classes, sz_embed, scale, **kwargs):
+        torch.nn.Module.__init__(self)
+        self.nb_classes = nb_classes
+        self.sz_embed = sz_embed
+        self.proxies = torch.nn.Parameter(torch.randn(nb_classes, sz_embed) / 8)
+        self.scale = scale
+
+    def forward(self, X, indices, T):
+        P = self.proxies
+        # note: self.scale is equal to sqrt(1/T)
+        # in the paper T = 1/9, therefore, scale = sart(1/(1/9)) = sqrt(9) = 3
+        #  we need to apply sqrt because the pairwise distance is calculated as norm^2
+
+        P = self.scale * F.normalize(P, p=2, dim=-1)
+        X = self.scale * F.normalize(X, p=2, dim=-1)
+
+        newX, b = self.dynamic_routing(X, T, P, 1)
+        D = pairwise_distance(
+            torch.cat(
+                [newX, P]
+            ),
+            squared=True
+        )[0][:newX.size()[0], newX.size()[0]:]
+
+        T = binarize_and_smooth_labels(
+            T=T, nb_classes=len(P), smoothing_const=0
+        )
+
+        loss = torch.sum(- T * F.log_softmax(-D, -1), -1)
+        loss = loss.mean()
+        return loss
+
+
+    def dynamic_routing(self, X, T, P, num_iterations):
+        b = torch.autograd.Variable(torch.ones((X.size()[0], self.sz_embed))).to(X.device) # (N, sz_embed)
+        P_gt = P[T.long(), :] # (N, sz_embed)
+        P_gt = self.scale * F.normalize(P_gt, p=2, dim=-1)
+
+        for iteration in range(num_iterations):
+            newX = b * X # add attention (N, sz_embed)
+            newX = self.scale * F.normalize(newX, p=2, dim=-1)
+
+            IP = pairwise_distance(
+                    torch.cat(
+                        [newX, P_gt]
+                    ),
+                    squared=True
+                )[1][:newX.size()[0], newX.size()[0]:].diagonal()
+
+            if iteration < num_iterations - 1:
+                a = X * P_gt # (N, sz_embed)
+                b = b + a # learning rate 0.01
+
+        return newX, b
+
 
 

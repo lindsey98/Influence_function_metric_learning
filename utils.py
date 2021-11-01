@@ -150,7 +150,7 @@ def evaluate(model, dataloader, eval_nmi=True, recall_list=[1, 2, 4, 8]):
         :param recall_list: recall@K
     '''
     eval_time = time.time()
-    nb_classes = dataloader.dataset.nb_classes()
+    nb_classes = len(dataloader.dataset.classes)
 
     # calculate embeddings with model and get targets
     X, T, *_ = predict_batchwise(model, dataloader)
