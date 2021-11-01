@@ -11,7 +11,7 @@ import umap
 from umap.parametric_umap import ParametricUMAP
 import tensorflow as tf
 from umap.parametric_umap import load_ParametricUMAP
-from loss import ProxyNCA_prob
+# from loss import ProxyNCA_prob
 from utils import predict_batchwise, inner_product_sim, predict_batchwise_loss
 import json
 import torch.nn.functional as F

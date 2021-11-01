@@ -35,15 +35,15 @@ parser.add_argument('--init_eval', default=False, action='store_true')
 parser.add_argument('--apex', default=False, action='store_true')
 parser.add_argument('--warmup_k', default=5, type=int)
 
-parser.add_argument('--dataset', default='cub')
+parser.add_argument('--dataset', default='cars')
 parser.add_argument('--embedding-size', default = 512, type=int, dest = 'sz_embedding')
-parser.add_argument('--config', default='config/cub.json')
-parser.add_argument('--mode', default='train', choices=['train', 'trainval', 'test',
-                                                           'testontrain', 'testontrain_super'],
+parser.add_argument('--config', default='config/cars_mixup.json')
+parser.add_argument('--mode', default='trainval', choices=['train', 'trainval', 'test',
+                                                          'testontrain', 'testontrain_super'],
                     help='train with train data or train with trainval')
 parser.add_argument('--batch-size', default = 32, type=int, dest = 'sz_batch')
 parser.add_argument('--no_warmup', default=False, action='store_true')
-parser.add_argument('--loss-type', default='ProxyNCA_prob_orig_trainmode', type=str)
+parser.add_argument('--loss-type', default='ProxyNCA_prob_orig_mixup_both_random', type=str)
 parser.add_argument('--workers', default = 16, type=int, dest = 'nb_workers')
 
 
@@ -289,7 +289,6 @@ if __name__ == '__main__':
     criterion = config['criterion']['type'](
         nb_classes = dl_tr.dataset.nb_classes(),
         sz_embed = args.sz_embedding,
-        initial_proxy_num = args.initial_proxy_num,
         **config['criterion']['args']
     ).cuda()
 
@@ -347,6 +346,7 @@ if __name__ == '__main__':
         with torch.no_grad():
             logging.info("**Evaluating...(test mode)**")
             model = load_best_checkpoint(model)
+            # model.load_state_dict(torch.load('/home/ruofan/PycharmProjects/ProxyNCA-/dvi_data_cub_lossProxyNCA_prob_orig_trainmode/ResNet_512_Model/Epoch_40/cub_cub_train_512_0.pth'))
             if 'inshop' in args.dataset:
                 utils.evaluate_inshop(model, dl_query, dl_gallery)
             else:

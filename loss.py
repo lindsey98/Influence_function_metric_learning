@@ -98,153 +98,6 @@ class ProxyNCA_classic(torch.nn.Module):
         loss = loss.mean()
         return loss
 
-
-class ProxyNCA_prob(torch.nn.Module):
-    def __init__(self, nb_classes: int, sz_embed: int, scale: float, initial_proxy_num: int, tau:float=0.0, **kwargs):
-        '''
-            :param nb_classes: number of classes in training set
-            :param sz_embed: embedding size, e.g. 2048, 512, 64
-            :param scale: self.scale is equal to sqrt(1/Temperature), default is 3
-        '''
-
-        torch.nn.Module.__init__(self)
-        self.max_proxy_per_class = 5  # maximum number of proxies per class
-        self.current_proxy = [initial_proxy_num] * nb_classes  # start with single proxy per class
-        self.proxies = torch.nn.Parameter(torch.randn(nb_classes * self.max_proxy_per_class, sz_embed) / 8)
-        self.mask = torch.zeros((nb_classes, self.max_proxy_per_class), requires_grad=False).to('cuda')
-        self.scale = scale  # sqrt(1/Temperature)
-        self.nb_classes = nb_classes  # number of classes
-        self.tau = tau
-
-        self.create_mask()  # create initial mask
-
-    def create_mask(self):
-        '''
-            initialize mask on proxies, only first proxy for each class is activated
-        '''
-        for c in range(self.nb_classes):
-            proxy4cls = self.current_proxy[c]
-            self.mask[c, 0:proxy4cls] = 1
-
-    def add_proxy(self, cls: Union[int, float], new_proxy: torch.Tensor):
-        '''
-            activate one more proxy for class cls
-            :param cls: the class to be added a proxy
-            :param new_proxy: the added proxy (mean of hard examples)
-        '''
-        cls = int(cls)
-        if self.current_proxy[cls] == self.max_proxy_per_class: # if reach the maximum proxy one class can get
-            pass
-        else:
-            self.proxies.data[self.max_proxy_per_class * cls + self.current_proxy[cls], :] = new_proxy.data  # initilaize new proxy there
-            self.current_proxy[cls] += 1  # update number of proxy for this class
-            self.mask[cls, :self.current_proxy[cls]] = 1  # unfreeze mask
-        return
-
-    def regularization(self, Proxy_IP):
-        A = []
-        for x in range(self.nb_classes):
-            count_proxy = int(torch.sum(self.mask[x]).item())
-            A_this = torch.zeros((self.max_proxy_per_class, self.max_proxy_per_class))
-            A_this[:count_proxy, :count_proxy] = 1.
-            A.append(A_this)
-        block_mask = torch.block_diag(*A).to(Proxy_IP.device)
-        masked_proxyIP = torch.mul(block_mask, Proxy_IP)
-        regularization = torch.sum(masked_proxyIP)
-        nonzero_items = torch.count_nonzero(masked_proxyIP).item()
-        if nonzero_items == 0:
-            mean_regularization = regularization * 0.0
-        else:
-            mean_regularization = regularization / (nonzero_items) # divide by 2 because proxy inner product was
-
-        return mean_regularization
-
-    @torch.no_grad()
-    def loss4debug(self, X:torch.Tensor, indices: torch.Tensor, T:torch.Tensor):
-        '''
-            Return intermediate calculations of loss for debugging purpose
-        '''
-        P = self.proxies
-        temperature = self.scale
-        P = F.normalize(P, p=2, dim=-1) * temperature
-        X = F.normalize(X, p=2, dim=-1) * temperature
-        P = P.to(X.device)
-
-        # pairwise distance
-        D, IP = pairwise_distance(
-            torch.cat([X, P]),
-            squared=True
-        ) # of shape (N, C*maxP)
-        D = D[:X.size()[0], X.size()[0]:] # of shape (N, N)
-        Proxy_IP = IP[X.size()[0]:, X.size()[0]:] # of shape (C*maxP, C*maxP)
-        IP = IP[:X.size()[0], X.size()[0]:] # of shape (N, C*maxP)
-
-        self.mask = self.mask.to(X.device)
-        D_reshape = D.reshape((X.shape[0], self.nb_classes, self.max_proxy_per_class))  # of shape (N, C, maxP)
-        output = D_reshape * self.mask.unsqueeze(0)  # mask unactivated proxies
-        output_IP = IP.reshape((X.shape[0], self.nb_classes, self.max_proxy_per_class)) * self.mask.unsqueeze(0)
-        normalize_prob = masked_softmax(output_IP, t=0.1) # p(i,c)
-        D_weighted = torch.sum(normalize_prob * output, dim=-1)  # S_i,c: weighted sum of distance, reduce to shape (N, C)
-
-        smoothing_const = 0.0 # smoothing class labels
-        target_probs = (torch.ones((X.shape[0], self.nb_classes)) * smoothing_const).to(T.device)
-        target_probs.scatter_(1, T.unsqueeze(1), 1 - smoothing_const) # one-hot label
-
-        gt_prob = normalize_prob[torch.arange(X.size()[0]), T.long(), :]
-        gt_D_weighted = D_weighted[torch.arange(X.size()[0]), T.long()]
-
-        base_loss = torch.sum(- target_probs * F.log_softmax(-D_weighted, -1), -1)
-
-        return indices, gt_prob, gt_D_weighted, base_loss, Proxy_IP
-
-
-    def forward(self, X:torch.Tensor, indices: torch.Tensor, T:torch.Tensor):
-        '''
-            Forward propogation of loss
-            :param X: the embedding torch.Tensor of shape (N, sz_embed)
-            :param indices: a torch.Tensor of shape (N, ) of batch indices (used to track the loss/similarity back to a sample)
-            :param T: a torch.Tensor of shape (N, ), keeping class labels: sample -> class label
-            :return : batch average loss
-        '''
-
-        P = self.proxies
-        temperature = self.scale
-        P = F.normalize(P, p=2, dim=-1) * temperature
-        X = F.normalize(X, p=2, dim=-1) * temperature
-
-        # pairwise distance
-        D, IP = pairwise_distance(
-            torch.cat([X, P]),
-            squared=True
-        ) # of shape (N, C*maxP)
-        D = D[:X.size()[0], X.size()[0]:]
-        Proxy_IP = IP[X.size()[0]:, X.size()[0]:] # between-proxy similarity
-        Proxy_IP = ((Proxy_IP + 1.)/2) * (1 - torch.eye(Proxy_IP.shape[0], Proxy_IP.shape[0]).to(Proxy_IP.device)) # add 1 to avoid zero entries
-        IP = IP[:X.size()[0], X.size()[0]:]
-
-        D_reshape = D.reshape((X.shape[0], self.nb_classes, self.max_proxy_per_class))  # of shape (N, C, maxP)
-        output = D_reshape * self.mask.unsqueeze(0)  # mask unactivated proxies
-        # normalize_prob_orig = masked_softmax(-output, t=1) # low distance proxy should get higher weight
-        #FIXME: here use inner product to compute intra-class weight
-        output_IP = IP.reshape((X.shape[0], self.nb_classes, self.max_proxy_per_class)) * self.mask.unsqueeze(0)
-        normalize_prob = masked_softmax(output_IP, t=0.1)
-
-        D_weighted = torch.sum(normalize_prob * output, dim=-1)  # weighted sum of distance, reduce to shape (N, C)
-
-        smoothing_const = 0.0 # smoothing class labels
-        target_probs = (torch.ones((X.shape[0], self.nb_classes)) * smoothing_const).to(T.device)
-        target_probs.scatter_(1, T.unsqueeze(1), 1 - smoothing_const) # one-hot label
-
-        base_loss = torch.sum(- target_probs * F.log_softmax(-D_weighted+(1e-12), -1), -1).mean() # log underflow
-        if self.tau == 0.0:
-            return base_loss
-        else:
-            mean_regularization = self.regularization(Proxy_IP)
-            loss = base_loss + mean_regularization * self.tau
-
-            return loss
-
-
 class ProxyNCA_prob_orig(torch.nn.Module):
     '''
         Original loss in ProxyNCA++
@@ -283,13 +136,16 @@ class ProxyNCA_prob_mixup(torch.nn.Module):
         Uncertainty-guided MixUp
     '''
 
-    def __init__(self, nb_classes, sz_embed, scale, mixup_method, **kwargs):
+    def __init__(self, nb_classes, sz_embed, scale, mixup_method, sampling_method, **kwargs):
         torch.nn.Module.__init__(self)
         self.proxies = torch.nn.Parameter(torch.randn(nb_classes, sz_embed) / 8)
         self.scale = scale
         self.sz_embed = sz_embed
         self.nb_classes = nb_classes
         self.mixup_method = mixup_method
+        self.sampling_method = sampling_method
+        assert self.mixup_method in ['none', 'intra', 'inter_noproxy', 'inter_proxy', 'both']
+        assert self.sampling_method in [1, 2] # 1 is weighted sampling, 2 is random sampling
 
     @staticmethod
     def random_lambdas(n_samples, alpha=1.0):
@@ -309,7 +165,7 @@ class ProxyNCA_prob_mixup(torch.nn.Module):
 
         return lambdas
 
-    def intracls_mixup(self, X, T, IP, pairs_per_cls, method=1):
+    def intracls_mixup(self, X, T, IP, pairs_per_cls):
 
         T = binarize_and_smooth_labels(
             T=T, nb_classes=len(self.proxies), smoothing_const=0
@@ -323,7 +179,7 @@ class ProxyNCA_prob_mixup(torch.nn.Module):
         D2T_normalize = masked_softmax(D2T_normalize, dim=0)  # normalize for each class to find highest confidence samples to mix (N, C_sub)
 
         # weighted sampling weighted by inverted confidence
-        if method == 1:
+        if self.sampling_method == 1:
             mixup_ind_samecls = torch.tensor([])
             for j in range(D2T_normalize.size()[1]):
                 for _ in range(pairs_per_cls):
@@ -336,7 +192,7 @@ class ProxyNCA_prob_mixup(torch.nn.Module):
             mixup_ind_samecls = mixup_ind_samecls.long()  # (2, C_sub*pairs_percls)
 
         # uniform random sampling
-        elif method == 2:
+        elif self.sampling_method == 2:
             mixup_ind_samecls = torch.tensor([])
             for j in range(D2T_normalize.size()[1]):
                 for _ in range(pairs_per_cls):
@@ -344,10 +200,6 @@ class ProxyNCA_prob_mixup(torch.nn.Module):
                                                 replace=False).tolist()
                     mixup_ind_samecls = torch.cat((mixup_ind_samecls, torch.tensor([pair_ind]).T), dim=-1)
             mixup_ind_samecls = mixup_ind_samecls.long()  # (2, C_sub*pairs_percls)
-
-        # unknown method
-        else:
-            raise NotImplementedError
 
         selectedX_samecls = torch.stack([X[index, :] for index in mixup_ind_samecls],
                                         dim=-1)  # of shape (C_sub*pairs_percls, sz_embed, 2)
@@ -363,7 +215,7 @@ class ProxyNCA_prob_mixup(torch.nn.Module):
         assert T_sub.size()[0] == virtual_samples.size()[0]
         return T_sub, virtual_samples
 
-    def intercls_mixup(self, X, T, IP, shifts=4, method=1):
+    def intercls_mixup(self, X, T, IP, shifts=4):
         # we only sythesize samples and interpolating class labels
         # get some inter-class pairs to mixup
         index1s = torch.arange(X.size()[0])
@@ -371,14 +223,12 @@ class ProxyNCA_prob_mixup(torch.nn.Module):
         index1s, index2s = index1s.long(), index2s.long()
         cls_index1s, cls_index2s = T[index1s], T[index2s]
 
-        if method == 1:
+        if self.sampling_method == 1:
             # uncertainty-based sampling
             lambdas_diffcls = self.uncertainty_lambdas(index1s, index2s, T, IP).unsqueeze(-1).repeat(1, self.sz_embed)
-        elif method == 2:
+        elif self.sampling_method == 2:
             # pure random sampling
             lambdas_diffcls = self.random_lambdas(len(index1s)).unsqueeze(-1).repeat(1, self.sz_embed)
-        else:
-            raise NotImplementedError
 
         # virtual samples
         selectedX_diffcls = torch.stack([X[index1s, :], X[index2s, :]], dim=-1)  # of shape (n_samples, sz_embed, 2)
@@ -396,7 +246,7 @@ class ProxyNCA_prob_mixup(torch.nn.Module):
         assert virtual_classes.size()[0] == virtual_samples.size()[0]
         return virtual_classes, virtual_samples
 
-    def intercls_mixup_proxy(self, X, T, P, IP, shifts=4, method=1):
+    def intercls_mixup_proxy(self, X, T, P, IP, shifts=4):
         # We synthesize proxies as well as samples, where the new proxies are treated as new classes
         # get some inter-class pairs to mixup
         index1s = torch.arange(X.size()[0])
@@ -414,14 +264,12 @@ class ProxyNCA_prob_mixup(torch.nn.Module):
         virtual_classes = torch.arange(self.nb_classes, self.nb_classes + virtual_proxies.size()[0]).to(virtual_proxies.device)
         virtual_classes = torch.repeat_interleave(virtual_classes, shifts)  # repeat
 
-        if method == 1:
+        if self.sampling_method == 1:
             # uncertainty-based
             lambdas_diffcls = self.uncertainty_lambdas(index1s, index2s, T, IP).unsqueeze(-1).repeat(1, self.sz_embed)
-        elif method == 2:
+        elif self.sampling_method == 2:
             # random
             lambdas_diffcls = self.random_lambdas(len(index1s)).unsqueeze(-1).repeat(1, self.sz_embed)
-        else:
-            raise NotImplementedError
         lambdas_diffcls = torch.stack((lambdas_diffcls, 1.-lambdas_diffcls), dim=-1).to(X.device)  # (n_samples, sz_embed, 2)
 
         # virtual samples
@@ -545,184 +393,272 @@ class ProxyNCA_prob_mixup(torch.nn.Module):
 
         return loss
 
-class ProxyNCA_distribution_loss(torch.nn.Module):
-    '''
-        ProxyNCA distribution based loss
-    '''
-    def __init__(self, nb_classes, sz_embed, scale, **kwargs):
-        torch.nn.Module.__init__(self)
-        self.proxies = torch.nn.Parameter(torch.randn(nb_classes, sz_embed) / 8)
-        # self.sigmas_inv = torch.nn.Parameter(torch.ones(nb_classes, sz_embed))
-        self.sigmas_inv = torch.nn.Parameter(torch.ones(nb_classes, sz_embed)*math.log(math.e-1)) # if softplus activation is used
-        # self.sigmas_inv.requires_grad = False # FIXME: initial test
-
-        self.sz_embed = sz_embed
-        self.nb_classes = nb_classes
-        self.scale = scale
-
-    def center_init(self, AllX, AllY):
-        initial_centers = torch.tensor([])
-        for cls in range(self.nb_classes):
-            selectedX = AllX[AllY == cls]
-            if len(selectedX) == 0:
-                selectedX_mean = torch.randn(self.sz_embed)
-                initial_centers = torch.cat((initial_centers, selectedX_mean.unsqueeze(0)), dim=0)
-            else:
-                selectedX_mean = selectedX.mean(0)
-                # print(selectedX_mean.shape)
-                initial_centers = torch.cat((initial_centers, selectedX_mean.unsqueeze(0)), dim=0)
-        self.proxies.data = initial_centers.data
-
-    def kmeans_init(self, AllX):
-        initial_centers, _ = kmeans_fun_gpu(AllX, K=self.nb_classes)
-        self.proxies.data = initial_centers.data
-
-    def kl_divergence(self, trace_Sigma):
-        Sigmas = 1 / trace_Sigma # (C, sz_embed)
-        mus = F.normalize(self.proxies, p=2, dim=-1) # (C, sz_embed)
-        mus2 = torch.square(mus)
-        KL = 0.5*(Sigmas + mus2 - 1 - torch.log(Sigmas)) # (C, sz_embed)
-        KL = KL.sum(-1).mean()
-        return KL
-
-    def forward(self, X, indices, T):
-        P = self.proxies
-        Sigma_inv = torch.diag_embed(F.softplus(self.sigmas_inv)**2) # of shape (C, sz_embed, sz_embed)
-
-        P = self.scale * F.normalize(P, p=2, dim=-1)
-        X = self.scale * F.normalize(X, p=2, dim=-1) # (N, sz_embed)
-
-        trace_Sigma_inv = Sigma_inv[:, torch.arange(self.sz_embed), torch.arange(self.sz_embed)] # (C, sz_embed)
-        xPdist = X.unsqueeze(1) - P # (N, C, sz_embed)
-        xPdist2 = xPdist * xPdist # Hadamard product (N, C, sz_embed)
-
-        xSx = torch.matmul(xPdist2, trace_Sigma_inv.T) # (N, C, C)
-        xSx = xSx[:, torch.arange(self.nb_classes), torch.arange(self.nb_classes)] # (N, C)
-        D = xSx # compute the -(x-mu)'Sigma^-1(x-mu) of shape (N, C)
-
-        D_sim = F.softmax(-D, -1) # similarity to proxies of shape (N, C)
-        logD_sim = torch.log(D_sim) # of shape (N, C)
-
-        T = binarize_and_smooth_labels(
-            T=T, nb_classes=len(P), smoothing_const=0
-        )
-
-        loss = torch.sum(- T * logD_sim, -1) # -ylog(yhat)
-        loss = loss.mean()
-        kl_loss = self.kl_divergence(trace_Sigma_inv)
-        loss = loss + 0.2*kl_loss # KL regularization on prior N(0, I)
-
-        return loss
-
-class ProxyNCA_prob_smooth(torch.nn.Module):
-    '''
-        Original loss in ProxyNCA++
-    '''
-    def __init__(self, nb_classes, sz_embed, scale, k=2, method='conf', **kwargs):
-        torch.nn.Module.__init__(self)
-        self.proxies = torch.nn.Parameter(torch.randn(nb_classes, sz_embed) / 8)
-        self.scale = scale
-        self.k = k
-        self.nb_classes = nb_classes
-        self.sz_embed = sz_embed
-        self.method = method
-        assert self.method in ['conf', 'none']
-
-    def forward(self, X, indices, T):
-        P = self.proxies
-        # note: self.scale is equal to sqrt(1/T)
-        # in the paper T = 1/9, therefore, scale = sart(1/(1/9)) = sqrt(9) = 3
-        #  we need to apply sqrt because the pairwise distance is calculated as norm^2
-
-        P = self.scale * F.normalize(P, p=2, dim=-1)
-        X = self.scale * F.normalize(X, p=2, dim=-1)
-
-        D = pairwise_distance(
-            torch.cat(
-                [X, P]
-            ),
-            squared=True
-        )[0][:X.size()[0], X.size()[0]:]
-        log_softmaxD = F.log_softmax(-D, -1)
-
-        T = binarize_and_smooth_labels(
-            T=T, nb_classes=len(P), smoothing_const=0
-        )
-
-        loss = torch.sum(- T * log_softmaxD, -1)
-        loss = loss.mean()
-
-        # smoothness regularizer to make top1-top2 equally likely
-        if self.method == 'conf':
-            with torch.no_grad():
-                topk_ind = torch.topk(log_softmaxD, dim=-1, k=self.k).indices # (N, 2)
-                T_prob = smooth_labels(topk_ind, log_softmaxD.size()[0], self.nb_classes)
-            kl_loss = F.kl_div(log_softmaxD, T_prob, log_target=False, reduction='batchmean')
-
-            lossall = loss + float(self.k) * kl_loss
-            return lossall
-
-        elif self.method == 'none':
-            return loss
-
-class ProxyNCA_prob_dynamic(torch.nn.Module):
-    '''
-        Original loss in ProxyNCA++
-    '''
-    def __init__(self, nb_classes, sz_embed, scale, **kwargs):
-        torch.nn.Module.__init__(self)
-        self.nb_classes = nb_classes
-        self.sz_embed = sz_embed
-        self.proxies = torch.nn.Parameter(torch.randn(nb_classes, sz_embed) / 8)
-        self.scale = scale
-
-    def forward(self, X, indices, T):
-        P = self.proxies
-        # note: self.scale is equal to sqrt(1/T)
-        # in the paper T = 1/9, therefore, scale = sart(1/(1/9)) = sqrt(9) = 3
-        #  we need to apply sqrt because the pairwise distance is calculated as norm^2
-
-        P = self.scale * F.normalize(P, p=2, dim=-1)
-        X = self.scale * F.normalize(X, p=2, dim=-1)
-
-        newX, b = self.dynamic_routing(X, T, P, 1)
-        D = pairwise_distance(
-            torch.cat(
-                [newX, P]
-            ),
-            squared=True
-        )[0][:newX.size()[0], newX.size()[0]:]
-
-        T = binarize_and_smooth_labels(
-            T=T, nb_classes=len(P), smoothing_const=0
-        )
-
-        loss = torch.sum(- T * F.log_softmax(-D, -1), -1)
-        loss = loss.mean()
-        return loss
+# class ProxyNCA_distribution_loss(torch.nn.Module):
+#     '''
+#         ProxyNCA distribution based loss
+#     '''
+#     def __init__(self, nb_classes, sz_embed, scale, **kwargs):
+#         torch.nn.Module.__init__(self)
+#         self.proxies = torch.nn.Parameter(torch.randn(nb_classes, sz_embed) / 8)
+#         # self.sigmas_inv = torch.nn.Parameter(torch.ones(nb_classes, sz_embed))
+#         self.sigmas_inv = torch.nn.Parameter(torch.ones(nb_classes, sz_embed)*math.log(math.e-1)) # if softplus activation is used
+#         # self.sigmas_inv.requires_grad = False # FIXME: initial test
+#
+#         self.sz_embed = sz_embed
+#         self.nb_classes = nb_classes
+#         self.scale = scale
+#
+#     def center_init(self, AllX, AllY):
+#         initial_centers = torch.tensor([])
+#         for cls in range(self.nb_classes):
+#             selectedX = AllX[AllY == cls]
+#             if len(selectedX) == 0:
+#                 selectedX_mean = torch.randn(self.sz_embed)
+#                 initial_centers = torch.cat((initial_centers, selectedX_mean.unsqueeze(0)), dim=0)
+#             else:
+#                 selectedX_mean = selectedX.mean(0)
+#                 # print(selectedX_mean.shape)
+#                 initial_centers = torch.cat((initial_centers, selectedX_mean.unsqueeze(0)), dim=0)
+#         self.proxies.data = initial_centers.data
+#
+#     def kmeans_init(self, AllX):
+#         initial_centers, _ = kmeans_fun_gpu(AllX, K=self.nb_classes)
+#         self.proxies.data = initial_centers.data
+#
+#     def kl_divergence(self, trace_Sigma):
+#         Sigmas = 1 / trace_Sigma # (C, sz_embed)
+#         mus = F.normalize(self.proxies, p=2, dim=-1) # (C, sz_embed)
+#         mus2 = torch.square(mus)
+#         KL = 0.5*(Sigmas + mus2 - 1 - torch.log(Sigmas)) # (C, sz_embed)
+#         KL = KL.sum(-1).mean()
+#         return KL
+#
+#     def forward(self, X, indices, T):
+#         P = self.proxies
+#         Sigma_inv = torch.diag_embed(F.softplus(self.sigmas_inv)**2) # of shape (C, sz_embed, sz_embed)
+#
+#         P = self.scale * F.normalize(P, p=2, dim=-1)
+#         X = self.scale * F.normalize(X, p=2, dim=-1) # (N, sz_embed)
+#
+#         trace_Sigma_inv = Sigma_inv[:, torch.arange(self.sz_embed), torch.arange(self.sz_embed)] # (C, sz_embed)
+#         xPdist = X.unsqueeze(1) - P # (N, C, sz_embed)
+#         xPdist2 = xPdist * xPdist # Hadamard product (N, C, sz_embed)
+#
+#         xSx = torch.matmul(xPdist2, trace_Sigma_inv.T) # (N, C, C)
+#         xSx = xSx[:, torch.arange(self.nb_classes), torch.arange(self.nb_classes)] # (N, C)
+#         D = xSx # compute the -(x-mu)'Sigma^-1(x-mu) of shape (N, C)
+#
+#         D_sim = F.softmax(-D, -1) # similarity to proxies of shape (N, C)
+#         logD_sim = torch.log(D_sim) # of shape (N, C)
+#
+#         T = binarize_and_smooth_labels(
+#             T=T, nb_classes=len(P), smoothing_const=0
+#         )
+#
+#         loss = torch.sum(- T * logD_sim, -1) # -ylog(yhat)
+#         loss = loss.mean()
+#         kl_loss = self.kl_divergence(trace_Sigma_inv)
+#         loss = loss + 0.2*kl_loss # KL regularization on prior N(0, I)
+#
+#         return loss
 
 
-    def dynamic_routing(self, X, T, P, num_iterations):
-        b = torch.autograd.Variable(torch.ones((X.size()[0], self.sz_embed))).to(X.device) # (N, sz_embed)
-        P_gt = P[T.long(), :] # (N, sz_embed)
-        P_gt = self.scale * F.normalize(P_gt, p=2, dim=-1)
+# class ProxyNCA_prob(torch.nn.Module):
+#     def __init__(self, nb_classes: int, sz_embed: int, scale: float, initial_proxy_num: int, tau:float=0.0, **kwargs):
+#         '''
+#             :param nb_classes: number of classes in training set
+#             :param sz_embed: embedding size, e.g. 2048, 512, 64
+#             :param scale: self.scale is equal to sqrt(1/Temperature), default is 3
+#         '''
+#
+#         torch.nn.Module.__init__(self)
+#         self.max_proxy_per_class = 5  # maximum number of proxies per class
+#         self.current_proxy = [initial_proxy_num] * nb_classes  # start with single proxy per class
+#         self.proxies = torch.nn.Parameter(torch.randn(nb_classes * self.max_proxy_per_class, sz_embed) / 8)
+#         self.mask = torch.zeros((nb_classes, self.max_proxy_per_class), requires_grad=False).to('cuda')
+#         self.scale = scale  # sqrt(1/Temperature)
+#         self.nb_classes = nb_classes  # number of classes
+#         self.tau = tau
+#
+#         self.create_mask()  # create initial mask
+#
+#     def create_mask(self):
+#         '''
+#             initialize mask on proxies, only first proxy for each class is activated
+#         '''
+#         for c in range(self.nb_classes):
+#             proxy4cls = self.current_proxy[c]
+#             self.mask[c, 0:proxy4cls] = 1
+#
+#     def add_proxy(self, cls: Union[int, float], new_proxy: torch.Tensor):
+#         '''
+#             activate one more proxy for class cls
+#             :param cls: the class to be added a proxy
+#             :param new_proxy: the added proxy (mean of hard examples)
+#         '''
+#         cls = int(cls)
+#         if self.current_proxy[cls] == self.max_proxy_per_class: # if reach the maximum proxy one class can get
+#             pass
+#         else:
+#             self.proxies.data[self.max_proxy_per_class * cls + self.current_proxy[cls], :] = new_proxy.data  # initilaize new proxy there
+#             self.current_proxy[cls] += 1  # update number of proxy for this class
+#             self.mask[cls, :self.current_proxy[cls]] = 1  # unfreeze mask
+#         return
+#
+#     def regularization(self, Proxy_IP):
+#         A = []
+#         for x in range(self.nb_classes):
+#             count_proxy = int(torch.sum(self.mask[x]).item())
+#             A_this = torch.zeros((self.max_proxy_per_class, self.max_proxy_per_class))
+#             A_this[:count_proxy, :count_proxy] = 1.
+#             A.append(A_this)
+#         block_mask = torch.block_diag(*A).to(Proxy_IP.device)
+#         masked_proxyIP = torch.mul(block_mask, Proxy_IP)
+#         regularization = torch.sum(masked_proxyIP)
+#         nonzero_items = torch.count_nonzero(masked_proxyIP).item()
+#         if nonzero_items == 0:
+#             mean_regularization = regularization * 0.0
+#         else:
+#             mean_regularization = regularization / (nonzero_items) # divide by 2 because proxy inner product was
+#
+#         return mean_regularization
+#
+#     @torch.no_grad()
+#     def loss4debug(self, X:torch.Tensor, indices: torch.Tensor, T:torch.Tensor):
+#         '''
+#             Return intermediate calculations of loss for debugging purpose
+#         '''
+#         P = self.proxies
+#         temperature = self.scale
+#         P = F.normalize(P, p=2, dim=-1) * temperature
+#         X = F.normalize(X, p=2, dim=-1) * temperature
+#         P = P.to(X.device)
+#
+#         # pairwise distance
+#         D, IP = pairwise_distance(
+#             torch.cat([X, P]),
+#             squared=True
+#         ) # of shape (N, C*maxP)
+#         D = D[:X.size()[0], X.size()[0]:] # of shape (N, N)
+#         Proxy_IP = IP[X.size()[0]:, X.size()[0]:] # of shape (C*maxP, C*maxP)
+#         IP = IP[:X.size()[0], X.size()[0]:] # of shape (N, C*maxP)
+#
+#         self.mask = self.mask.to(X.device)
+#         D_reshape = D.reshape((X.shape[0], self.nb_classes, self.max_proxy_per_class))  # of shape (N, C, maxP)
+#         output = D_reshape * self.mask.unsqueeze(0)  # mask unactivated proxies
+#         output_IP = IP.reshape((X.shape[0], self.nb_classes, self.max_proxy_per_class)) * self.mask.unsqueeze(0)
+#         normalize_prob = masked_softmax(output_IP, t=0.1) # p(i,c)
+#         D_weighted = torch.sum(normalize_prob * output, dim=-1)  # S_i,c: weighted sum of distance, reduce to shape (N, C)
+#
+#         smoothing_const = 0.0 # smoothing class labels
+#         target_probs = (torch.ones((X.shape[0], self.nb_classes)) * smoothing_const).to(T.device)
+#         target_probs.scatter_(1, T.unsqueeze(1), 1 - smoothing_const) # one-hot label
+#
+#         gt_prob = normalize_prob[torch.arange(X.size()[0]), T.long(), :]
+#         gt_D_weighted = D_weighted[torch.arange(X.size()[0]), T.long()]
+#
+#         base_loss = torch.sum(- target_probs * F.log_softmax(-D_weighted, -1), -1)
+#
+#         return indices, gt_prob, gt_D_weighted, base_loss, Proxy_IP
+#
+#
+#     def forward(self, X:torch.Tensor, indices: torch.Tensor, T:torch.Tensor):
+#         '''
+#             Forward propogation of loss
+#             :param X: the embedding torch.Tensor of shape (N, sz_embed)
+#             :param indices: a torch.Tensor of shape (N, ) of batch indices (used to track the loss/similarity back to a sample)
+#             :param T: a torch.Tensor of shape (N, ), keeping class labels: sample -> class label
+#             :return : batch average loss
+#         '''
+#
+#         P = self.proxies
+#         temperature = self.scale
+#         P = F.normalize(P, p=2, dim=-1) * temperature
+#         X = F.normalize(X, p=2, dim=-1) * temperature
+#
+#         # pairwise distance
+#         D, IP = pairwise_distance(
+#             torch.cat([X, P]),
+#             squared=True
+#         ) # of shape (N, C*maxP)
+#         D = D[:X.size()[0], X.size()[0]:]
+#         Proxy_IP = IP[X.size()[0]:, X.size()[0]:] # between-proxy similarity
+#         Proxy_IP = ((Proxy_IP + 1.)/2) * (1 - torch.eye(Proxy_IP.shape[0], Proxy_IP.shape[0]).to(Proxy_IP.device)) # add 1 to avoid zero entries
+#         IP = IP[:X.size()[0], X.size()[0]:]
+#
+#         D_reshape = D.reshape((X.shape[0], self.nb_classes, self.max_proxy_per_class))  # of shape (N, C, maxP)
+#         output = D_reshape * self.mask.unsqueeze(0)  # mask unactivated proxies
+#         # normalize_prob_orig = masked_softmax(-output, t=1) # low distance proxy should get higher weight
+#         #FIXME: here use inner product to compute intra-class weight
+#         output_IP = IP.reshape((X.shape[0], self.nb_classes, self.max_proxy_per_class)) * self.mask.unsqueeze(0)
+#         normalize_prob = masked_softmax(output_IP, t=0.1)
+#
+#         D_weighted = torch.sum(normalize_prob * output, dim=-1)  # weighted sum of distance, reduce to shape (N, C)
+#
+#         smoothing_const = 0.0 # smoothing class labels
+#         target_probs = (torch.ones((X.shape[0], self.nb_classes)) * smoothing_const).to(T.device)
+#         target_probs.scatter_(1, T.unsqueeze(1), 1 - smoothing_const) # one-hot label
+#
+#         base_loss = torch.sum(- target_probs * F.log_softmax(-D_weighted+(1e-12), -1), -1).mean() # log underflow
+#         if self.tau == 0.0:
+#             return base_loss
+#         else:
+#             mean_regularization = self.regularization(Proxy_IP)
+#             loss = base_loss + mean_regularization * self.tau
+#
+#             return loss
 
-        for iteration in range(num_iterations):
-            newX = b * X # add attention (N, sz_embed)
-            newX = self.scale * F.normalize(newX, p=2, dim=-1)
 
-            IP = pairwise_distance(
-                    torch.cat(
-                        [newX, P_gt]
-                    ),
-                    squared=True
-                )[1][:newX.size()[0], newX.size()[0]:].diagonal()
-
-            if iteration < num_iterations - 1:
-                a = X * P_gt # (N, sz_embed)
-                b = b + a # learning rate 0.01
-
-        return newX, b
+# class ProxyNCA_prob_smooth(torch.nn.Module):
+#     '''
+#         Original loss in ProxyNCA++
+#     '''
+#     def __init__(self, nb_classes, sz_embed, scale, k=2, method='conf', **kwargs):
+#         torch.nn.Module.__init__(self)
+#         self.proxies = torch.nn.Parameter(torch.randn(nb_classes, sz_embed) / 8)
+#         self.scale = scale
+#         self.k = k
+#         self.nb_classes = nb_classes
+#         self.sz_embed = sz_embed
+#         self.method = method
+#         assert self.method in ['conf', 'none']
+#
+#     def forward(self, X, indices, T):
+#         P = self.proxies
+#         # note: self.scale is equal to sqrt(1/T)
+#         # in the paper T = 1/9, therefore, scale = sart(1/(1/9)) = sqrt(9) = 3
+#         #  we need to apply sqrt because the pairwise distance is calculated as norm^2
+#
+#         P = self.scale * F.normalize(P, p=2, dim=-1)
+#         X = self.scale * F.normalize(X, p=2, dim=-1)
+#
+#         D = pairwise_distance(
+#             torch.cat(
+#                 [X, P]
+#             ),
+#             squared=True
+#         )[0][:X.size()[0], X.size()[0]:]
+#         log_softmaxD = F.log_softmax(-D, -1)
+#
+#         T = binarize_and_smooth_labels(
+#             T=T, nb_classes=len(P), smoothing_const=0
+#         )
+#
+#         loss = torch.sum(- T * log_softmaxD, -1)
+#         loss = loss.mean()
+#
+#         # smoothness regularizer to make top1-top2 equally likely
+#         if self.method == 'conf':
+#             with torch.no_grad():
+#                 topk_ind = torch.topk(log_softmaxD, dim=-1, k=self.k).indices # (N, 2)
+#                 T_prob = smooth_labels(topk_ind, log_softmaxD.size()[0], self.nb_classes)
+#             kl_loss = F.kl_div(log_softmaxD, T_prob, log_target=False, reduction='batchmean')
+#
+#             lossall = loss + float(self.k) * kl_loss
+#             return lossall
+#
+#         elif self.method == 'none':
+#             return loss
 
 
 
