@@ -35,19 +35,15 @@ parser.add_argument('--init_eval', default=False, action='store_true')
 parser.add_argument('--apex', default=False, action='store_true')
 parser.add_argument('--warmup_k', default=5, type=int)
 
-parser.add_argument('--dataset', default='cars')
+parser.add_argument('--dataset', default='cub')
 parser.add_argument('--embedding-size', default = 512, type=int, dest = 'sz_embedding')
-parser.add_argument('--config', default='config/cars_mixup.json')
-parser.add_argument('--mode', default='trainval', choices=['train', 'trainval', 'test',
+parser.add_argument('--config', default='config/cub.json')
+parser.add_argument('--mode', default='train', choices=['train', 'trainval', 'test',
                                                            'testontrain', 'testontrain_super'],
                     help='train with train data or train with trainval')
 parser.add_argument('--batch-size', default = 32, type=int, dest = 'sz_batch')
-parser.add_argument('--dynamic_proxy', default=False, action='store_true')
-parser.add_argument('--initial_proxy_num', default=1, type=int)
-parser.add_argument('--tau', default=0.0, type=float)
-parser.add_argument('--proxy_update_schedule', default=[0.5, 0.75], nargs='+', type=float)
 parser.add_argument('--no_warmup', default=False, action='store_true')
-parser.add_argument('--loss-type', default='ProxyNCA_prob_orig_mixup_both', type=str)
+parser.add_argument('--loss-type', default='ProxyNCA_prob_orig_trainmode', type=str)
 parser.add_argument('--workers', default = 16, type=int, dest = 'nb_workers')
 
 
@@ -103,17 +99,15 @@ if __name__ == '__main__':
         transform_key = config['transform_key']
     print('Transformation: ', transform_key)
 
-    out_results_fn = "log/%s_%s_%s_%d_%s_loss%s_proxy%d_tau%0.2f.json" % (args.dataset, curr_fn, args.mode,
-                                                                        args.seed,
-                                                                        args.dynamic_proxy,
-                                                                        args.loss_type,
-                                                                        args.initial_proxy_num, args.tau)
+    out_results_fn = "log/%s_%s_%s_%d_%d_loss%s.json" % (args.dataset, curr_fn,
+                                                         args.mode, args.sz_embedding,
+                                                        args.seed,
+                                                        args.loss_type)
 
-    args.log_filename = '%s_%s_%s_%d_%d_%s_loss%s_proxy%d_tau%0.2f' % (args.dataset, curr_fn, args.mode, args.sz_embedding,
-                                                                     args.seed,
-                                                                     args.dynamic_proxy,
-                                                                     args.loss_type,
-                                                                     args.initial_proxy_num, args.tau)
+    args.log_filename = '%s_%s_%s_%d_%d_loss%s' % (args.dataset, curr_fn,
+                                                   args.mode, args.sz_embedding,
+                                                   args.seed,
+                                                   args.loss_type)
 
     if args.mode == 'test':
         args.log_filename = args.log_filename.replace('test', 'trainval')
@@ -125,11 +119,10 @@ if __name__ == '__main__':
 
     '''Dataloader'''
     if args.mode == 'trainval':
-        train_results_fn = "log/%s_%s_%s_%d_%d_%s_loss%s_proxy%d_tau%0.2f.json" % (args.dataset, curr_fn, 'train',
-                                                                                 args.sz_embedding, args.seed,
-                                                                                 args.dynamic_proxy,
-                                                                                 args.loss_type,
-                                                                                 args.initial_proxy_num, args.tau)
+        train_results_fn = "log/%s_%s_%s_%d_%d_loss%s.json" % (args.dataset, curr_fn,
+                                                               args.mode, args.sz_embedding,
+                                                               args.seed,
+                                                               args.loss_type)
 
         if os.path.exists(train_results_fn):
             with open(train_results_fn, 'r') as f:
@@ -533,12 +526,7 @@ if __name__ == '__main__':
             logging.info(str(lr_steps))
 
         if e % 10 == 0 or e == args.nb_epochs-1:
-            save_dir = 'dvi_data_{}_{}_loss{}_proxy{}_tau{}/ResNet_{}_Model'.format(args.dataset,
-                                                                                  args.dynamic_proxy,
-                                                                                  args.loss_type,
-                                                                                  str(args.initial_proxy_num),
-                                                                                  str(args.tau),
-                                                                                  str(args.sz_embedding))
+            save_dir = 'dvi_data_{}_loss{}/ResNet_{}_Model'.format(args.dataset, args.loss_type, str(args.sz_embedding))
             os.makedirs('{}'.format(save_dir), exist_ok=True)
             os.makedirs('{}/Epoch_{}'.format(save_dir, e+1), exist_ok=True)
             with open('{}/Epoch_{}/index.json'.format(save_dir, e + 1), 'wt') as handle:

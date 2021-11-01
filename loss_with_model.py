@@ -40,6 +40,7 @@ class Encoder(nn.Module):
 
         c_ij = self.dynamic_routing(feat) # find best pooling weights for each specific sample
         final_feat = (c_ij * feat).sum(-1).sum(-1) # dynamic pooling
+
         if self.lnorm is not None:
             final_feat = self.lnorm(final_feat)
         return final_feat
