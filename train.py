@@ -33,7 +33,7 @@ parser.add_argument('--warmup_k', default=5, type=int)
 parser.add_argument('--dataset', default='cars')
 parser.add_argument('--embedding-size', default = 512, type=int, dest = 'sz_embedding')
 parser.add_argument('--config', default='config/cars.json')
-parser.add_argument('--mode', default='train', choices=['train', 'trainval', 'test',
+parser.add_argument('--mode', default='test', choices=['train', 'trainval', 'test',
                                                         'testontrain', 'testontrain_super'],
                     help='train with train data or train with trainval')
 parser.add_argument('--batch-size', default = 32, type=int, dest = 'sz_batch')
@@ -340,8 +340,8 @@ if __name__ == '__main__':
     if args.mode == 'test':
         with torch.no_grad():
             logging.info("**Evaluating...(test mode)**")
-            model = load_best_checkpoint(model)
-            # model.load_state_dict(torch.load('/home/ruofan/PycharmProjects/ProxyNCA-/dvi_data_cub_lossProxyNCA_prob_orig_trainmode/ResNet_512_Model/Epoch_40/cub_cub_train_512_0.pth'))
+            # model = load_best_checkpoint(model)
+            model.load_state_dict(torch.load('/home/ruofan/PycharmProjects/ProxyNCA-/dvi_data_cars_lossProxyNCA_prob_orig_trainmode/ResNet_512_Model/Epoch_40/cars_cars_train_512_0.pth'))
             if 'inshop' in args.dataset:
                 utils.evaluate_inshop(model, dl_query, dl_gallery)
             else:

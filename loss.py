@@ -157,8 +157,10 @@ class ProxyNCA_prob_mixup(torch.nn.Module):
     @staticmethod
     def uncertainty_lambdas(index1s, index2s, T, IP):
         C1, C2 = T[index1s], T[index2s]
-        X1P1, X1P2 = torch.clamp(IP[index1s, C1], min=-1., max=1.), torch.clamp(IP[index1s, C2], min=-1., max=1.) # (n_samples, )
-        X2P1, X2P2 = torch.clamp(IP[index2s, C1], min=-1., max=1.), torch.clamp(IP[index2s, C2], min=-1., max=1.)
+        X1P1, X1P2 = torch.clamp(IP[index1s, C1], min=-1., max=1.), \
+                     torch.clamp(IP[index1s, C2], min=-1., max=1.) # (n_samples, )
+        X2P1, X2P2 = torch.clamp(IP[index2s, C1], min=-1., max=1.), \
+                     torch.clamp(IP[index2s, C2], min=-1., max=1.)
         lambdas = (X2P2-X2P1) / ((X2P2-X2P1) + (X1P1-X1P2))
         lambdas = lambdas + torch.from_numpy((np.random.uniform(size=len(index1s))*0.4-0.2)).to(lambdas.device) # add small random noises e~unif(-0.2, 0.2)
         lambdas = torch.clamp(lambdas, min=0.2, max=0.8) # clamp
@@ -281,11 +283,8 @@ class ProxyNCA_prob_mixup(torch.nn.Module):
         return virtual_classes, virtual_samples, virtual_proxies
 
     def forward(self, X, indices, T):
-        P = self.proxies
-        # note: self.scale is equal to sqrt(1/T)
-        # in the paper T = 1/9, therefore, scale = sart(1/(1/9)) = sqrt(9) = 3
-        #  we need to apply sqrt because the pairwise distance is calculated as norm^2
 
+        P = self.proxies
         P = self.scale * F.normalize(P, p=2, dim=-1)
         X = self.scale * F.normalize(X, p=2, dim=-1)
 
@@ -371,9 +370,14 @@ class ProxyNCA_prob_mixup(torch.nn.Module):
             # between dfferent class with proxy
             virtual_classes_inter, virtual_samples_inter, virtual_proxies_inter = self.intercls_mixup_proxy(X, T, P, IP)
 
-            Xall = torch.cat((X, self.scale * virtual_samples_inter, self.scale * virtual_samples_intra), dim=0) # (N+N_inter+N_intra, sz_embed)
-            Tall = torch.cat([T, virtual_classes_inter, virtual_classes_intra], 0) # (N+N_inter+N_intra, )
-            Pall = torch.cat([P, self.scale * virtual_proxies_inter])  # (C+C_inter, sz_embed)
+            Xall = torch.cat((X,
+                                self.scale * virtual_samples_inter,
+                                self.scale * virtual_samples_intra), dim=0) # (N+N_inter+N_intra, sz_embed)
+            Tall = torch.cat([T,
+                                virtual_classes_inter,
+                                virtual_classes_intra], 0) # (N+N_inter+N_intra, )
+            Pall = torch.cat([P,
+                                self.scale * virtual_proxies_inter])  # (C+C_inter, sz_embed)
 
             Tall = binarize_and_smooth_labels(
                T=Tall, nb_classes=len(Pall), smoothing_const=0
