@@ -13,14 +13,9 @@ import time
 import argparse
 import json
 from tqdm import tqdm
-# from apex import amp
-from utils import predict_batchwise, inner_product_sim
-from dataset.base import SubSampler
-from deprecated.hard_sample_detection.hard_detection import hard_potential
 from torch.utils.data import Dataset, DataLoader
-import torch.nn.functional as F
 
-os.environ["CUDA_VISIBLE_DEVICES"]="0"
+os.environ["CUDA_VISIBLE_DEVICES"]="1"
 
 parser = argparse.ArgumentParser(description='Training ProxyNCA++')
 parser.add_argument('--epochs', default = 40, type=int, dest = 'nb_epochs')
@@ -37,13 +32,13 @@ parser.add_argument('--warmup_k', default=5, type=int)
 
 parser.add_argument('--dataset', default='cars')
 parser.add_argument('--embedding-size', default = 512, type=int, dest = 'sz_embedding')
-parser.add_argument('--config', default='config/cars_mixup.json')
-parser.add_argument('--mode', default='trainval', choices=['train', 'trainval', 'test',
-                                                          'testontrain', 'testontrain_super'],
+parser.add_argument('--config', default='config/cars.json')
+parser.add_argument('--mode', default='train', choices=['train', 'trainval', 'test',
+                                                        'testontrain', 'testontrain_super'],
                     help='train with train data or train with trainval')
 parser.add_argument('--batch-size', default = 32, type=int, dest = 'sz_batch')
 parser.add_argument('--no_warmup', default=False, action='store_true')
-parser.add_argument('--loss-type', default='ProxyNCA_prob_orig_mixup_both_random', type=str)
+parser.add_argument('--loss-type', default='ProxyNCA_prob_orig_trainmode', type=str)
 parser.add_argument('--workers', default = 16, type=int, dest = 'nb_workers')
 
 

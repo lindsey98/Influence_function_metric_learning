@@ -154,13 +154,7 @@ def evaluate(model, dataloader, eval_nmi=True, recall_list=[1, 2, 4, 8]):
 
     # calculate embeddings with model and get targets
     X, T, *_ = predict_batchwise(model, dataloader)
-    # X = X.detach().cpu()
-    # T = T.detach().cpu()
-    
     print('done collecting prediction')
-
-    #eval_time = time.time() - eval_time
-    #logging.info('Eval time: %.2f' % eval_time)
 
     if eval_nmi:
         # calculate NMI with kmeans clustering
@@ -197,7 +191,8 @@ def evaluate(model, dataloader, eval_nmi=True, recall_list=[1, 2, 4, 8]):
 
 def evaluate_super(model, dataloader,
                    labeldict,
-                   eval_nmi=True, recall_list=[1, 2, 4, 8]):
+                   eval_nmi=True,
+                   recall_list=[1, 2, 4, 8]):
     '''
         Evaluation on dataloader
         :param model: embedding model
