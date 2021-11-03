@@ -16,7 +16,7 @@ from tqdm import tqdm
 from torch.utils.data import Dataset, DataLoader
 from deprecated.regularizer.smoothness_regularize import regularizer
 
-os.environ["CUDA_VISIBLE_DEVICES"]="0, 1"
+os.environ["CUDA_VISIBLE_DEVICES"]="1"
 
 parser = argparse.ArgumentParser(description='Training ProxyNCA++')
 parser.add_argument('--epochs', default = 40, type=int, dest = 'nb_epochs')
@@ -31,15 +31,15 @@ parser.add_argument('--init_eval', default=False, action='store_true')
 parser.add_argument('--apex', default=False, action='store_true')
 parser.add_argument('--warmup_k', default=5, type=int)
 
-parser.add_argument('--dataset', default='cub')
+parser.add_argument('--dataset', default='cars')
 parser.add_argument('--embedding-size', default = 512, type=int, dest = 'sz_embedding')
-parser.add_argument('--config', default='config/cub_smooth.json')
+parser.add_argument('--config', default='config/cars.json')
 parser.add_argument('--mode', default='trainval', choices=['train', 'trainval', 'test',
                                                            'testontrain', 'testontrain_super'],
                     help='train with train data or train with trainval')
 parser.add_argument('--batch-size', default = 32, type=int, dest = 'sz_batch')
 parser.add_argument('--no_warmup', default=False, action='store_true')
-parser.add_argument('--loss-type', default='ProxyNCA_prob_smooth', type=str)
+parser.add_argument('--loss-type', default='ProxyNCA_prob_inputmixup', type=str)
 parser.add_argument('--workers', default = 4, type=int, dest = 'nb_workers')
 
 args = parser.parse_args()
@@ -54,6 +54,27 @@ def load_best_checkpoint(model):
         model.load_state_dict(torch.load('results/' + args.log_filename + '.pth'))
     model = model.cuda()
     return model
+
+def mixup_data(x, y, alpha=1.0, use_cuda=True):
+    '''Returns mixed inputs, pairs of targets, and lambda'''
+    if alpha > 0:
+        lam = np.random.beta(alpha, alpha)
+    else:
+        lam = 1
+
+    batch_size = x.size()[0]
+    if use_cuda:
+        index = torch.randperm(batch_size).cuda()
+    else:
+        index = torch.randperm(batch_size)
+
+    mixed_x = lam * x + (1 - lam) * x[index, :]
+    y_a, y_b = y, y[index]
+    return mixed_x, y_a, y_b, lam, (torch.arange(batch_size), index)
+
+def mixup_criterion(criterion, pred, y_a, y_b, indices_a, indices_b, lam):
+    return lam * criterion(pred, indices_a, y_a) + (1 - lam) * criterion(pred, indices_b, y_b)
+
 
 if __name__ == '__main__':
 
@@ -340,8 +361,7 @@ if __name__ == '__main__':
     if args.mode == 'test':
         with torch.no_grad():
             logging.info("**Evaluating...(test mode)**")
-            # model = load_best_checkpoint(model)
-            model.load_state_dict(torch.load('/home/ruofan/PycharmProjects/ProxyNCA-/dvi_data_cars_lossProxyNCA_prob_orig_trainmode/ResNet_512_Model/Epoch_40/cars_cars_train_512_0.pth'))
+            model = load_best_checkpoint(model)
             if 'inshop' in args.dataset:
                 utils.evaluate_inshop(model, dl_query, dl_gallery)
             else:
@@ -381,7 +401,6 @@ if __name__ == '__main__':
     losses = []
     scores = []
     scores_tr = []
-    curvatures = []
 
     t1 = time.time()
 
@@ -446,7 +465,6 @@ if __name__ == '__main__':
         time_per_epoch_1 = time.time()
         losses_per_epoch = []
         tnmi = []
-        curvature = []
 
         for ct, (x, y, indices) in tqdm(enumerate(dl_tr)):
             it += 1
@@ -454,8 +472,11 @@ if __name__ == '__main__':
             m = model(x)
             loss = criterion(m, indices, y)
 
-            regularize, grad_norm = regularizer(x, y, model, criterion)
-            loss += regularize
+            mixed_inputs, targets_a, targets_b, lam, (indices_a, indices_b) = mixup_data(x, y, alpha=1.0, use_cuda=True)
+            mixed_inputs, targets_a, targets_b = map(torch.autograd.Variable, (mixed_inputs, targets_a, targets_b))
+            outputs = model(mixed_inputs)
+            mixed_loss = mixup_criterion(criterion, outputs, targets_a, targets_b, indices_a, indices_b, lam)
+            loss += mixed_loss
 
             opt.zero_grad()
             loss.backward() # backprop
@@ -463,19 +484,16 @@ if __name__ == '__main__':
             opt.step() # gradient descent
 
             losses_per_epoch.append(loss.data.cpu().numpy())
-            curvature.append(regularizer.item())
 
         time_per_epoch_2 = time.time()
         losses.append(np.mean(losses_per_epoch[-20:]))
-        curvatures.append(np.mean(curvature[-20:]))
 
         print('it: {}'.format(it))
         print(opt)
         logging.info(
-            "Epoch: {}, loss: {:.3f}, curvature: {:.3f}, time (seconds): {:.2f}.".format(
+            "Epoch: {}, loss: {:.3f}, time (seconds): {:.2f}.".format(
                 e,
                 losses[-1],
-                curvatures[-1],
                 time_per_epoch_2 - time_per_epoch_1
             )
         )
@@ -539,19 +557,19 @@ if __name__ == '__main__':
                                                                                    args.dataset, args.mode,
                                                                                    str(args.sz_embedding), str(args.seed)))
             # # TODO
-            if 'ProxyNCA_prob_orig' in args.loss_type or 'ProxyNCA_prob_smooth' in args.loss_type \
-                or 'ProxyNCA_prob_mixup' in args.loss_type or 'ProxyNCA_prob_dynamic' in args.loss_type:
-                torch.save({"proxies": criterion.proxies},
+            # if 'ProxyNCA_prob_orig' in args.loss_type or 'ProxyNCA_prob_smooth' in args.loss_type \
+            #     or 'ProxyNCA_prob_mixup' in args.loss_type or 'ProxyNCA_prob_dynamic' in args.loss_type:
+            torch.save({"proxies": criterion.proxies},
                        '{}/Epoch_{}/proxy.pth'.format(save_dir, e+1))
-            elif 'ProxyNCA_prob' in args.loss_type:
-                torch.save({"proxies": criterion.proxies, "mask": criterion.mask},
-                           '{}/Epoch_{}/proxy.pth'.format(save_dir, e+1))
-            elif 'ProxyNCA_distribution_loss' in args.loss_type:
-                torch.save({"proxies": criterion.proxies, "sigma_inv": criterion.sigmas_inv},
-                           '{}/Epoch_{}/proxy.pth'.format(save_dir, e+1))
-            elif 'ProxyNCA_dist_mixup' in args.loss_type:
-                torch.save({"proxies": criterion.proxies, "sigma_inv": criterion.sigmas_inv},
-                           '{}/Epoch_{}/proxy.pth'.format(save_dir, e+1))
+            # elif 'ProxyNCA_prob' in args.loss_type:
+            #     torch.save({"proxies": criterion.proxies, "mask": criterion.mask},
+            #                '{}/Epoch_{}/proxy.pth'.format(save_dir, e+1))
+            # elif 'ProxyNCA_distribution_loss' in args.loss_type:
+            #     torch.save({"proxies": criterion.proxies, "sigma_inv": criterion.sigmas_inv},
+            #                '{}/Epoch_{}/proxy.pth'.format(save_dir, e+1))
+            # elif 'ProxyNCA_dist_mixup' in args.loss_type:
+            #     torch.save({"proxies": criterion.proxies, "sigma_inv": criterion.sigmas_inv},
+            #                '{}/Epoch_{}/proxy.pth'.format(save_dir, e+1))
 
         ######################################################################################
 

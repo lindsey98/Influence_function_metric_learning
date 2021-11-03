@@ -397,6 +397,7 @@ class ProxyNCA_prob_mixup(torch.nn.Module):
 
         return loss
 
+
 # class ProxyNCA_distribution_loss(torch.nn.Module):
 #     '''
 #         ProxyNCA distribution based loss
