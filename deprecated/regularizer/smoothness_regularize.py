@@ -39,8 +39,8 @@ def regularizer(inputs, targets, model, criterion, lambda_=4.):
     loss_pos = criterion(outputs_pos, None, targets)
     loss_orig = criterion(outputs_orig, None, targets)
     grad_diff = \
-        torch.autograd.grad((loss_pos - loss_orig), inputs,
-                            create_graph=False)[0]
+        torch.autograd.grad(outputs=(loss_pos - loss_orig), inputs=inputs,
+                            create_graph=True)[0]
     reg = grad_diff.reshape(grad_diff.size()[0], -1).norm(dim=1)
     model.zero_grad()
     model.train()

@@ -14,8 +14,9 @@ import argparse
 import json
 from tqdm import tqdm
 from torch.utils.data import Dataset, DataLoader
+from deprecated.regularizer.smoothness_regularize import regularizer
 
-os.environ["CUDA_VISIBLE_DEVICES"]="1"
+os.environ["CUDA_VISIBLE_DEVICES"]="0, 1"
 
 parser = argparse.ArgumentParser(description='Training ProxyNCA++')
 parser.add_argument('--epochs', default = 40, type=int, dest = 'nb_epochs')
@@ -30,17 +31,16 @@ parser.add_argument('--init_eval', default=False, action='store_true')
 parser.add_argument('--apex', default=False, action='store_true')
 parser.add_argument('--warmup_k', default=5, type=int)
 
-parser.add_argument('--dataset', default='cars')
+parser.add_argument('--dataset', default='cub')
 parser.add_argument('--embedding-size', default = 512, type=int, dest = 'sz_embedding')
-parser.add_argument('--config', default='config/cars.json')
-parser.add_argument('--mode', default='test', choices=['train', 'trainval', 'test',
-                                                        'testontrain', 'testontrain_super'],
+parser.add_argument('--config', default='config/cub_smooth.json')
+parser.add_argument('--mode', default='trainval', choices=['train', 'trainval', 'test',
+                                                           'testontrain', 'testontrain_super'],
                     help='train with train data or train with trainval')
 parser.add_argument('--batch-size', default = 32, type=int, dest = 'sz_batch')
 parser.add_argument('--no_warmup', default=False, action='store_true')
-parser.add_argument('--loss-type', default='ProxyNCA_prob_orig_trainmode', type=str)
-parser.add_argument('--workers', default = 16, type=int, dest = 'nb_workers')
-
+parser.add_argument('--loss-type', default='ProxyNCA_prob_smooth', type=str)
+parser.add_argument('--workers', default = 4, type=int, dest = 'nb_workers')
 
 args = parser.parse_args()
 
@@ -381,6 +381,7 @@ if __name__ == '__main__':
     losses = []
     scores = []
     scores_tr = []
+    curvatures = []
 
     t1 = time.time()
 
@@ -419,7 +420,7 @@ if __name__ == '__main__':
         #warm up training for 5 epochs
         logging.info("**warm up for %d epochs.**" % args.warmup_k)
         for e in range(0, args.warmup_k):
-            for ct, (x,y,_) in tqdm(enumerate(dl_tr)):
+            for ct, (x, y, _) in tqdm(enumerate(dl_tr)):
                 opt_warmup.zero_grad()
                 m = model(x.cuda())
                 loss = criterion(m, None, y.cuda())
@@ -445,28 +446,36 @@ if __name__ == '__main__':
         time_per_epoch_1 = time.time()
         losses_per_epoch = []
         tnmi = []
+        curvature = []
 
         for ct, (x, y, indices) in tqdm(enumerate(dl_tr)):
             it += 1
             x, y = x.cuda(), y.cuda()
             m = model(x)
             loss = criterion(m, indices, y)
+
+            regularize, grad_norm = regularizer(x, y, model, criterion)
+            loss += regularize
+
             opt.zero_grad()
             loss.backward() # backprop
             torch.nn.utils.clip_grad_value_(model.parameters(), 10) # clip gradient?
             opt.step() # gradient descent
 
             losses_per_epoch.append(loss.data.cpu().numpy())
+            curvature.append(regularizer.item())
 
         time_per_epoch_2 = time.time()
         losses.append(np.mean(losses_per_epoch[-20:]))
+        curvatures.append(np.mean(curvature[-20:]))
 
         print('it: {}'.format(it))
         print(opt)
         logging.info(
-            "Epoch: {}, loss: {:.3f}, time (seconds): {:.2f}.".format(
+            "Epoch: {}, loss: {:.3f}, curvature: {:.3f}, time (seconds): {:.2f}.".format(
                 e,
                 losses[-1],
+                curvatures[-1],
                 time_per_epoch_2 - time_per_epoch_1
             )
         )

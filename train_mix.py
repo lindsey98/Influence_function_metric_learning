@@ -37,9 +37,9 @@ parser.add_argument('--init_eval', default=False, action='store_true')
 parser.add_argument('--apex', default=False, action='store_true')
 parser.add_argument('--warmup_k', default=5, type=int)
 
-parser.add_argument('--dataset', default='cars')
-parser.add_argument('--config', default='config/cars.json')
-parser.add_argument('--data_root', default = '/home/ruofan/PycharmProjects/SoftTriple/datasets/cars196',
+parser.add_argument('--dataset', default='cub_cars')
+parser.add_argument('--config', default='config/cub.json')
+parser.add_argument('--data_root', default = '/home/ruofan/PycharmProjects/SoftTriple/datasets/cub_cars',
                     type=str)
 parser.add_argument('--embedding-size', default = 512, type=int, dest = 'sz_embedding')
 parser.add_argument('--mode', default='test', choices=['trainval', 'test', 'testontrain'],
@@ -138,7 +138,7 @@ if __name__ == '__main__':
     if ('inshop' not in args.dataset ):
         dl_ev = torch.utils.data.DataLoader(
             torchvision.datasets.ImageFolder(
-                root=os.path.join(args.data_root, 'test'),
+                root=os.path.join(args.data_root, 'cars_test'),
                 transform=dataset.utils.make_transform(
                     **dataset_config[transform_key],
                     is_train=False
@@ -194,7 +194,7 @@ if __name__ == '__main__':
         ])
 
     tr_dataset = torchvision.datasets.ImageFolder(
-            root=os.path.join(args.data_root, 'train_val_mix'),
+            root=os.path.join(args.data_root, 'train'),
             transform=train_transform
     )
 
@@ -215,7 +215,7 @@ if __name__ == '__main__':
     )
     dl_tr_noshuffle = torch.utils.data.DataLoader(
         torchvision.datasets.ImageFolder(
-            root=os.path.join(args.data_root, 'train_val_mix'), # TODO: this is the original training set?
+            root=os.path.join(args.data_root, 'train'), # TODO: this is the original training set?
             transform=dataset.utils.make_transform(
                 **dataset_config[transform_key],
                 is_train=False
@@ -267,11 +267,6 @@ if __name__ == '__main__':
                 **config['opt']['args']['proxynca']
 
             },
-            # {
-            #     **{'params': criterion.sigmas_inv},
-            #     **config['opt']['args']['proxynca_sigma']
-            # },
-
         ],
         **config['opt']['args']['base']
     )
@@ -296,11 +291,6 @@ if __name__ == '__main__':
                 **{'params': criterion.proxies},
                 **config['opt']['args']['proxynca']
             },
-            # {
-            #     **{'params': criterion.sigmas_inv},
-            #     **config['opt']['args']['proxynca_sigma']
-            # },
-
         ],
         **config['opt']['args']['base']
     )

@@ -11,6 +11,7 @@ ImageFile.LOAD_TRUNCATED_IMAGES = True
 _int_classes = int
 import numpy as np
 import numbers
+import torch.nn.functional as F
 
 def std_per_channel(images):
     images = torch.stack(images, dim = 0)
@@ -206,3 +207,68 @@ class BalancedBatchSampler(BatchSampler):
     def __len__(self):
         return self.n_dataset // self.batch_size
 
+class ClsDistSampler(torch.utils.data.sampler.Sampler):
+    """
+    Plugs into PyTorch Batchsampler Package.
+    """
+    def __init__(self, labels, n_classes, n_samples):
+
+        self.labels = labels
+        self.labels_set = list(set(self.labels.numpy()))
+        self.label_to_indices = {label: np.where(self.labels.numpy() == label)[0]
+                                 for label in self.labels_set}
+        for l in self.labels_set:
+            np.random.shuffle(self.label_to_indices[l])
+        self.used_label_indices_count = {label: 0 for label in self.labels_set}
+        self.count = 0
+        self.n_classes = n_classes
+        self.n_samples = n_samples
+        self.n_dataset = len(self.labels)
+        self.batch_size = self.n_samples * self.n_classes
+
+    def create_storage(self, dataloader, model, total_num_classes): # this dataloader should be no shuffled version
+        from utils import predict_batchwise
+        X, *_ = predict_batchwise(model, dataloader)
+
+        # similarity matrix
+        cls_sim_matrix = torch.zeros((len(self.labels_set), len(self.labels_set)))
+        for i in self.labels_set:
+            for j in range(i+1, total_num_classes):
+                indices_i = self.label_to_indices[i]
+                indices_j = self.label_to_indices[j]
+                Xi, Xj = X[indices_i], X[indices_j]
+                sim = self.inner_prod(Xi, Xj)
+                cls_sim_matrix[i, j] = cls_sim_matrix[j, i] = sim
+
+        cls_sim_matrix = cls_sim_matrix / cls_sim_matrix.sum(-1)
+        self.storage = cls_sim_matrix
+
+    def inner_prod(self, X1, X2):
+        X1, X2 = F.normalize(X1, dim=-1), F.normalize(X2, dim=-1)
+        sim = torch.matmul(X1, X2.T)
+        return sim.mean()
+
+    def __iter__(self):
+        self.count = 0
+        while self.count + self.batch_size < self.n_dataset:
+            # random sample a class and the other classes
+            first_class = np.random.choice(self.labels_set, 1, replace=False)[0]
+            rest_classes = np.random.choice(self.labels_set, self.n_classes-1,
+                                            p=self.storage[first_class], replace=False)
+            classes = list(first_class) + list(rest_classes)
+            assert len(classes) == self.n_classes
+
+            indices = []
+            for class_ in classes:
+                indices.extend(self.label_to_indices[class_][
+                               self.used_label_indices_count[class_]:self.used_label_indices_count[
+                                                                         class_] + self.n_samples])
+                self.used_label_indices_count[class_] += self.n_samples
+                if self.used_label_indices_count[class_] + self.n_samples > len(self.label_to_indices[class_]):
+                    np.random.shuffle(self.label_to_indices[class_])
+                    self.used_label_indices_count[class_] = 0
+            yield indices
+            self.count += self.n_classes * self.n_samples
+
+    def __len__(self):
+        return self.n_dataset // self.batch_size
