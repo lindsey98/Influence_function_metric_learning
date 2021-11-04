@@ -254,20 +254,7 @@ class ClsDistSampler(torch.utils.data.sampler.Sampler):
         sim = torch.matmul(X1, X2.T)
         return sim.mean()
 
-    def greedy_class_sampling(self):
-        chosen_cls = np.random.choice(self.labels_set, 1, replace=False)[0] # first class is chosen at random
-        classes = [chosen_cls]
-
-        for _ in range(self.n_classes - 1):
-            prob = self.storage[int(chosen_cls), :].numpy()
-            for j in classes:
-                prob[int(j)] = 0 # ignore classes that already been included
-            prob = ((1. - prob) * (prob != 0))  # sample far away class to have more diverse selection
-            chosen_cls = np.random.choice(self.labels_set, 1, p=prob / prob.sum(), replace=False)[0]
-            classes.append(chosen_cls)
-        return classes
-
-    def coarse_class_sampling(self):
+    def diverse_class_sampling(self):
         chosen_cls = np.random.choice(self.labels_set, 1, replace=False)[0] # first class is chosen at random
 
         prob = self.storage[int(chosen_cls), :].numpy()
@@ -282,7 +269,7 @@ class ClsDistSampler(torch.utils.data.sampler.Sampler):
         self.count = 0
         while self.count + self.batch_size < self.n_dataset:
             # random sample a class and the other classes
-            classes = self.coarse_class_sampling()
+            classes = self.diverse_class_sampling()
 
             indices = []
             for cls in classes:
