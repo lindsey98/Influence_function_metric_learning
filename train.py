@@ -14,7 +14,6 @@ import argparse
 import json
 from tqdm import tqdm
 from torch.utils.data import Dataset, DataLoader
-from deprecated.regularizer.smoothness_regularize import regularizer
 
 os.environ["CUDA_VISIBLE_DEVICES"]="1"
 
@@ -25,17 +24,17 @@ parser.add_argument('--seed', default=0, type=int)
 parser.add_argument('--lr_steps', default=[1000], nargs='+', type=int)
 parser.add_argument('--source_dir', default='', type=str)
 parser.add_argument('--root_dir', default='', type=str)
-parser.add_argument('--eval_nmi', default=False, action='store_true')
 parser.add_argument('--recall', default=[1, 2, 4, 8], nargs='+', type=int)
 parser.add_argument('--init_eval', default=False, action='store_true')
 parser.add_argument('--apex', default=False, action='store_true')
 parser.add_argument('--warmup_k', default=5, type=int)
 
-parser.add_argument('--dataset', default='sop')
+parser.add_argument('--dataset', default='cub')
+parser.add_argument('--eval_nmi', default=True, action='store_true')
 parser.add_argument('--embedding-size', default = 512, type=int, dest = 'sz_embedding')
-parser.add_argument('--config', default='config/sop.json')
-parser.add_argument('--mode', default='trainval', choices=['train', 'trainval', 'test',
-                                                           'testontrain', 'testontrain_super'],
+parser.add_argument('--config', default='config/cub.json')
+parser.add_argument('--mode', default='test', choices=['train', 'trainval', 'test',
+                                                       'testontrain', 'testontrain_super'],
                     help='train with train data or train with trainval')
 parser.add_argument('--batch-size', default = 32, type=int, dest = 'sz_batch')
 parser.add_argument('--no_warmup', default=False, action='store_true')
@@ -101,8 +100,7 @@ if __name__ == '__main__':
     if (args.mode =='trainval' or args.mode == 'test' or args.mode == 'testontrain'):
         if args.dataset == 'sop' or args.dataset == 'sop_h5':
             args.recall = [1, 10, 100, 1000]
-        elif 'cub' in args.dataset or 'cars' in args.dataset: # FIXME: logo2k didnt evaluate NMI cuz it's time-consuming
-            args.eval_nmi = True
+        args.eval_nmi = True
 
     args.nb_epochs = config['nb_epochs']
     args.sz_batch = config['sz_batch']
@@ -420,12 +418,14 @@ if __name__ == '__main__':
     best_val_nmi = 0
     best_val_epoch = 0
     best_val_r1 = 0
+    best_val_mapr = 0
     best_test_nmi = 0
     best_test_r1 = 0
     best_test_r2 = 0
     best_test_r5 = 0
     best_test_r8 = 0
     best_tnmi = 0
+    best_test_mapr = 0
 
     prev_lr = opt.param_groups[0]['lr']
     lr_steps = []
@@ -511,7 +511,7 @@ if __name__ == '__main__':
         if args.mode == 'train':
             with torch.no_grad():
                 logging.info("**Validation...**")
-                nmi, recall = utils.evaluate(model, dl_val, args.eval_nmi, args.recall)
+                nmi, recall, map_R = utils.evaluate(model, dl_val, args.eval_nmi, args.recall)
 
             chmean = (2 * nmi * recall[0]) / (nmi + recall[0])
 
@@ -524,6 +524,7 @@ if __name__ == '__main__':
                 best_val_r2 = recall[1]
                 best_val_r4 = recall[2]
                 best_val_r8 = recall[3]
+                best_val_mapr = map_R
                 best_val_epoch = e
                 best_tnmi = torch.Tensor(tnmi).mean()
 
@@ -536,6 +537,8 @@ if __name__ == '__main__':
                 results['last_R2'] = recall[1]
                 results['last_R4'] = recall[2]
                 results['last_R8'] = recall[3]
+                results['last_mapr'] = map_R
+
 
                 #saving best epoch
                 results['best_NMI'] = best_val_nmi
@@ -544,11 +547,15 @@ if __name__ == '__main__':
                 results['best_R2'] = best_val_r2
                 results['best_R4'] = best_val_r4
                 results['best_R8'] = best_val_r8
+                results['best_mapr'] = best_val_mapr
+
 
             logging.info('Best val epoch: %s', str(best_val_epoch))
             logging.info('Best val hmean: %s', str(best_val_hmean))
             logging.info('Best val nmi: %s', str(best_val_nmi))
             logging.info('Best val r1: %s', str(best_val_r1))
+            logging.info('Best val MAP@R: %s', str(best_val_mapr))
+
             logging.info(str(lr_steps))
 
         if e % 10 == 0 or e == args.nb_epochs-1:
@@ -574,9 +581,9 @@ if __name__ == '__main__':
             logging.info("**Evaluating...**")
             model = load_best_checkpoint(model)
             if 'inshop' in args.dataset:
-                best_test_nmi, (best_test_r1, best_test_r10, best_test_r20, best_test_r30, best_test_r40, best_test_r50) = utils.evaluate_inshop(model, dl_query, dl_gallery)
+                best_test_nmi, (best_test_r1, best_test_r10, best_test_r20, best_test_r30, best_test_r40, best_test_r50), best_mapr = utils.evaluate_inshop(model, dl_query, dl_gallery)
             else:
-                best_test_nmi, (best_test_r1, best_test_r2, best_test_r4, best_test_r8) = utils.evaluate(model, dl_ev, args.eval_nmi, args.recall)
+                best_test_nmi, (best_test_r1, best_test_r2, best_test_r4, best_test_r8), best_mapr = utils.evaluate(model, dl_ev, args.eval_nmi, args.recall)
             #logging.info('Best test r8: %s', str(best_test_r8))
         if 'inshop' in args.dataset:
             results['NMI'] = best_test_nmi
@@ -586,12 +593,16 @@ if __name__ == '__main__':
             results['R30'] = best_test_r30
             results['R40'] = best_test_r40
             results['R50'] = best_test_r50
+            results['MAP@R'] = best_test_mapr
+
         else:
             results['NMI'] = best_test_nmi
             results['R1'] = best_test_r1
             results['R2'] = best_test_r2
             results['R4'] = best_test_r4
             results['R8'] = best_test_r8
+            results['MAP@R'] = best_test_mapr
+
 
     if args.mode == 'train':
         print('lr_steps', lr_steps)
