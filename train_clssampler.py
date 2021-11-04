@@ -31,9 +31,9 @@ parser.add_argument('--init_eval', default=False, action='store_true')
 parser.add_argument('--apex', default=False, action='store_true')
 parser.add_argument('--warmup_k', default=5, type=int)
 
-parser.add_argument('--dataset', default='cub')
+parser.add_argument('--dataset', default='cars')
 parser.add_argument('--embedding-size', default = 512, type=int, dest = 'sz_embedding')
-parser.add_argument('--config', default='config/cub_mixup.json')
+parser.add_argument('--config', default='config/cars_mixup.json')
 parser.add_argument('--mode', default='trainval', choices=['train', 'trainval', 'test',
                                                            'testontrain', 'testontrain_super'],
                     help='train with train data or train with trainval')
@@ -395,12 +395,14 @@ if __name__ == '__main__':
     best_val_nmi = 0
     best_val_epoch = 0
     best_val_r1 = 0
+    best_val_mapr = 0
     best_test_nmi = 0
     best_test_r1 = 0
     best_test_r2 = 0
     best_test_r5 = 0
     best_test_r8 = 0
     best_tnmi = 0
+    best_test_mapr = 0
 
     prev_lr = opt.param_groups[0]['lr']
     lr_steps = []
@@ -476,7 +478,7 @@ if __name__ == '__main__':
         if args.mode == 'train':
             with torch.no_grad():
                 logging.info("**Validation...**")
-                nmi, recall = utils.evaluate(model, dl_val, args.eval_nmi, args.recall)
+                nmi, recall, map_R = utils.evaluate(model, dl_val, args.eval_nmi, args.recall)
 
             chmean = (2 * nmi * recall[0]) / (nmi + recall[0])
 
@@ -489,11 +491,12 @@ if __name__ == '__main__':
                 best_val_r2 = recall[1]
                 best_val_r4 = recall[2]
                 best_val_r8 = recall[3]
+                best_val_mapr = map_R
                 best_val_epoch = e
                 best_tnmi = torch.Tensor(tnmi).mean()
 
             if e == (args.nb_epochs - 1):
-                #saving last epoch
+                # saving last epoch
                 results['last_NMI'] = nmi
                 results['last_hmean'] = chmean
                 results['best_epoch'] = best_val_epoch
@@ -501,20 +504,22 @@ if __name__ == '__main__':
                 results['last_R2'] = recall[1]
                 results['last_R4'] = recall[2]
                 results['last_R8'] = recall[3]
+                results['last_mapr'] = map_R
 
-                #saving best epoch
+                # saving best epoch
                 results['best_NMI'] = best_val_nmi
                 results['best_hmean'] = best_val_hmean
                 results['best_R1'] = best_val_r1
                 results['best_R2'] = best_val_r2
                 results['best_R4'] = best_val_r4
                 results['best_R8'] = best_val_r8
+                results['best_mapr'] = best_val_mapr
 
             logging.info('Best val epoch: %s', str(best_val_epoch))
             logging.info('Best val hmean: %s', str(best_val_hmean))
             logging.info('Best val nmi: %s', str(best_val_nmi))
             logging.info('Best val r1: %s', str(best_val_r1))
-            logging.info(str(lr_steps))
+            logging.info('Best val MAP@R: %s', str(best_val_mapr))
 
         if e % 10 == 0 or e == args.nb_epochs-1:
             save_dir = 'dvi_data_{}_loss{}/ResNet_{}_Model'.format(args.dataset, args.loss_type, str(args.sz_embedding))
@@ -552,9 +557,9 @@ if __name__ == '__main__':
             logging.info("**Evaluating...**")
             model = load_best_checkpoint(model)
             if 'inshop' in args.dataset:
-                best_test_nmi, (best_test_r1, best_test_r10, best_test_r20, best_test_r30, best_test_r40, best_test_r50) = utils.evaluate_inshop(model, dl_query, dl_gallery)
+                best_test_nmi, (best_test_r1, best_test_r10, best_test_r20, best_test_r30, best_test_r40, best_test_r50), best_mapr = utils.evaluate_inshop(model, dl_query, dl_gallery)
             else:
-                best_test_nmi, (best_test_r1, best_test_r2, best_test_r4, best_test_r8) = utils.evaluate(model, dl_ev, args.eval_nmi, args.recall)
+                best_test_nmi, (best_test_r1, best_test_r2, best_test_r4, best_test_r8), best_mapr = utils.evaluate(model, dl_ev, args.eval_nmi, args.recall)
             #logging.info('Best test r8: %s', str(best_test_r8))
         if 'inshop' in args.dataset:
             results['NMI'] = best_test_nmi
@@ -564,12 +569,15 @@ if __name__ == '__main__':
             results['R30'] = best_test_r30
             results['R40'] = best_test_r40
             results['R50'] = best_test_r50
+            results['MAP@R'] = best_test_mapr
+
         else:
             results['NMI'] = best_test_nmi
             results['R1'] = best_test_r1
             results['R2'] = best_test_r2
             results['R4'] = best_test_r4
             results['R8'] = best_test_r8
+            results['MAP@R'] = best_test_mapr
 
     if args.mode == 'train':
         print('lr_steps', lr_steps)
