@@ -12,6 +12,7 @@ _int_classes = int
 import numpy as np
 import numbers
 import torch.nn.functional as F
+import logging
 
 def std_per_channel(images):
     images = torch.stack(images, dim = 0)
@@ -226,47 +227,62 @@ class ClsDistSampler(torch.utils.data.sampler.Sampler):
         self.n_dataset = len(self.labels)
         self.batch_size = self.n_samples * self.n_classes
 
-    def create_storage(self, dataloader, model, total_num_classes): # this dataloader should be no shuffled version
+    def create_storage(self, dataloader, model): # this dataloader should be no shuffled version
+
         from utils import predict_batchwise
         X, *_ = predict_batchwise(model, dataloader)
 
         # similarity matrix
         cls_sim_matrix = torch.zeros((len(self.labels_set), len(self.labels_set)))
         for i in self.labels_set:
-            for j in range(i+1, total_num_classes):
-                indices_i = self.label_to_indices[i]
-                indices_j = self.label_to_indices[j]
-                Xi, Xj = X[indices_i], X[indices_j]
-                sim = self.inner_prod(Xi, Xj)
-                cls_sim_matrix[i, j] = cls_sim_matrix[j, i] = sim
+            for j in self.labels_set:
+                if j > i:
+                    indices_i = self.label_to_indices[i]
+                    indices_j = self.label_to_indices[j]
+                    Xi, Xj = X[indices_i], X[indices_j]
+                    sim = self.inner_prod(Xi, Xj) # get sample pairwise similarity
+                    cls_sim_matrix[int(i), int(j)] = (sim.item() + 1.)
+                    cls_sim_matrix[int(j), int(i)] = (sim.item() + 1.)
 
-        cls_sim_matrix = cls_sim_matrix / cls_sim_matrix.sum(-1)
+        normalization_factor = torch.sum(cls_sim_matrix, dim=1, keepdim=True)
+        cls_sim_matrix = cls_sim_matrix / normalization_factor  # normalize to be between 0 and 1
         self.storage = cls_sim_matrix
+        logging.info('Reinitialize Class Sampler')
 
     def inner_prod(self, X1, X2):
         X1, X2 = F.normalize(X1, dim=-1), F.normalize(X2, dim=-1)
         sim = torch.matmul(X1, X2.T)
         return sim.mean()
 
+    def greedy_class_sampling(self):
+        chosen_cls = np.random.choice(self.labels_set, 1, replace=False)[0] # first class is chosen at random
+        classes = [chosen_cls]
+
+        for _ in range(self.n_classes - 1):
+            prob = self.storage[int(chosen_cls), :].numpy()
+            for j in classes:
+                prob[int(j)] = 0 # ignore classes that already been included
+            prob = ((1. - prob) * (prob != 0))  # sample far away class to have more diverse selection
+            chosen_cls = np.random.choice(self.labels_set, 1, p=prob / prob.sum(), replace=False)[0]
+            classes.append(chosen_cls)
+        return classes
+
     def __iter__(self):
         self.count = 0
         while self.count + self.batch_size < self.n_dataset:
             # random sample a class and the other classes
-            first_class = np.random.choice(self.labels_set, 1, replace=False)[0]
-            rest_classes = np.random.choice(self.labels_set, self.n_classes-1,
-                                            p=self.storage[first_class], replace=False)
-            classes = list(first_class) + list(rest_classes)
-            assert len(classes) == self.n_classes
+            classes = self.greedy_class_sampling()
 
             indices = []
-            for class_ in classes:
-                indices.extend(self.label_to_indices[class_][
-                               self.used_label_indices_count[class_]:self.used_label_indices_count[
-                                                                         class_] + self.n_samples])
-                self.used_label_indices_count[class_] += self.n_samples
-                if self.used_label_indices_count[class_] + self.n_samples > len(self.label_to_indices[class_]):
-                    np.random.shuffle(self.label_to_indices[class_])
-                    self.used_label_indices_count[class_] = 0
+            for cls in classes:
+                indices.extend(self.label_to_indices[cls][self.used_label_indices_count[cls]:\
+                                                            (self.used_label_indices_count[cls] + self.n_samples)])
+                self.used_label_indices_count[cls] += self.n_samples
+
+                if self.used_label_indices_count[cls] + self.n_samples > len(self.label_to_indices[cls]):
+                    np.random.shuffle(self.label_to_indices[cls])
+                    self.used_label_indices_count[cls] = 0
+
             yield indices
             self.count += self.n_classes * self.n_samples
 

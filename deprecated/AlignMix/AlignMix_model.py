@@ -5,14 +5,11 @@ Licensed under the CC BY-NC-SA 4.0 license
 """
 import copy
 
-import torch
 import torch.nn as nn
-import torch.nn.functional as F
-from networks import Generator
-from similarity import pairwise_distance
+from deprecated.AlignMix.networks import Generator
+from deprecated.AlignMix.similarity import pairwise_distance
 import sklearn.preprocessing
-import numpy as np
-from utils import *
+from deprecated.AlignMix.utils import *
 from tqdm import tqdm
 
 def recon_criterion(predict, target):

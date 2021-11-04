@@ -10,14 +10,13 @@ import shutil
 
 from tensorboardX import SummaryWriter
 
-from utils import get_config, make_result_folders
-from utils import write_loss, write_html, write_1images, Timer
+from deprecated.AlignMix.utils import get_config, make_result_folders
+from deprecated.AlignMix.utils import write_loss, Timer
 from trainer import Trainer
 
 import torch.backends.cudnn as cudnn
-import dataset
+from deprecated.AlignMix import dataset
 import json
-from tqdm import tqdm
 
 # Enable auto-tuner to find the best algorithm to use for your hardware.
 cudnn.benchmark = True
@@ -79,7 +78,7 @@ if __name__ == '__main__':
     # TODO classbalanced dataloader
     dataset_config = load_config('dataset/config.json')
     transform_key = 'transform_parameters'
-    train_transform = dataset.utils.make_transform(
+    train_transform = deprecated.AlignMix.dataset.utils.make_transform(
                 **dataset_config[transform_key]
     )
     tr_dataset = dataset.load(
@@ -90,8 +89,8 @@ if __name__ == '__main__':
         transform=train_transform,
     )
     num_class_per_batch = 8
-    batch_sampler = dataset.utils.BalancedBatchSampler(torch.Tensor(tr_dataset.ys), num_class_per_batch,
-                                                       int(opts.batch_size / num_class_per_batch))
+    batch_sampler = deprecated.AlignMix.dataset.utils.BalancedBatchSampler(torch.Tensor(tr_dataset.ys), num_class_per_batch,
+                                                                           int(opts.batch_size / num_class_per_batch))
 
     # training loader
     dl_tr = torch.utils.data.DataLoader(
@@ -106,7 +105,7 @@ if __name__ == '__main__':
                     root=dataset_config['dataset'][opts.dataset]['root'],
                     source=dataset_config['dataset'][opts.dataset]['source'],
                     classes=dataset_config['dataset'][opts.dataset]['classes']['trainval'],
-                    transform=dataset.utils.make_transform(
+                    transform=deprecated.AlignMix.dataset.utils.make_transform(
                         **dataset_config[transform_key],
                         is_train=False
                     )
@@ -122,7 +121,7 @@ if __name__ == '__main__':
             root=dataset_config['dataset'][opts.dataset]['root'],
             source=dataset_config['dataset'][opts.dataset]['source'],
             classes=dataset_config['dataset'][opts.dataset]['classes']['eval'],
-            transform=dataset.utils.make_transform(
+            transform=deprecated.AlignMix.dataset.utils.make_transform(
                 **dataset_config[transform_key],
                 is_train=False
             )
