@@ -6,7 +6,7 @@
         "args": {
             "scale": "3",
             "mixup_method": "str('both')",
-            "sampling_method": "1"
+            "sampling_method": "2"
         }
     },
     "lr_scheduler": {

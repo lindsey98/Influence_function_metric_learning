@@ -39,7 +39,7 @@
                 "weight_decay": "0"
             },
             "proxynca": {
-                "weight_decay": "0", 
+                "weight_decay": "0",
                 "lr": "4e2*6"
             },
             "base": {
