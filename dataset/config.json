@@ -54,8 +54,8 @@
             "root": "str('./mnt/datasets/CARS_196/cars.h5')"
         },
         "sop": {
-            "source": "str('/mnt/datasets/sop')",
-            "root": "str('/mnt/datasets/sop')",
+            "source": "str('./mnt/datasets/sop')",
+            "root": "str('./mnt/datasets/sop')",
             "classes": {
                 "train": "range(0, 5659)",
                 "val": "range(5659, 11318)",
@@ -74,8 +74,8 @@
             "root": "str('/mnt/datasets//sop/sop.h5')"
         },
         "inshop": {
-            "source": "str('/mnt/datasets/inshop')",
-            "root": "str('/mnt/datasets/inshop')",
+            "source": "str('./mnt/datasets/inshop')",
+            "root": "str('./mnt/datasets/inshop')",
             "classes": {
                 "train": "range(0, 1998)",
                 "val": "range(1998, 3997)",

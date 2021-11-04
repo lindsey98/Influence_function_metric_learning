@@ -16,7 +16,7 @@ from tqdm import tqdm
 from torch.utils.data import Dataset, DataLoader
 from deprecated.regularizer.smoothness_regularize import regularizer
 
-os.environ["CUDA_VISIBLE_DEVICES"]="1"
+os.environ["CUDA_VISIBLE_DEVICES"]="0"
 
 parser = argparse.ArgumentParser(description='Training ProxyNCA++')
 parser.add_argument('--epochs', default = 40, type=int, dest = 'nb_epochs')
@@ -31,15 +31,15 @@ parser.add_argument('--init_eval', default=False, action='store_true')
 parser.add_argument('--apex', default=False, action='store_true')
 parser.add_argument('--warmup_k', default=5, type=int)
 
-parser.add_argument('--dataset', default='cars')
+parser.add_argument('--dataset', default='inshop')
 parser.add_argument('--embedding-size', default = 512, type=int, dest = 'sz_embedding')
-parser.add_argument('--config', default='config/cars.json')
+parser.add_argument('--config', default='config/inshop.json')
 parser.add_argument('--mode', default='trainval', choices=['train', 'trainval', 'test',
                                                            'testontrain', 'testontrain_super'],
                     help='train with train data or train with trainval')
 parser.add_argument('--batch-size', default = 32, type=int, dest = 'sz_batch')
 parser.add_argument('--no_warmup', default=False, action='store_true')
-parser.add_argument('--loss-type', default='ProxyNCA_prob_inputmixup', type=str)
+parser.add_argument('--loss-type', default='ProxyNCA_prob_orig', type=str)
 parser.add_argument('--workers', default = 4, type=int, dest = 'nb_workers')
 
 args = parser.parse_args()
@@ -432,7 +432,12 @@ if __name__ == '__main__':
 
     logging.info('Number of training: {}'.format(len(dl_tr.dataset)))
     logging.info('Number of original training: {}'.format(len(dl_tr_noshuffle.dataset)))
-    logging.info('Number of testing: {}'.format(len(dl_ev.dataset)))
+    if 'inshop' not in args.dataset:
+        logging.info('Number of testing: {}'.format(len(dl_ev.dataset)))
+    else:
+        logging.info('Number of query set: {}'.format(len(dl_query.dataset)))
+        logging.info('Number of gallery set: {}'.format(len(dl_gallery.dataset)))
+
 
     '''Warmup training'''
     if not args.no_warmup:
@@ -471,12 +476,11 @@ if __name__ == '__main__':
             x, y = x.cuda(), y.cuda()
             m = model(x)
             loss = criterion(m, indices, y)
-
-            mixed_inputs, targets_a, targets_b, lam, (indices_a, indices_b) = mixup_data(x, y, alpha=1.0, use_cuda=True)
-            mixed_inputs, targets_a, targets_b = map(torch.autograd.Variable, (mixed_inputs, targets_a, targets_b))
-            outputs = model(mixed_inputs)
-            mixed_loss = mixup_criterion(criterion, outputs, targets_a, targets_b, indices_a, indices_b, lam)
-            loss += mixed_loss
+            # mixed_inputs, targets_a, targets_b, lam, (indices_a, indices_b) = mixup_data(x, y, alpha=1.0, use_cuda=True)
+            # mixed_inputs, targets_a, targets_b = map(torch.autograd.Variable, (mixed_inputs, targets_a, targets_b))
+            # outputs = model(mixed_inputs)
+            # mixed_loss = mixup_criterion(criterion, outputs, targets_a, targets_b, indices_a, indices_b, lam)
+            # loss += mixed_loss
 
             opt.zero_grad()
             loss.backward() # backprop
@@ -556,21 +560,8 @@ if __name__ == '__main__':
             torch.save(model.state_dict(), '{}/Epoch_{}/{}_{}_{}_{}_{}.pth'.format(save_dir, e+1, args.dataset,
                                                                                    args.dataset, args.mode,
                                                                                    str(args.sz_embedding), str(args.seed)))
-            # # TODO
-            # if 'ProxyNCA_prob_orig' in args.loss_type or 'ProxyNCA_prob_smooth' in args.loss_type \
-            #     or 'ProxyNCA_prob_mixup' in args.loss_type or 'ProxyNCA_prob_dynamic' in args.loss_type:
             torch.save({"proxies": criterion.proxies},
                        '{}/Epoch_{}/proxy.pth'.format(save_dir, e+1))
-            # elif 'ProxyNCA_prob' in args.loss_type:
-            #     torch.save({"proxies": criterion.proxies, "mask": criterion.mask},
-            #                '{}/Epoch_{}/proxy.pth'.format(save_dir, e+1))
-            # elif 'ProxyNCA_distribution_loss' in args.loss_type:
-            #     torch.save({"proxies": criterion.proxies, "sigma_inv": criterion.sigmas_inv},
-            #                '{}/Epoch_{}/proxy.pth'.format(save_dir, e+1))
-            # elif 'ProxyNCA_dist_mixup' in args.loss_type:
-            #     torch.save({"proxies": criterion.proxies, "sigma_inv": criterion.sigmas_inv},
-            #                '{}/Epoch_{}/proxy.pth'.format(save_dir, e+1))
-
         ######################################################################################
 
         if args.mode == 'trainval':

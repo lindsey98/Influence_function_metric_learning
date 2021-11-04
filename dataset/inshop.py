@@ -49,7 +49,6 @@ class InShop(BaseDatasetMod):
                 l for l in line.split(' ') if l != '' and l != '\n']
             y = int(im_id.split('_')[1])
 
-
             # this is the old code chunk
             self.or_im_paths[eval_type] += [os.path.join(root, im_path)]
             self.or_ys[eval_type] += [y]
