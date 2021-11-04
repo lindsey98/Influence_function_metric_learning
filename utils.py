@@ -189,57 +189,57 @@ def evaluate(model, dataloader, eval_nmi=True, recall_list=[1, 2, 4, 8]):
     return nmi, recall
 
 
-def evaluate_super(model, dataloader,
-                   labeldict,
-                   eval_nmi=True,
-                   recall_list=[1, 2, 4, 8]):
-    '''
-        Evaluation on dataloader
-        :param model: embedding model
-        :param dataloader: dataloader
-        :param eval_nmi: evaluate NMI (Mutual information between clustering on embedding and the gt class labels) or not
-        :param recall_list: recall@K
-    '''
-    eval_time = time.time()
-    nb_classes = dataloader.dataset.nb_classes()
-    reverse_dict = {int(value): int(key) for key in labeldict for value in labeldict[key]}
-    # calculate embeddings with model and get targets
-    X, T, *_ = predict_batchwise(model, dataloader)
-    T = T.detach().cpu().numpy()
-    T = [reverse_dict[t] for t in T]
-    print('done collecting prediction')
-
-    if eval_nmi:
-        # calculate NMI with kmeans clustering
-        nmi = evaluation.calc_normalized_mutual_information(
-            T,
-            evaluation.cluster_by_kmeans(
-                X, nb_classes
-            )
-        )
-    else:
-        nmi = 1
-
-    logging.info("NMI: {:.3f}".format(nmi * 100))
-
-    # get predictions by assigning nearest 8 neighbors with euclidian
-    max_dist = max(recall_list)
-    Y = evaluation.assign_by_euclidian_at_k(X, T, max_dist)
-    Y = torch.from_numpy(Y)
-
-    # calculate recall @ 1, 2, 4, 8
-    recall = []
-    for k in recall_list:
-        r_at_k = evaluation.calc_recall_at_k(T, Y, k)
-        recall.append(r_at_k)
-        logging.info("R@{} : {:.3f}".format(k, 100 * r_at_k))
-
-    chmean = (2 * nmi * recall[0]) / (nmi + recall[0])
-    logging.info("hmean: %s", str(chmean))
-
-    eval_time = time.time() - eval_time
-    logging.info('Eval time: %.2f' % eval_time)
-    return nmi, recall
+# def evaluate_super(model, dataloader,
+#                    labeldict,
+#                    eval_nmi=True,
+#                    recall_list=[1, 2, 4, 8]):
+#     '''
+#         Evaluation on dataloader
+#         :param model: embedding model
+#         :param dataloader: dataloader
+#         :param eval_nmi: evaluate NMI (Mutual information between clustering on embedding and the gt class labels) or not
+#         :param recall_list: recall@K
+#     '''
+#     eval_time = time.time()
+#     nb_classes = dataloader.dataset.nb_classes()
+#     reverse_dict = {int(value): int(key) for key in labeldict for value in labeldict[key]}
+#     # calculate embeddings with model and get targets
+#     X, T, *_ = predict_batchwise(model, dataloader)
+#     T = T.detach().cpu().numpy()
+#     T = [reverse_dict[t] for t in T]
+#     print('done collecting prediction')
+#
+#     if eval_nmi:
+#         # calculate NMI with kmeans clustering
+#         nmi = evaluation.calc_normalized_mutual_information(
+#             T,
+#             evaluation.cluster_by_kmeans(
+#                 X, nb_classes
+#             )
+#         )
+#     else:
+#         nmi = 1
+#
+#     logging.info("NMI: {:.3f}".format(nmi * 100))
+#
+#     # get predictions by assigning nearest 8 neighbors with euclidian
+#     max_dist = max(recall_list)
+#     Y = evaluation.assign_by_euclidian_at_k(X, T, max_dist)
+#     Y = torch.from_numpy(Y)
+#
+#     # calculate recall @ 1, 2, 4, 8
+#     recall = []
+#     for k in recall_list:
+#         r_at_k = evaluation.calc_recall_at_k(T, Y, k)
+#         recall.append(r_at_k)
+#         logging.info("R@{} : {:.3f}".format(k, 100 * r_at_k))
+#
+#     chmean = (2 * nmi * recall[0]) / (nmi + recall[0])
+#     logging.info("hmean: %s", str(chmean))
+#
+#     eval_time = time.time() - eval_time
+#     logging.info('Eval time: %.2f' % eval_time)
+#     return nmi, recall
 
 def evaluate_inshop(model, dl_query, dl_gallery,
         K = [1, 10, 20, 30, 40, 50], with_nmi = False):
@@ -292,58 +292,58 @@ def evaluate_inshop(model, dl_query, dl_gallery,
     return nmi, recall
 
 
-@torch.no_grad()
-def inner_product_sim(X: torch.Tensor, P: torch.nn.Parameter, T: torch.Tensor,
-                      mask: torch.Tensor, nb_classes:int, max_proxy_per_class:int):
-    '''
-        get maximum inner product similarity to ground-truth proxy
-        :param X: embedding torch.Tensor of shape (N, sz_embed)
-        :param P: learnt proxy torch.Tensor of shape (C * self.max_proxy_per_class, sz_embed)
-        :param T: one-hot ground-truth class label torch.Tensor of shape (N, C)
-        :param mask: mask on activated proxies
-        :param nb_classes: number of classes
-        :param max_proxy_per_class: maximum proxies per class
-        :return L_IP: Inner product similarity to the closest gt-class proxies
-        :return cls_labels: gt-class labels
-    '''
-    X_copy, P_copy, T_copy = X.clone(), P.clone(), T.clone()
+# @torch.no_grad()
+# def inner_product_sim(X: torch.Tensor, P: torch.nn.Parameter, T: torch.Tensor,
+#                       mask: torch.Tensor, nb_classes:int, max_proxy_per_class:int):
+#     '''
+#         get maximum inner product similarity to ground-truth proxy
+#         :param X: embedding torch.Tensor of shape (N, sz_embed)
+#         :param P: learnt proxy torch.Tensor of shape (C * self.max_proxy_per_class, sz_embed)
+#         :param T: one-hot ground-truth class label torch.Tensor of shape (N, C)
+#         :param mask: mask on activated proxies
+#         :param nb_classes: number of classes
+#         :param max_proxy_per_class: maximum proxies per class
+#         :return L_IP: Inner product similarity to the closest gt-class proxies
+#         :return cls_labels: gt-class labels
+#     '''
+#     X_copy, P_copy, T_copy = X.clone(), P.clone(), T.clone()
+#
+#     X_copy = F.normalize(X_copy, dim=-1, p=2).to(P_copy.device)
+#     P_copy = F.normalize(P_copy, dim=-1, p=2)
+#     mask = mask.view(nb_classes * max_proxy_per_class, -1).to(P_copy.device)
+#     masked_P = P_copy * mask # mask unactivated proxies
+#     IP = torch.mm(X_copy, masked_P.T)  # inner product between X and P of shape (N, C*maxP)
+#     IP_reshape = IP.reshape((X_copy.shape[0], nb_classes, max_proxy_per_class))  # reshape to (N, C, maxP)
+#
+#     IP_gt = IP_reshape[torch.arange(X_copy.shape[0]), T_copy.long(), :]  # get similarities to gt-class's proxies, of shape (N, maxP)
+#     rescale_IP_gt = (IP_gt+1)*(IP_gt!=0) # IP_gt range from [-1, 1]
+#     _, max_indices = torch.max(rescale_IP_gt, dim=-1)  # get maximum similarity to gt-class's proxies, of shape (N,)
+#     L_IP = IP_gt[torch.arange(IP_gt.shape[0]), max_indices]
+#
+#     return L_IP.detach().cpu().numpy(), T_copy.detach().cpu().numpy()
 
-    X_copy = F.normalize(X_copy, dim=-1, p=2).to(P_copy.device)
-    P_copy = F.normalize(P_copy, dim=-1, p=2)
-    mask = mask.view(nb_classes * max_proxy_per_class, -1).to(P_copy.device)
-    masked_P = P_copy * mask # mask unactivated proxies
-    IP = torch.mm(X_copy, masked_P.T)  # inner product between X and P of shape (N, C*maxP)
-    IP_reshape = IP.reshape((X_copy.shape[0], nb_classes, max_proxy_per_class))  # reshape to (N, C, maxP)
-
-    IP_gt = IP_reshape[torch.arange(X_copy.shape[0]), T_copy.long(), :]  # get similarities to gt-class's proxies, of shape (N, maxP)
-    rescale_IP_gt = (IP_gt+1)*(IP_gt!=0) # IP_gt range from [-1, 1]
-    _, max_indices = torch.max(rescale_IP_gt, dim=-1)  # get maximum similarity to gt-class's proxies, of shape (N,)
-    L_IP = IP_gt[torch.arange(IP_gt.shape[0]), max_indices]
-
-    return L_IP.detach().cpu().numpy(), T_copy.detach().cpu().numpy()
-
-@torch.no_grad()
-def get_centers(dl_tr, model, sz_embedding):
-    '''
-        Compute centroid for each class
-        :param dl_tr: data loader
-        :param model: embedding model
-        :param sz_embedding: size of embedding
-        :return c_centers: class centers of shape (C, sz_embedding)
-    '''
-    c_centers = torch.zeros(dl_tr.dataset.nb_classes(), sz_embedding).cuda()
-    n_centers = torch.zeros(dl_tr.dataset.nb_classes()).cuda()
-    for ct, (x, y, _) in enumerate(dl_tr):
-        with torch.no_grad():
-            m = model(x.cuda())
-        for ix in range(m.size(0)):
-            c_centers[y] += m[ix]
-            n_centers[y] += 1
-
-    for ix in range(n_centers.size(0)):
-        c_centers[ix] = c_centers[ix] / n_centers[ix]
-
-    return c_centers
+# @torch.no_grad()
+# def get_centers(dl_tr, model, sz_embedding):
+#     '''
+#         Compute centroid for each class
+#         :param dl_tr: data loader
+#         :param model: embedding model
+#         :param sz_embedding: size of embedding
+#         :return c_centers: class centers of shape (C, sz_embedding)
+#     '''
+#     c_centers = torch.zeros(dl_tr.dataset.nb_classes(), sz_embedding).cuda()
+#     n_centers = torch.zeros(dl_tr.dataset.nb_classes()).cuda()
+#     for ct, (x, y, _) in enumerate(dl_tr):
+#         with torch.no_grad():
+#             m = model(x.cuda())
+#         for ix in range(m.size(0)):
+#             c_centers[y] += m[ix]
+#             n_centers[y] += 1
+#
+#     for ix in range(n_centers.size(0)):
+#         c_centers[ix] = c_centers[ix] / n_centers[ix]
+#
+#     return c_centers
 
 
 def batch_lbl_stats(y):
@@ -361,4 +361,5 @@ def batch_lbl_stats(y):
                 kk_c[kx] += 1
 
     return kk_c
+
 

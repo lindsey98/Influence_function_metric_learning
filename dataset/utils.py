@@ -267,11 +267,22 @@ class ClsDistSampler(torch.utils.data.sampler.Sampler):
             classes.append(chosen_cls)
         return classes
 
+    def coarse_class_sampling(self):
+        chosen_cls = np.random.choice(self.labels_set, 1, replace=False)[0] # first class is chosen at random
+
+        prob = self.storage[int(chosen_cls), :].numpy()
+        prob = ((1. - prob) * (prob != 0))  # sample far away class to have more diverse selection
+        rest_classes = np.random.choice(self.labels_set, self.n_classes-1,
+                                        p=prob / prob.sum(), replace=False)
+        classes = [chosen_cls] + rest_classes.tolist()
+
+        return classes
+
     def __iter__(self):
         self.count = 0
         while self.count + self.batch_size < self.n_dataset:
             # random sample a class and the other classes
-            classes = self.greedy_class_sampling()
+            classes = self.coarse_class_sampling()
 
             indices = []
             for cls in classes:

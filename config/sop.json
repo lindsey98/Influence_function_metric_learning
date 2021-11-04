@@ -2,7 +2,7 @@
     "name": "str('example')",
     "gpu_id": "int(0)",
     "criterion": {
-        "type": "loss.ProxyNCA_prob",
+        "type": "loss.ProxyNCA_prob_orig",
         "args": {
             "scale": "3"
         }
@@ -19,10 +19,10 @@
         
     },
    
-    "nb_epochs": "40*2",
-    "sz_batch": "32*6",
-    "sz_embedding": "2048",
-    "num_class_per_batch": "32*2",
+    "nb_epochs": "40",
+    "sz_batch": "32",
+    "sz_embedding": "512",
+    "num_class_per_batch": "8",
     "num_gradcum": "1",
     "is_random_sampler":"False",
     "transform_key": "str('transform_parameters')",
@@ -40,10 +40,10 @@
             },
             "proxynca": {
                 "weight_decay": "0", 
-                "lr": "4e1*6"
+                "lr": "4e2"
             },
             "base": {
-                "lr": "4e-3*6",
+                "lr": "4e-3",
                 "eps": "1.0"
             }
         }
