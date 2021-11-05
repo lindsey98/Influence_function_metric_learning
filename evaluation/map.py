@@ -35,28 +35,7 @@ def to_device(x, tensor=None, device=None, dtype=None):
 
 def add_to_index_and_search(index, reference_embeddings, test_embeddings, k):
     index.add(reference_embeddings)
-    return index.search(test_embeddings, k)
-
-def try_gpu(cpu_index, reference_embeddings, test_embeddings, k):
-    # https://github.com/facebookresearch/faiss/blob/master/faiss/gpu/utils/DeviceDefs.cuh
-    gpu_index = None
-    gpus_are_available = faiss.get_num_gpus() > 0
-    if gpus_are_available:
-        max_k_for_gpu = 1024 if float(torch.version.cuda) < 9.5 else 2048
-        if k <= max_k_for_gpu:
-            gpu_index = faiss.index_cpu_to_all_gpus(cpu_index)
-    try:
-        return add_to_index_and_search(
-            gpu_index, reference_embeddings, test_embeddings, k
-        )
-    except (AttributeError, RuntimeError) as e:
-        if gpus_are_available:
-            logging.warning(
-                f"Using CPU for k-nn search because k = {k} > {max_k_for_gpu}, which is the maximum allowable on GPU."
-            )
-        return add_to_index_and_search(
-            cpu_index, reference_embeddings, test_embeddings, k
-)
+    return index.search(test_embeddings, k)[1]
 
 def maybe_get_avg_of_avgs(accuracy_per_sample, sample_labels, avg_of_avgs):
     if avg_of_avgs:
@@ -203,10 +182,9 @@ def get_knn(
     d = reference_embeddings.shape[1]
     logging.info("running k-nn with k=%d" % k)
     logging.info("embedding dimensionality is %d" % d)
-    cpu_index = faiss.IndexFlatL2(d)
-    distances, indices = try_gpu(cpu_index, reference_embeddings, test_embeddings, k)
-    distances = to_device(torch.from_numpy(distances), device=device)
+    cpu_index = faiss.IndexFlatIP(d)
+    indices = add_to_index_and_search(cpu_index, reference_embeddings, test_embeddings, k.item())
     indices = to_device(torch.from_numpy(indices), device=device)
     if embeddings_come_from_same_source:
-        return indices[:, 1:], distances[:, 1:]
-    return indices, distances
+        return indices[:, 1:]
+    return indices

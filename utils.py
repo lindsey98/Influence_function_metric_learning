@@ -168,7 +168,7 @@ def evaluate(model, dataloader, eval_nmi=True, recall_list=[1, 2, 4, 8]):
     else:
         nmi = 1
 
-    logging.info("NMI: {:.3f}".format(nmi * 100))
+    logging.info("NMI: {:.3f}".format(nmi))
 
     # Recall get predictions by assigning nearest 8 neighbors with euclidian
     max_dist = max(recall_list)
@@ -187,10 +187,11 @@ def evaluate(model, dataloader, eval_nmi=True, recall_list=[1, 2, 4, 8]):
 
     # MAP@R
     label_counts = get_label_match_counts(T, T) # get R
-    num_k = determine_k(
-        num_reference_embeddings=len(T), embeddings_come_from_same_source=True
-    ) # equal to num_reference-1 (deduct itself)
-    knn_indices, knn_distances = get_knn(
+    # num_k = determine_k(
+    #     num_reference_embeddings=len(T), embeddings_come_from_same_source=True
+    # ) # equal to num_reference-1 (deduct itself)
+    num_k = max([count[1] for count in label_counts])
+    knn_indices = get_knn(
         X, X, num_k, True
     )
     knn_labels = T[knn_indices] # get KNN indicies

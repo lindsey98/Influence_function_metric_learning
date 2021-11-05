@@ -260,7 +260,7 @@ class ClsDistSampler(torch.utils.data.sampler.Sampler):
         prob = self.storage[int(chosen_cls), :].numpy()
         prob = ((1. - prob) * (prob != 0))  # sample far away class to have more diverse selection
         rest_classes = np.random.choice(self.labels_set, self.n_classes-1,
-                                        p=prob / prob.sum(), replace=False)
+                                        p=(prob + 1e-8) / (prob.sum() + 1e-8), replace=False)
         classes = [chosen_cls] + rest_classes.tolist()
 
         return classes

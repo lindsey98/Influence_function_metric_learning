@@ -14,7 +14,6 @@ import argparse
 import json
 from tqdm import tqdm
 from torch.utils.data import Dataset, DataLoader
-from deprecated.regularizer.smoothness_regularize import regularizer
 
 os.environ["CUDA_VISIBLE_DEVICES"]="0"
 
@@ -31,9 +30,9 @@ parser.add_argument('--init_eval', default=False, action='store_true')
 parser.add_argument('--apex', default=False, action='store_true')
 parser.add_argument('--warmup_k', default=5, type=int)
 
-parser.add_argument('--dataset', default='cars')
+parser.add_argument('--dataset', default='logo2k')
 parser.add_argument('--embedding-size', default = 512, type=int, dest = 'sz_embedding')
-parser.add_argument('--config', default='config/cars_mixup.json')
+parser.add_argument('--config', default='config/logo2k_mixup.json')
 parser.add_argument('--mode', default='trainval', choices=['train', 'trainval', 'test',
                                                            'testontrain', 'testontrain_super'],
                     help='train with train data or train with trainval')
