@@ -186,7 +186,7 @@ class ProxyNCA_prob_mixup(torch.nn.Module):
             for j in range(D2T_normalize.size()[1]):
                 for _ in range(pairs_per_cls):
                     prob_vec = D2T_normalize[:, j].detach().cpu().numpy()
-                    prob_vec = ((1.-prob_vec) * (prob_vec != 0)) / np.sum((1.-prob_vec) * (prob_vec != 0))
+                    prob_vec = (((1.-prob_vec) * (prob_vec != 0)) + 1e-8) / (np.sum((1.-prob_vec) * (prob_vec != 0)) + 1e-8)
                     pair_ind = np.random.choice(D2T_normalize.size()[0], 2,
                                                 p=prob_vec, # inverse probability
                                                 replace=False).tolist()

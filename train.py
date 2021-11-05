@@ -38,7 +38,7 @@ parser.add_argument('--mode', default='trainval', choices=['train', 'trainval', 
                     help='train with train data or train with trainval')
 parser.add_argument('--batch-size', default = 32, type=int, dest = 'sz_batch')
 parser.add_argument('--no_warmup', default=False, action='store_true')
-parser.add_argument('--loss-type', default='ProxyNCA_prob_mixup_both_random', type=str)
+parser.add_argument('--loss-type', default='ProxyNCA_prob_mixup_both_weighted', type=str)
 parser.add_argument('--workers', default = 4, type=int, dest = 'nb_workers')
 
 args = parser.parse_args()
