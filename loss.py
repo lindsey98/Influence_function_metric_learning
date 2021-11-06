@@ -163,7 +163,7 @@ class ProxyNCA_prob_mixup(torch.nn.Module):
                      torch.clamp(IP[index1s, C2], min=-1., max=1.) # (n_samples, )
         X2P1, X2P2 = torch.clamp(IP[index2s, C1], min=-1., max=1.), \
                      torch.clamp(IP[index2s, C2], min=-1., max=1.)
-        lambdas = (X2P2-X2P1) / ((X2P2-X2P1) + (X1P1-X1P2))
+        lambdas = (X2P2-X2P1) / ((X2P2-X2P1) + (X1P1-X1P2)) # lambda_best
         noises = torch.from_numpy((np.random.uniform(size=len(index1s))*0.4 - 0.2)).to(lambdas.device)
         lambdas = lambdas + noises # add small random noises ~ U(-0.2, 0.2)
         lambdas = torch.clamp(lambdas, min=0.2, max=0.8) # clamp
@@ -260,17 +260,18 @@ class ProxyNCA_prob_mixup(torch.nn.Module):
         # We synthesize proxies as well as samples, where the new proxies are treated as new classes
         # get some inter-class pairs to mixup
         index1s = torch.arange(X.size()[0])
-        index2s = torch.roll(index1s, -self.shifts)  # shifts should be equal to n_samples_per_cls in your balanced sampler
+        index2s = torch.roll(index1s, -self.shifts)  # shifts should be equal to n_samples_per_cls in your balanced sampler?
         index1s, index2s = index1s.long(), index2s.long()
         cls_index1s, cls_index2s = T[index1s], T[index2s]
+        _, counts = torch.unique_consecutive(cls_index1s, return_counts=True)
 
+        # get mixup coefficients
         if self.sampling_method == 1:
             # uncertainty-based
             lambdas_diffcls = self.uncertainty_lambdas(index1s, index2s, T, IP).unsqueeze(-1).repeat(1, self.sz_embed)
         elif self.sampling_method == 2:
             # random
             lambdas_diffcls = self.random_lambdas() * torch.ones((len(index1s), self.sz_embed))
-
         lambdas_diffcls = torch.stack((lambdas_diffcls, 1.-lambdas_diffcls), dim=-1).to(X.device)  # (n_samples, sz_embed, 2)
 
         # virtual samples
@@ -285,13 +286,16 @@ class ProxyNCA_prob_mixup(torch.nn.Module):
             virtual_proxies = torch.sum(P_pairs * lambdas_diffcls, dim=-1)  # (n_samples, sz_embed)
 
         virtual_proxies = F.normalize(virtual_proxies, p=2, dim=-1)  # (n_samples, sz_embed)
-        virtual_proxies = virtual_proxies[torch.arange(0, len(virtual_proxies), self.shifts), :]  # remove repeated entries
+        virtual_proxies = virtual_proxies[torch.cumsum(counts, dim=0) - counts[0], :]  # remove repeated entries
 
         #  virtual class labels (give new labels)
-        virtual_classes = torch.arange(self.nb_classes, self.nb_classes + virtual_proxies.size()[0]).to(virtual_proxies.device)
-        virtual_classes = torch.repeat_interleave(virtual_classes, self.shifts)  # repeat
+        virtual_classes = torch.arange(self.nb_classes,
+                                       self.nb_classes + virtual_proxies.size()[0]).to(virtual_proxies.device)
+        virtual_classes = virtual_classes.unsqueeze(-1)
+        virtual_classes = torch.repeat_interleave(virtual_classes, counts, dim=0)  # repeat
+        virtual_classes = virtual_classes.squeeze(-1)
 
-        assert virtual_classes.size()[0] == virtual_samples.size()[0]
+        assert len(virtual_classes) == len(virtual_samples)
         return virtual_classes, virtual_samples, virtual_proxies
 
     def forward(self, X, indices, T):

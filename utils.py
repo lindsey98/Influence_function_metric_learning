@@ -260,7 +260,7 @@ def evaluate_inshop(model, dl_query, dl_gallery,
     #     num_reference_embeddings=len(T_gallery), embeddings_come_from_same_source=False
     # ) # equal to num_reference
     num_k = max([count[1] for count in label_counts])
-    knn_indices, knn_distances = get_knn(
+    knn_indices = get_knn(
         X_gallery, X_query, num_k, True
     )
     knn_labels = T_gallery[knn_indices] # get KNN indicies
