@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 
 from similarity import pairwise_distance
@@ -7,6 +8,7 @@ from typing import Union
 import sklearn.preprocessing
 from deprecated.hard_sample_detection.gmm import *
 from itertools import combinations
+import logging
 
 def masked_softmax(A, dim, t=1.0):
     '''
@@ -149,11 +151,8 @@ class ProxyNCA_prob_mixup(torch.nn.Module):
         assert self.sampling_method in [1, 2] # 1 is weighted sampling, 2 is random sampling
 
     @staticmethod
-    def random_lambdas(n_samples, alpha=1.0):
-        lambdas = []
-        for _ in range(n_samples):
-            lambdas.append(np.random.beta(alpha, alpha)) # alpha=beta=1 is uniform distribution
-        return torch.tensor(lambdas)
+    def random_lambdas(alpha=1.0):
+        return np.random.beta(alpha, alpha)
 
     @staticmethod
     def uncertainty_lambdas(index1s, index2s, T, IP):
@@ -187,8 +186,15 @@ class ProxyNCA_prob_mixup(torch.nn.Module):
             for j in range(D2T_normalize.size()[1]):
                 for _ in range(pairs_per_cls):
                     prob_vec = D2T_normalize[:, j].detach().cpu().numpy()
-                    prob_vec = (1.- prob_vec) * (prob_vec != 0)
-                    pair_ind = np.random.choice(D2T_normalize.size()[0], 2,
+                    index_pool = np.where(prob_vec != 0)[0]
+                    prob_vec = (1.- prob_vec[index_pool])
+
+                    if np.sum(prob_vec == 0) == len(prob_vec):
+                        logging.info('All probabilities are zeros')
+                        pair_ind = np.random.choice(index_pool, 2,
+                                                    replace=False).tolist()
+                    else:
+                        pair_ind = np.random.choice(index_pool, 2,
                                                 p=(prob_vec + 1e-8) / (prob_vec.sum() + 1e-8), # inverse probability
                                                 replace=False).tolist()
                     mixup_ind_samecls = torch.cat((mixup_ind_samecls, torch.tensor([pair_ind]).T), dim=-1)
@@ -206,11 +212,9 @@ class ProxyNCA_prob_mixup(torch.nn.Module):
 
         selectedX_samecls = torch.stack([X[index, :] for index in mixup_ind_samecls],
                                         dim=-1)  # of shape (C_sub*pairs_percls, sz_embed, 2)
-        # sample lambda coefficients (different lambda for different samples)
-        lambda_samecls = self.random_lambdas(selectedX_samecls.size()[0])
-        lambda_samecls = lambda_samecls.unsqueeze(-1).repeat(1, self.sz_embed)
-        lambda_samecls = torch.stack((lambda_samecls, 1.-lambda_samecls), dim=-1).to(
-            selectedX_samecls.device)  # (C_sub*pairs_percls, sz_embed, 2)
+        # sample lambda coefficients
+        lambda_samecls = self.random_lambdas() * torch.ones((len(selectedX_samecls), self.sz_embed))
+        lambda_samecls = torch.stack((lambda_samecls, 1.-lambda_samecls), dim=-1).to(selectedX_samecls.device)  # (C_sub*pairs_percls, sz_embed, 2)
 
         # perform MixUp
         virtual_samples = torch.sum(selectedX_samecls * lambda_samecls, dim=-1)  # (C_sub*pairs_percls, sz_embed)
@@ -231,7 +235,7 @@ class ProxyNCA_prob_mixup(torch.nn.Module):
             lambdas_diffcls = self.uncertainty_lambdas(index1s, index2s, T, IP).unsqueeze(-1).repeat(1, self.sz_embed)
         elif self.sampling_method == 2:
             # pure random sampling
-            lambdas_diffcls = self.random_lambdas(len(index1s)).unsqueeze(-1).repeat(1, self.sz_embed)
+            lambdas_diffcls = self.random_lambdas() * torch.ones((len(index1s), self.sz_embed))
 
         # virtual samples
         selectedX_diffcls = torch.stack([X[index1s, :], X[index2s, :]], dim=-1)  # of shape (n_samples, sz_embed, 2)
@@ -257,28 +261,36 @@ class ProxyNCA_prob_mixup(torch.nn.Module):
         index1s, index2s = index1s.long(), index2s.long()
         cls_index1s, cls_index2s = T[index1s], T[index2s]
 
-        # virtual proxies with mix ratio 0.5
-        P_pairs = torch.stack((P[cls_index1s, :], P[cls_index2s, :]), dim=-1)  # (n_samples, sz_embed, 2)
-        virtual_proxies = torch.sum(P_pairs * 0.5, dim=-1)  # (n_samples, sz_embed)
-        virtual_proxies = F.normalize(virtual_proxies, p=2, dim=-1)  # (n_samples, sz_embed)
-        virtual_proxies = virtual_proxies[torch.arange(0, len(virtual_proxies), shifts), :]  # remove repeated entries
-
-        #  virtual class labels (give new labels)
-        virtual_classes = torch.arange(self.nb_classes, self.nb_classes + virtual_proxies.size()[0]).to(virtual_proxies.device)
-        virtual_classes = torch.repeat_interleave(virtual_classes, shifts)  # repeat
-
         if self.sampling_method == 1:
             # uncertainty-based
             lambdas_diffcls = self.uncertainty_lambdas(index1s, index2s, T, IP).unsqueeze(-1).repeat(1, self.sz_embed)
         elif self.sampling_method == 2:
             # random
-            lambdas_diffcls = self.random_lambdas(len(index1s)).unsqueeze(-1).repeat(1, self.sz_embed)
+            lambdas_diffcls = self.random_lambdas() * torch.ones((len(index1s), self.sz_embed))
+
         lambdas_diffcls = torch.stack((lambdas_diffcls, 1.-lambdas_diffcls), dim=-1).to(X.device)  # (n_samples, sz_embed, 2)
 
         # virtual samples
         selectedX_diffcls = torch.stack([X[index1s, :], X[index2s, :]], dim=-1)  # of shape (n_samples, sz_embed, 2)
         virtual_samples = torch.sum(selectedX_diffcls * lambdas_diffcls, dim=-1)  # (n_samples, sz_embed)
         virtual_samples = F.normalize(virtual_samples, p=2, dim=-1)
+
+        if self.sampling_method == 1:
+            # virtual proxies with mix ratio 0.5
+            P_pairs = torch.stack((P[cls_index1s, :], P[cls_index2s, :]), dim=-1)  # (n_samples, sz_embed, 2)
+            virtual_proxies = torch.sum(P_pairs * 0.5, dim=-1)  # (n_samples, sz_embed)
+            virtual_proxies = F.normalize(virtual_proxies, p=2, dim=-1)  # (n_samples, sz_embed)
+            virtual_proxies = virtual_proxies[torch.arange(0, len(virtual_proxies), shifts), :]  # remove repeated entries
+
+        elif self.sampling_method == 2:
+            P_pairs = torch.stack((P[cls_index1s, :], P[cls_index2s, :]), dim=-1)  # (n_samples, sz_embed, 2)
+            virtual_proxies = torch.sum(P_pairs * lambdas_diffcls, dim=-1)  # (n_samples, sz_embed)
+            virtual_proxies = F.normalize(virtual_proxies, p=2, dim=-1)  # (n_samples, sz_embed)
+            virtual_proxies = virtual_proxies[torch.arange(0, len(virtual_proxies), shifts),:]  # remove repeated entries
+
+        #  virtual class labels (give new labels)
+        virtual_classes = torch.arange(self.nb_classes, self.nb_classes + virtual_proxies.size()[0]).to(virtual_proxies.device)
+        virtual_classes = torch.repeat_interleave(virtual_classes, shifts)  # repeat
 
         assert virtual_classes.size()[0] == virtual_samples.size()[0]
         return virtual_classes, virtual_samples, virtual_proxies

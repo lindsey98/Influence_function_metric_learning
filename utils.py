@@ -261,28 +261,28 @@ def evaluate(model, dataloader, eval_nmi=True, recall_list=[1, 2, 4, 8]):
 #     return nmi, recall
 
 def evaluate_inshop(model, dl_query, dl_gallery,
-        K = [1, 10, 20, 30, 40, 50], with_nmi = False):
+                    K = [1, 10, 20, 30, 40, 50], with_nmi = True):
     '''
         Evaluate on Inshop dataset
     '''
 
     # calculate embeddings with model and get targets
-    X_query, T_query, *_ = predict_batchwise_inshop(
+    X_query, T_query, *_ = predict_batchwise(
         model, dl_query)
-    X_gallery, T_gallery, *_ = predict_batchwise_inshop(
+    X_gallery, T_gallery, *_ = predict_batchwise(
         model, dl_gallery)
 
     nb_classes = dl_query.dataset.nb_classes()
 
-    assert nb_classes == len(set(T_query))
+    assert nb_classes == len(set(T_query.detach().cpu().numpy()))
 
     # calculate full similarity matrix, choose only first `len(X_query)` rows
     # and only last columns corresponding to the column
     T_eval = torch.cat(
-        [torch.from_numpy(T_query), torch.from_numpy(T_gallery)])
+        [T_query, T_gallery])
     X_eval = torch.cat(
-        [torch.from_numpy(X_query), torch.from_numpy(X_gallery)])
-    D = similarity.pairwise_distance(X_eval)[:len(X_query), len(X_query):]
+        [X_query, X_gallery])
+    D = similarity.pairwise_distance(X_eval)[:X_query.size()[0], X_query.size()[0]:]
 
     # get top k labels with smallest (`largest = False`) distance
     Y = T_gallery[D.topk(k = max(K), dim = 1, largest = False)[1]]
