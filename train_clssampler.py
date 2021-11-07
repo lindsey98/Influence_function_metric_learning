@@ -30,15 +30,15 @@ parser.add_argument('--init_eval', default=False, action='store_true')
 parser.add_argument('--apex', default=False, action='store_true')
 parser.add_argument('--warmup_k', default=5, type=int)
 
-parser.add_argument('--dataset', default='logo2k')
+parser.add_argument('--dataset', default='inshop')
 parser.add_argument('--embedding-size', default = 512, type=int, dest = 'sz_embedding')
-parser.add_argument('--config', default='config/logo2k_mixup.json')
+parser.add_argument('--config', default='config/inshop_mixup.json')
 parser.add_argument('--mode', default='trainval', choices=['train', 'trainval', 'test',
                                                            'testontrain', 'testontrain_super'],
                     help='train with train data or train with trainval')
 parser.add_argument('--batch-size', default = 32, type=int, dest = 'sz_batch')
 parser.add_argument('--no_warmup', default=False, action='store_true')
-parser.add_argument('--loss-type', default='ProxyNCA_prob_mixup_both_weighted_with_classsamplerdiverse', type=str)
+parser.add_argument('--loss-type', default='ProxyNCA_prob_mixup_interproxy_weighted_with_classsamplerdiverse', type=str)
 parser.add_argument('--workers', default = 2, type=int, dest = 'nb_workers')
 
 args = parser.parse_args()
@@ -408,7 +408,7 @@ if __name__ == '__main__':
 
     logging.info('Number of training: {}'.format(len(dl_tr.dataset)))
     logging.info('Number of original training: {}'.format(len(dl_tr_noshuffle.dataset)))
-    logging.info('Number of testing: {}'.format(len(dl_ev.dataset)))
+    # logging.info('Number of testing: {}'.format(len(dl_ev.dataset)))
 
     '''Warmup training'''
     if not args.no_warmup:

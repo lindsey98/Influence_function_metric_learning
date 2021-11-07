@@ -275,6 +275,20 @@ def evaluate_inshop(model, dl_query, dl_gallery,
 
     return nmi, recall, map_R
 
+def get_svd(model, dl, topk_singular=5, return_avg=False):
+    X, T, *_ = predict_batchwise(model, dl) # get embedding
+    singular_values = torch.tensor([])
+    for cls in range(dl.dataset.nb_classes()):
+        indices = T == cls
+        X_cls = X[indices, :] # class-specific embedding
+        u, s, v = torch.linalg.svd(X_cls) # compute singular value, lower value implies lower data variance
+        s = s[:topk_singular] # only take top 5 singular values
+        singular_values = torch.cat((singular_values, s.unsqueeze(0)), dim=0)
+
+    if return_avg: # average over different classes or n
+        singular_values = torch.mean(singular_values, dim=0)
+    return singular_values
+
 
 def batch_lbl_stats(y):
     '''
