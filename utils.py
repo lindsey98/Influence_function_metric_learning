@@ -15,6 +15,7 @@ from tqdm import tqdm
 import loss
 import networks
 from evaluation.map import *
+from similarity import pairwise_distance
 # __repr__ may contain `\n`, json replaces it by `\\n` + indent
 json_dumps = lambda **kwargs: json.dumps(
     **kwargs
@@ -289,6 +290,13 @@ def get_svd(model, dl, topk_singular=5, return_avg=False):
         singular_values = torch.mean(singular_values, dim=0)
     return singular_values
 
+
+def inter_proxy_dist(proxies):
+    logging.info('Proxies of shape ', proxies.shape)
+    IP = pairwise_distance(proxies, squared=True)[1]
+    upper_triu = torch.triu(IP, diagonal=1)
+    reduced_mean = upper_triu.mean()
+    return reduced_mean
 
 def batch_lbl_stats(y):
     '''
