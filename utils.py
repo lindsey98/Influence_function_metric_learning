@@ -292,7 +292,7 @@ def get_svd(model, dl, topk_singular=5, return_avg=False):
 
 
 def inter_proxy_dist(proxies):
-    logging.info('Proxies of shape ', proxies.shape)
+    # logging.info('Proxies of shape ', proxies.shape)
     IP = pairwise_distance(proxies, squared=True)[1]
     upper_triu = torch.triu(IP, diagonal=1)
     reduced_mean = upper_triu.mean()
