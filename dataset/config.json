@@ -105,6 +105,17 @@
             "root":"str('mnt/datasets/logo2k')"
 
         },
+        "logo2k_subset": {
+            "classes": {
+                "train": "range(0, 100)",
+                "val": "range(100, 200)",
+                "trainval": "range(0, 100)",
+                "eval": "range(100, 200)"
+            },
+            "source": "str('mnt/datasets/logo2k_subset')",
+            "root":"str('mnt/datasets/logo2k_subset')"
+
+        },
         "logo2k_super100": {
             "classes": {
                 "train": "range(0, 107)",

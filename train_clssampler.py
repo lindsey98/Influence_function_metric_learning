@@ -30,15 +30,15 @@ parser.add_argument('--init_eval', default=False, action='store_true')
 parser.add_argument('--apex', default=False, action='store_true')
 parser.add_argument('--warmup_k', default=5, type=int)
 
-parser.add_argument('--dataset', default='sop')
+parser.add_argument('--dataset', default='logo2k_subset')
 parser.add_argument('--embedding-size', default = 512, type=int, dest = 'sz_embedding')
-parser.add_argument('--config', default='config/sop_mixup.json')
+parser.add_argument('--config', default='config/logo2k_subset_mixup.json')
 parser.add_argument('--mode', default='trainval', choices=['train', 'trainval', 'test',
                                                            'testontrain', 'testontrain_super'],
                     help='train with train data or train with trainval')
 parser.add_argument('--batch-size', default = 32, type=int, dest = 'sz_batch')
 parser.add_argument('--no_warmup', default=False, action='store_true')
-parser.add_argument('--loss-type', default='ProxyNCA_prob_mixup_interproxy_weighted_with_classsamplerdiverse', type=str)
+parser.add_argument('--loss-type', default='ProxyNCA_prob_mixup_both_weighted_with_classsamplerdiverse', type=str)
 parser.add_argument('--workers', default = 2, type=int, dest = 'nb_workers')
 
 args = parser.parse_args()
@@ -220,6 +220,8 @@ if __name__ == '__main__':
     batch_sampler = dataset.utils.ClsDistSampler(torch.Tensor(tr_dataset.ys), num_class_per_batch,
                                                   int(args.sz_batch / num_class_per_batch))
 
+    # batch_sampler = dataset.utils.ClsCohSampler(torch.Tensor(tr_dataset.ys), num_class_per_batch,
+    #                                             int(args.sz_batch / num_class_per_batch))
     dl_tr = torch.utils.data.DataLoader(
         tr_dataset,
         batch_sampler = batch_sampler,

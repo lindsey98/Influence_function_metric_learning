@@ -14,10 +14,10 @@ os.environ["CUDA_VISIBLE_DEVICES"]="0"
 
 if __name__ == '__main__':
     sz_embedding = 512
-    dataset_name = 'cars'
-    model_dir = 'results/cars_cars_mixup_trainval_512_0_lossProxyNCA_prob_mixup_both_weighted_with_classsamplerdiverse.pt'
-    proxy_dir = 'dvi_data_inshop_lossProxyNCA_prob_mixup_interproxy_random/ResNet_512_Model/Epoch_40/proxy.pth'
-    config = utils.load_config('config/cars.json')
+    dataset_name = 'logo2k_subset'
+    model_dir = 'results/logo2k_subset_logo2k_subset_mixup_trainval_512_0_lossProxyNCA_prob_mixup_both_random.pt'
+    proxy_dir = 'dvi_data_logo2k_subset_lossProxyNCA_prob_mixup_both_random/ResNet_512_Model/Epoch_40/proxy.pth'
+    config = utils.load_config('config/logo2k_subset.json')
 
     # set random seed for all gpus
     torch.manual_seed(0)
@@ -78,7 +78,8 @@ if __name__ == '__main__':
     model.load_state_dict(torch.load(model_dir))
 
     # get svd
-    # svd = utils.get_svd(model, dl_tr_noshuffle, return_avg=True)
+    svd = utils.get_svd(model, dl_tr_noshuffle, return_avg=True)
+    print(svd.item())
     # plt.plot(svd.detach().cpu().numpy())
     # for i, j in zip(range(len(svd)), svd):
     #     plt.annotate(str(round(j.item(), 2)), xy=(i, j))

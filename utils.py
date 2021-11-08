@@ -276,7 +276,7 @@ def evaluate_inshop(model, dl_query, dl_gallery,
 
     return nmi, recall, map_R
 
-def get_svd(model, dl, topk_singular=5, return_avg=False):
+def get_svd(model, dl, topk_singular=1, return_avg=False):
     X, T, *_ = predict_batchwise(model, dl) # get embedding
     singular_values = torch.tensor([])
     for cls in range(dl.dataset.nb_classes()):

@@ -230,7 +230,7 @@ class ClsDistSampler(torch.utils.data.sampler.Sampler):
     def create_storage(self, dataloader, model): # this dataloader should be no shuffled version
 
         from utils import predict_batchwise
-        X, *_ = predict_batchwise(model, dataloader)
+        X, T, *_ = predict_batchwise(model, dataloader)
 
         # similarity matrix
         cls_sim_matrix = torch.zeros((len(self.labels_set), len(self.labels_set)))
@@ -253,6 +253,7 @@ class ClsDistSampler(torch.utils.data.sampler.Sampler):
         X1, X2 = F.normalize(X1, dim=-1), F.normalize(X2, dim=-1)
         sim = torch.matmul(X1, X2.T)
         return sim.mean()
+
 
     def diverse_class_sampling(self):
         chosen_cls = np.random.choice(self.labels_set, 1, replace=False)[0] # first class is chosen at random
@@ -286,3 +287,69 @@ class ClsDistSampler(torch.utils.data.sampler.Sampler):
 
     def __len__(self):
         return self.n_dataset // self.batch_size
+
+class ClsCohSampler(torch.utils.data.sampler.Sampler):
+    """
+    Plugs into PyTorch Batchsampler Package.
+    """
+
+    def __init__(self, labels, n_classes, n_samples):
+
+        self.labels = labels
+        self.labels_set = list(set(self.labels.numpy()))
+        self.label_to_indices = {label: np.where(self.labels.numpy() == label)[0]
+                                 for label in self.labels_set}
+        for l in self.labels_set:
+            np.random.shuffle(self.label_to_indices[l])
+        self.used_label_indices_count = {label: 0 for label in self.labels_set}
+        self.count = 0
+        self.n_classes = n_classes
+        self.n_samples = n_samples
+        self.n_dataset = len(self.labels)
+        self.batch_size = self.n_samples * self.n_classes
+
+    def create_storage(self, dataloader, model):  # this dataloader should be no shuffled version
+
+        from utils import predict_batchwise
+        X, T, *_ = predict_batchwise(model, dataloader)
+
+        # similarity matrix
+        self.storage = self.get_class_svd(X, T)
+        logging.info('Reinitialize Class Sampler')
+
+    def get_class_svd(self, X, T):
+        singular_values = torch.tensor([])
+        for cls in self.labels_set:
+            indices = T == cls
+            X_cls = X[indices, :]  # class-specific embedding
+            u, s, v = torch.linalg.svd(X_cls)  # compute singular value, lower value implies lower data variance
+            s = s[:1]  # only take top 1 singular values
+            singular_values = torch.cat((singular_values, s.unsqueeze(0)), dim=0)
+        return singular_values # (C, 1)
+
+    def __iter__(self):
+        self.count = 0
+        while self.count + self.batch_size < self.n_dataset:
+            # random sample a class and the other classes
+            classes_prob = self.storage.squeeze().detach().cpu().numpy()
+            classes_prob = classes_prob / classes_prob.sum()
+            classes = np.random.choice(self.labels_set, self.n_classes,
+                             p=classes_prob, replace=False)
+            # sample large variance classes
+
+            indices = []
+            for cls in classes:
+                indices.extend(self.label_to_indices[cls][self.used_label_indices_count[cls]: \
+                                                          (self.used_label_indices_count[cls] + self.n_samples)])
+                self.used_label_indices_count[cls] += self.n_samples
+
+                if self.used_label_indices_count[cls] + self.n_samples > len(self.label_to_indices[cls]):
+                    np.random.shuffle(self.label_to_indices[cls])
+                    self.used_label_indices_count[cls] = 0
+
+            yield indices
+            self.count += self.n_classes * self.n_samples
+
+    def __len__(self):
+        return self.n_dataset // self.batch_size
+

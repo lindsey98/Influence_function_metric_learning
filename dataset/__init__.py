@@ -7,7 +7,6 @@ from .logo2k import Logo2k, Logo2k_class, Logo2k_super
 # from .vggface import VggFace
 from . import utils
 
-
 import resource
 rlimit = resource.getrlimit(resource.RLIMIT_NOFILE)
 print(rlimit)
@@ -25,6 +24,7 @@ _type = {
     'inshop': InShop,
     'inshop_h5': InShop_hdf5,
     'logo2k': Logo2k,
+    'logo2k_subset': Logo2k,
     'logo2k_super100': Logo2k_super,
     'logo2k_super500': Logo2k_super,
     # 'vgg': VggFace,

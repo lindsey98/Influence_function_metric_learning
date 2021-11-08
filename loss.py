@@ -448,10 +448,11 @@ class ProxyNCA_prob_pregularizer(torch.nn.Module):
         loss = torch.sum(- T * F.log_softmax(-D, -1), -1)
         loss = loss.mean()
 
-        # regularization loss on inter proxy distance
-        inter_proxy_D = pairwise_distance(self.proxies, squared=True)[0]
-        inter_proxy_D_mean = torch.triu(-inter_proxy_D, diagonal=1).mean()
-        loss_all = loss + self.regular_strength * inter_proxy_D_mean
+        # regularization loss on inter proxy, use inner product because euclidean distance might produce high gradient (givent proxy_lr is high, better to choos elow gradient for it)
+        P_norm = F.normalize(self.proxies, p=2, dim=-1)
+        inter_proxy_IP = torch.mm(P_norm, torch.t(P_norm))
+        inter_proxy_IP_mean = torch.triu(inter_proxy_IP, diagonal=1).mean()
+        loss_all = loss + self.regular_strength * inter_proxy_IP_mean
 
         return loss_all
 

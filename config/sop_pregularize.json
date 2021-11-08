@@ -9,7 +9,7 @@
         }
     },
     "lr_scheduler": {
-            "type": "torch.optim.lr_scheduler.ReduceLROnPlateau",
+        "type": "torch.optim.lr_scheduler.ReduceLROnPlateau",
         "args": {
             "mode": "str('max')",
             "patience": "4*1"
@@ -20,8 +20,8 @@
         
     },
    
-    "nb_epochs": "40*1",
-    "sz_batch": "32*1",
+    "nb_epochs": "40",
+    "sz_batch": "32",
     "sz_embedding": "512",
     "num_class_per_batch": "8",
     "num_gradcum": "1",
@@ -40,7 +40,7 @@
                 "weight_decay": "0"
             },
             "proxynca": {
-                "weight_decay": "0", 
+                "weight_decay": "0",
                 "lr": "4e2"
             },
             "base": {
