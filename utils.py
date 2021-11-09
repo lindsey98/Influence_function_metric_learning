@@ -16,6 +16,7 @@ import loss
 import networks
 from evaluation.map import *
 from similarity import pairwise_distance
+from scipy.optimize import linear_sum_assignment
 # __repr__ may contain `\n`, json replaces it by `\\n` + indent
 json_dumps = lambda **kwargs: json.dumps(
     **kwargs
@@ -289,6 +290,41 @@ def get_svd(model, dl, topk_singular=1, return_avg=False):
     if return_avg: # average over different classes or n
         singular_values = torch.mean(singular_values, dim=0)
     return singular_values
+
+
+def bipartite_matching(embeddingX, embeddingY):
+
+    D = pairwise_distance(
+        torch.cat([embeddingX, embeddingY], dim=0)
+    )[0][:len(embeddingX), len(embeddingX):] # (Nx, Ny)
+
+    row_ind, col_ind = linear_sum_assignment(D.numpy())
+    best_matchD = D[row_ind, col_ind]
+    gapD = np.sort(best_matchD)[:min(10, len(best_matchD))].mean() # top10 edges distances
+    return gapD
+
+
+def calc_gap(model, dl, proxies, topk=5):
+    X, T, *_ = predict_batchwise(model, dl)  # get embedding
+    embeddings = []
+    for cls in range(dl.dataset.nb_classes()):
+        indices = T == cls
+        X_cls = X[indices, :]  # class-specific embedding
+        embeddings.append(X_cls)
+
+    IP = pairwise_distance(proxies, squared=True)[1]
+    _, knn_indices = torch.sort(IP, dim=-1, descending=True)
+    knn_indices = knn_indices[:, 1:(topk+1)]
+
+    gaps = np.zeros((knn_indices.size()[0], topk))
+    for i in range(len(knn_indices)):
+        for j in range(topk): # 5 NNs
+            class_i = int(i)
+            class_j = int(knn_indices[i][j].item())
+            gaps[i][j] = bipartite_matching(embeddings[class_i].detach().cpu(),
+                                            embeddings[class_j].detach().cpu())
+
+    return gaps.mean()
 
 
 def inter_proxy_dist(proxies):
