@@ -6,7 +6,6 @@ import torch.nn.functional as F
 import math
 from typing import Union
 import sklearn.preprocessing
-from deprecated.hard_sample_detection.gmm import *
 from itertools import combinations
 import logging
 
@@ -99,6 +98,49 @@ class ProxyNCA_classic(torch.nn.Module):
         loss = -torch.log(loss1 / loss2) # There is no guarantee that k = (exp(-positive_distance)/ exp(-negative_distance)) is below 1.
                                          # if k is greater than one, algorithm will give you negative loss values. (-log(k))
         loss = loss.mean()
+        return loss
+
+def l2_norm(input):
+    input_size = input.size()
+    buffer = torch.pow(input, 2)
+    normp = torch.sum(buffer, 1).add_(1e-12)
+    norm = torch.sqrt(normp)
+    _output = torch.div(input, norm.view(-1, 1).expand_as(input))
+    output = _output.view(input_size)
+    return output
+
+class Proxy_Anchor(torch.nn.Module):
+    def __init__(self, nb_classes, sz_embed, mrg=0.1, alpha=32):
+        torch.nn.Module.__init__(self)
+        # Proxy Anchor Initialization
+        self.proxies = torch.nn.Parameter(torch.randn(nb_classes, sz_embed).cuda())
+        torch.nn.init.kaiming_normal_(self.proxies, mode='fan_out')
+
+        self.nb_classes = nb_classes
+        self.sz_embed = sz_embed
+        self.mrg = mrg
+        self.alpha = alpha
+
+    def forward(self, X, T):
+        P = self.proxies
+
+        cos = F.linear(l2_norm(X), l2_norm(P))  # Calcluate cosine similarity
+        P_one_hot = binarize_and_smooth_labels(T=T, nb_classes=self.nb_classes)
+        N_one_hot = 1 - P_one_hot
+
+        pos_exp = torch.exp(-self.alpha * (cos - self.mrg))
+        neg_exp = torch.exp(self.alpha * (cos + self.mrg))
+
+        with_pos_proxies = torch.nonzero(P_one_hot.sum(dim=0) != 0).squeeze(dim=1)  # The set of positive proxies of data in the batch
+        num_valid_proxies = len(with_pos_proxies)  # The number of positive proxies
+
+        P_sim_sum = torch.where(P_one_hot == 1, pos_exp, torch.zeros_like(pos_exp)).sum(dim=0)
+        N_sim_sum = torch.where(N_one_hot == 1, neg_exp, torch.zeros_like(neg_exp)).sum(dim=0)
+
+        pos_term = torch.log(1 + P_sim_sum).sum() / num_valid_proxies
+        neg_term = torch.log(1 + N_sim_sum).sum() / self.nb_classes
+        loss = pos_term + neg_term
+
         return loss
 
 class ProxyNCA_prob_orig(torch.nn.Module):
@@ -455,5 +497,58 @@ class ProxyNCA_prob_pregularizer(torch.nn.Module):
         loss_all = loss + self.regular_strength * inter_proxy_IP_mean
 
         return loss_all
+
+
+class ProxyNCA_prob_match(torch.nn.Module):
+
+    def __init__(self, nb_classes, sz_embed, scale, **kwargs):
+        torch.nn.Module.__init__(self)
+        self.proxies = torch.nn.Parameter(torch.randn(nb_classes, sz_embed) / 8)
+        self.nb_classes = nb_classes
+        self.sz_embed = sz_embed
+        self.scale = scale
+
+    def cross_attention(self, X, T, P):
+
+        P_batch = P[T.long(),:] # N, sz_embed
+        decision_boundaries = torch.zeros((P_batch.size()[0], P_batch.size()[0], P_batch.size()[1])) # N, N, sz_embed
+        for i in range(len(P_batch)):
+            for j in range(len(P_batch)):
+                decision_boundaries[i, j, :] = (P_batch[i] + P_batch[j]) / 2
+
+        affinity2boundary = F.relu(torch.einsum("bkj,kj->bk", decision_boundaries, X)) # boundary-to-data affinity, (N, N)
+
+        affinity2x = F.relu(torch.einsum("bj,kj->bk", X, X)) # data-to-data affinity (N, N)
+        return affinity2boundary + affinity2x
+
+    def forward(self, X, indices, T):
+        P = self.proxies
+        P = F.normalize(P, p=2, dim=-1)
+        X = F.normalize(X, p=2, dim=-1)
+
+        # self attention update
+        attention = self.cross_attention(X, T, P) # (N, N)
+        attention = attention / (attention.sum(-1) + 1e-5) # (N, N)
+        attention_weights = torch.einsum("bk,kj->bj", attention, X)
+        X = X + attention_weights # residual connection
+
+        P = self.scale * F.normalize(P, p=2, dim=-1)
+        X = self.scale * F.normalize(X, p=2, dim=-1)
+
+        D = pairwise_distance(
+            torch.cat(
+                [X, P]
+            ),
+            squared=True
+        )[0][:X.size()[0], X.size()[0]:]
+
+        T = binarize_and_smooth_labels(
+            T=T, nb_classes=len(P), smoothing_const=0
+        )
+
+        loss = torch.sum(- T * F.log_softmax(-D, -1), -1)
+        loss = loss.mean()
+
+        return loss
 
 
