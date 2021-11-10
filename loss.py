@@ -510,15 +510,11 @@ class ProxyNCA_prob_match(torch.nn.Module):
 
     def cross_attention(self, X, T, P):
 
-        P_batch = P[T.long(),:] # N, sz_embed
-        decision_boundaries = torch.zeros((P_batch.size()[0], P_batch.size()[0], P_batch.size()[1])) # N, N, sz_embed
-        for i in range(len(P_batch)):
-            for j in range(len(P_batch)):
-                decision_boundaries[i, j, :] = (P_batch[i] + P_batch[j]) / 2
-
+        P_batch = P[T.long(),:] # ground-truth proxies (N, sz_embed)
+        decision_boundaries = (P_batch.unsqueeze(0) + P_batch.unsqueeze(1)) / 2
         affinity2boundary = F.relu(torch.einsum("bkj,kj->bk", decision_boundaries, X)) # boundary-to-data affinity, (N, N)
-
         affinity2x = F.relu(torch.einsum("bj,kj->bk", X, X)) # data-to-data affinity (N, N)
+
         return affinity2boundary + affinity2x
 
     def forward(self, X, indices, T):
