@@ -510,8 +510,8 @@ class ProxyNCA_prob_match(torch.nn.Module):
 
     def cross_attention(self, X, T, P):
 
-        P_batch = P[T.long(),:] # ground-truth proxies (N, sz_embed)
-        decision_boundaries = (P_batch.unsqueeze(0) + P_batch.unsqueeze(1)) / 2
+        P_batch = P[T.long(), :] # ground-truth proxies (N, sz_embed)
+        decision_boundaries = (P_batch.unsqueeze(0) + P_batch.unsqueeze(1)) / 2 # (N, N, sz_embed) decision boundaries (middle point between 2 proxies)
         affinity2boundary = F.relu(torch.einsum("bkj,kj->bk", decision_boundaries, X)) # boundary-to-data affinity, (N, N)
         affinity2x = F.relu(torch.einsum("bj,kj->bk", X, X)) # data-to-data affinity (N, N)
 
@@ -522,11 +522,11 @@ class ProxyNCA_prob_match(torch.nn.Module):
         P = F.normalize(P, p=2, dim=-1)
         X = F.normalize(X, p=2, dim=-1)
 
-        # self attention update
+        # self-attention update like simplified message passing network
         attention = self.cross_attention(X, T, P) # (N, N)
-        attention = attention / (attention.sum(-1) + 1e-5) # (N, N)
-        attention_weights = torch.einsum("bk,kj->bj", attention, X)
-        X = X + attention_weights # residual connection
+        attention = attention / (attention.sum(-1) + 1e-5) # normalize over batch (N, N), each row is the importance of all other intra-batch samples relative to this sample
+        attention_weights = torch.einsum("bk,kj->bj", attention, X) # weighted average of neighbors (N, sz_embed)
+        X = X + attention_weights # weighted average + residual connection
 
         P = self.scale * F.normalize(P, p=2, dim=-1)
         X = self.scale * F.normalize(X, p=2, dim=-1)

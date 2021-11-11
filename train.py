@@ -15,7 +15,7 @@ import json
 from tqdm import tqdm
 from torch.utils.data import Dataset, DataLoader
 
-os.environ["CUDA_VISIBLE_DEVICES"]="1"
+os.environ["CUDA_VISIBLE_DEVICES"]="1, 0"
 
 parser = argparse.ArgumentParser(description='Training ProxyNCA++')
 parser.add_argument('--epochs', default = 40, type=int, dest = 'nb_epochs')
@@ -293,12 +293,10 @@ if __name__ == '__main__':
     feat.train()
     emb = torch.nn.Linear(in_sz, args.sz_embedding)
     model = torch.nn.Sequential(feat, emb)
-
     model = torch.nn.DataParallel(model)
     model = model.cuda()
 
     '''Loss'''
-    # TODO
     criterion = config['criterion']['type'](
         nb_classes = dl_tr.dataset.nb_classes(),
         sz_embed = args.sz_embedding,
@@ -401,7 +399,6 @@ if __name__ == '__main__':
 
     t1 = time.time()
 
-
     if args.init_eval:
         logging.info("**Evaluating initial model...**")
         with torch.no_grad():
@@ -436,7 +433,6 @@ if __name__ == '__main__':
     else:
         logging.info('Number of query set: {}'.format(len(dl_query.dataset)))
         logging.info('Number of gallery set: {}'.format(len(dl_gallery.dataset)))
-
 
     '''Warmup training'''
     if not args.no_warmup:
