@@ -166,6 +166,7 @@ if __name__ == '__main__':
     presaved = True
     pretrained = True
     interactive = False
+    highlight = True
     folder = 'dvi_data_{}_loss{}/'.format(dataset_name, loss_type)
     model_dir = '{}/ResNet_{}_Model'.format(folder, sz_embedding)
     plot_dir = '{}/resnet_{}_umap_plots'.format(folder, sz_embedding)
@@ -233,16 +234,6 @@ if __name__ == '__main__':
         line4proxy = ax.scatter(px, py, c='blue', marker=(5, 1), edgecolors='black')
         line4ev = ax.scatter(x_test, y_test, c='pink', s=5)
 
-        sample_plots = []
-        plot = ax.plot([], [], '.', ms=10, color='black', zorder=4)
-        sample_plots.append(plot[0])
-        plot[0].set_visible(False)
-
-        sample_plots2 = []
-        plot2 = ax.plot([], [], '.', ms=10, color='red', zorder=5)
-        sample_plots2.append(plot2[0])
-        plot2[0].set_visible(False)
-
         if interactive:
             imagebox = OffsetImage(dl_tr.dataset.__getitem__(0)[0].permute(1, 2, 0).numpy(), zoom=0.2)
             xybox = (32., 32.)
@@ -271,6 +262,17 @@ if __name__ == '__main__':
             ax.add_artist(ac)
             ac.set_visible(False)
 
+            if highlight:
+                sample_plots = []
+                plot = ax.plot([], [], '.', ms=5, color='black', zorder=4)
+                sample_plots.append(plot[0])
+                plot[0].set_visible(False)
+
+                sample_plots2 = []
+                plot2 = ax.plot([], [], '.', ms=5, color='red', zorder=5)
+                sample_plots2.append(plot2[0])
+                plot2[0].set_visible(False)
+
             def hover(event):
 
                 '''
@@ -292,10 +294,11 @@ if __name__ == '__main__':
                     ab.xy = (x[ind], y[ind])
                     # set the image corresponding to that point
                     imagebox.set_data(images[ind])
-                    c = label_sub[ind]
-                    data = low_dim_emb[label_sub == c, :]
-                    plot[0].set_visible(True)
-                    sample_plots[0].set_data(data.transpose())
+                    if highlight:
+                        c = label_sub[ind]
+                        data = low_dim_emb[label_sub == c, :]
+                        plot[0].set_visible(True)
+                        sample_plots[0].set_data(data.transpose())
 
                     ac.xybox = (xybox_ac[0] * ws, xybox_ac[1] * hs)
                     ac.xy = (x[ind], y[ind])
@@ -327,10 +330,11 @@ if __name__ == '__main__':
                     ab2.xy = (x_test[ind], y_test[ind])
                     # set the image corresponding to that point
                     imagebox2.set_data(images_test[ind])
-                    c = test_label[ind]
-                    data = low_dim_emb_test[test_label == c, :]
-                    plot2[0].set_visible(True)
-                    sample_plots2[0].set_data(data.transpose())
+                    if highlight:
+                        c = test_label[ind]
+                        data = low_dim_emb_test[test_label == c, :]
+                        plot2[0].set_visible(True)
+                        sample_plots2[0].set_data(data.transpose())
 
                     ac.xybox = (xybox_ac[0] * ws, xybox_ac[1] * hs)
                     ac.xy = (x_test[ind], y_test[ind])

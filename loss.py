@@ -115,17 +115,35 @@ class Proxy_Anchor(torch.nn.Module):
         # Proxy Anchor Initialization
         self.proxies = torch.nn.Parameter(torch.randn(nb_classes, sz_embed).cuda())
         torch.nn.init.kaiming_normal_(self.proxies, mode='fan_out')
-
         self.nb_classes = nb_classes
         self.sz_embed = sz_embed
         self.mrg = mrg
         self.alpha = alpha
 
-    def forward(self, X, T):
+    def cross_attention(self, X, T, P):
+        '''
+            Cross attention calculation, give more weightage to neighbors closer to (corresponding) decision boundary or closer to the anchor itself
+        '''
+        P_batch = P[T.long(), :] # ground-truth proxies (N, sz_embed)
+        decision_boundaries = (P_batch.unsqueeze(0) + P_batch.unsqueeze(1)) / 2 # (N, N, sz_embed) decision boundaries (middle point between 2 proxies)
+        affinity2boundary = F.relu(torch.einsum("bkj,kj->bk", decision_boundaries, X)) # boundary-to-data affinity, (N, N)
+        affinity2x = F.relu(torch.einsum("bj,kj->bk", X, X)) # data-to-data affinity (N, N)
+        return affinity2boundary + affinity2x
+
+    def forward(self, X, indices, T):
         P = self.proxies
+        P = F.normalize(P, p=2, dim=-1)
+        X = F.normalize(X, p=2, dim=-1)
+
+        # self-attention update like simplified message passing network
+        attention = self.cross_attention(X, T, P) # (N, N)
+        attention = attention / (attention.sum(-1) + 1e-5) # normalize over batch (N, N), each row is the importance of all other intra-batch samples relative to this sample
+        attention_weights = torch.einsum("bk,kj->bj", attention, X) # weighted average of neighbors (N, sz_embed)
+        X = X + attention_weights # weighted average + residual connection
 
         cos = F.linear(l2_norm(X), l2_norm(P))  # Calcluate cosine similarity
-        P_one_hot = binarize_and_smooth_labels(T=T, nb_classes=self.nb_classes)
+        P_one_hot = binarize_and_smooth_labels(T=T,
+                                               nb_classes=self.nb_classes)
         N_one_hot = 1 - P_one_hot
 
         pos_exp = torch.exp(-self.alpha * (cos - self.mrg))
@@ -504,7 +522,9 @@ class ProxyNCA_prob_match(torch.nn.Module):
         self.scale = scale
 
     def cross_attention(self, X, T, P):
-
+        '''
+            Cross attention calculation, give more weightage to neighbors closer to (corresponding) decision boundary or closer to the anchor itself
+        '''
         P_batch = P[T.long(), :] # ground-truth proxies (N, sz_embed)
         decision_boundaries = (P_batch.unsqueeze(0) + P_batch.unsqueeze(1)) / 2 # (N, N, sz_embed) decision boundaries (middle point between 2 proxies)
         affinity2boundary = F.relu(torch.einsum("bkj,kj->bk", decision_boundaries, X)) # boundary-to-data affinity, (N, N)
