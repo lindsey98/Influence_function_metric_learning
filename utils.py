@@ -88,6 +88,7 @@ def predict_batchwise_loss(model, dataloader, criterion):
     embeddings = torch.tensor([])
     labels = torch.tensor([])
     gt_D_weighted = torch.tensor([])
+
     with torch.no_grad():
         # extract batches (A becomes list of samples)
         for (x, y, indices) in tqdm(dataloader, desc="Batch-wise prediction"):
