@@ -1,25 +1,19 @@
 import matplotlib.pyplot as plt
-import numpy as np
-import torch
 import os
 import utils
 import dataset
 from tqdm import tqdm
-from networks import bninception, Feat_resnet50_max_n
+from networks import  Feat_resnet50_max_n
 from torch import nn
-import umap
 from umap.parametric_umap import ParametricUMAP
 import tensorflow as tf
-from umap.parametric_umap import load_ParametricUMAP
-from loss import ProxyNCA_prob
-from utils import predict_batchwise, inner_product_sim, predict_batchwise_loss
-import json
+from loss import *
+from utils import predict_batchwise
 import torch.nn.functional as F
 from matplotlib.offsetbox import TextArea, DrawingArea, OffsetImage, \
     AnnotationBbox
 
 os.environ['CUDA_VISIBLE_DEVICES'] = "1,0"
-
 
 def prepare_data(data_name='cub', root='dvi_data_cub200/', save=False):
     '''
@@ -101,7 +95,6 @@ def encoder_model(n_components=2):
 
 
 def pumap_training(model, model_dir, e,
-                   criterion,
                    dl_tr, dl_ev,
                    stacked_proxies, presaved, pretrained):
     '''
@@ -114,9 +107,9 @@ def pumap_training(model, model_dir, e,
         torch.save(indices, '{}/Epoch_{}/training_indices.pth'.format(model_dir, e + 1))
 
         testing_embedding, testing_label, testing_indices = predict_batchwise(model, dl_ev)
-        torch.save(embedding, '{}/Epoch_{}/testing_embeddings.pth'.format(model_dir, e + 1))
-        torch.save(label, '{}/Epoch_{}/testing_labels.pth'.format(model_dir, e + 1))
-        torch.save(indices, '{}/Epoch_{}/testing_indices.pth'.format(model_dir, e + 1))
+        torch.save(testing_embedding, '{}/Epoch_{}/testing_embeddings.pth'.format(model_dir, e + 1))
+        torch.save(testing_label, '{}/Epoch_{}/testing_labels.pth'.format(model_dir, e + 1))
+        torch.save(testing_indices, '{}/Epoch_{}/testing_indices.pth'.format(model_dir, e + 1))
 
     else:
         embedding = torch.load('{}/Epoch_{}/training_embeddings.pth'.format(model_dir, e + 1))
@@ -128,7 +121,8 @@ def pumap_training(model, model_dir, e,
         testing_indices = torch.load('{}/Epoch_{}/testing_indices.pth'.format(model_dir, e + 1))
 
     # need to normalize, other producing wierd results
-    embedding, stacked_proxies = F.normalize(embedding, dim=-1), F.normalize(stacked_proxies, dim=-1)
+    embedding = F.normalize(embedding, dim=-1)
+    stacked_proxies =  F.normalize(stacked_proxies, dim=-1)
     testing_embedding = F.normalize(testing_embedding, dim=-1)
     print('Embedding of shape: ', embedding.shape,
           'Current proxies of shape: ', stacked_proxies.shape,
@@ -136,14 +130,13 @@ def pumap_training(model, model_dir, e,
 
     # Parametric Umap model
     encoder = encoder_model()
-    embedder = ParametricUMAP(encoder=encoder, verbose=False, batch_size=256)
+    embedder = ParametricUMAP(encoder=encoder, verbose=False, batch_size=128)
 
     if not pretrained:
         if e > 0:
             try:
                 # Initialize by last visualization model
-                embedder.encoder = tf.keras.models.load_model(
-                    '{}/Epoch_{}/parametric_model/encoder'.format(model_dir, e))
+                embedder.encoder = tf.keras.models.load_model('{}/Epoch_{}/parametric_model/encoder'.format(model_dir, e))
             except OSError as error:  # saved model file does not exist
                 print(error)
                 pass
@@ -158,32 +151,30 @@ def pumap_training(model, model_dir, e,
     # transform high dimensional embedding and proxy to low-dimension
     low_dim_emb = embedder.transform(embedding.detach().cpu().numpy())
     low_dim_emb_test = embedder.transform(testing_embedding.detach().cpu().numpy())
-    low_dim_proxy = embedder.transform(p.cpu().numpy())
+    low_dim_proxy = embedder.transform(stacked_proxies.cpu().numpy())
 
     return embedder, \
             low_dim_proxy,\
            (low_dim_emb, label, indices),\
            (low_dim_emb_test, testing_label, testing_indices)
 
-
 if __name__ == '__main__':
 
-    dataset_name = 'logo2k'
+    dataset_name = 'cub'
+    loss_type = 'ProxyNCA_prob_orig'
     sz_embedding = 512
     presaved = True
     pretrained = True
     interactive = False
-
-    folder = 'dvi_data_{}_{}/'.format(dataset_name)
-    os.makedirs(folder, exist_ok=True)
-    os.makedirs(os.path.join(folder, 'Training_data'), exist_ok=True)
-    os.makedirs(os.path.join(folder, 'Testing_data'), exist_ok=True)
-    os.makedirs('{}/resnet_{}_umap_plots/'.format(folder, sz_embedding), exist_ok=True)
-
+    folder = 'dvi_data_{}_loss{}/'.format(dataset_name, loss_type)
     model_dir = '{}/ResNet_{}_Model'.format(folder, sz_embedding)
     plot_dir = '{}/resnet_{}_umap_plots'.format(folder, sz_embedding)
 
+    os.makedirs(os.path.join(folder, 'Training_data'), exist_ok=True)
+    os.makedirs(os.path.join(folder, 'Testing_data'), exist_ok=True)
     os.makedirs(plot_dir, exist_ok=True)
+
+    # load data
     dl_tr, dl_ev = prepare_data(data_name=dataset_name, root=folder, save=False)
 
     # load model
@@ -196,14 +187,11 @@ if __name__ == '__main__':
     model.cuda()
 
     # load loss
-    # TODO: should echange criterion
-    criterion = ProxyNCA_prob(nb_classes=dl_tr.dataset.nb_classes(),
+    # TODO: should echange criterion accordingly
+    criterion = ProxyNCA_prob_orig(nb_classes=dl_tr.dataset.nb_classes(),
                               sz_embed=sz_embedding,
                               scale=3)
 
-    # for i in range(1, 10):
-    #     subclasses = np.asarray(list(range(5 * (i - 1), 5 * i)))
-    # for e in tqdm(range(39)):
     for e in [39]:
         model.load_state_dict(torch.load(
             '{}/Epoch_{}/{}_{}_trainval_512_0.pth'.format(model_dir, e + 1, dataset_name, dataset_name)))
@@ -214,14 +202,12 @@ if __name__ == '__main__':
         embedder, low_dim_proxy, (low_dim_emb, label, _), (low_dim_emb_test, test_label, _) = pumap_training(model=model,
                                                                                        model_dir=model_dir,
                                                                                        e=e,
-                                                                                       criterion=criterion,
                                                                                        stacked_proxies=proxies,
                                                                                        dl_tr=dl_tr,
                                                                                        dl_ev=dl_ev,
                                                                                        presaved=presaved,
                                                                                        pretrained=pretrained)
         '''Visualize'''
-
         # Training
         indices = range(len(low_dim_emb))
         images = [dl_tr.dataset.__getitem__(ind)[0].permute(1, 2, 0).numpy() for ind in indices]
@@ -231,8 +217,8 @@ if __name__ == '__main__':
         # Testing
         indices_test = range(len(low_dim_emb_test))
         images_test = [dl_ev.dataset.__getitem__(ind)[0].permute(1, 2, 0).numpy() for ind in indices_test]
-        label_sub_test = test_label[indices].numpy()
-        low_dim_emb_test = low_dim_emb_test[indices, :]
+        label_sub_test = test_label[indices_test].numpy()
+        low_dim_emb_test = low_dim_emb_test[indices_test, :]
 
         # # Visualize
         fig, ax = plt.subplots()
@@ -240,11 +226,22 @@ if __name__ == '__main__':
         x, y = low_dim_emb[:, 0], low_dim_emb[:, 1]
         x_test, y_test = low_dim_emb_test[:, 0], low_dim_emb_test[:, 1]
         px, py = low_dim_proxy[:, 0], low_dim_proxy[:, 1]
-        ax.set_xlim(min(min(x), min(px)), max(max(x), max(px))); ax.set_ylim(min(min(y), min(py)), max(max(y), max(py)))
+        ax.set_xlim(min(min(x), min(px), min(x_test)), max(max(x), max(px), max(x_test)))
+        ax.set_ylim(min(min(y), min(py), min(y_test)), max(max(y), max(py), max(y_test)))
 
         line4tr = ax.scatter(x, y, c='gray',  s=5)
-        line4proxy = ax.scatter(px, py, c='blue',  marker=(5, 1), edgecolors='black')
+        line4proxy = ax.scatter(px, py, c='blue', marker=(5, 1), edgecolors='black')
         line4ev = ax.scatter(x_test, y_test, c='pink', s=5)
+
+        sample_plots = []
+        plot = ax.plot([], [], '.', ms=10, color='black', zorder=4)
+        sample_plots.append(plot[0])
+        plot[0].set_visible(False)
+
+        sample_plots2 = []
+        plot2 = ax.plot([], [], '.', ms=10, color='red', zorder=5)
+        sample_plots2.append(plot2[0])
+        plot2[0].set_visible(False)
 
         if interactive:
             imagebox = OffsetImage(dl_tr.dataset.__getitem__(0)[0].permute(1, 2, 0).numpy(), zoom=0.2)
@@ -295,10 +292,14 @@ if __name__ == '__main__':
                     ab.xy = (x[ind], y[ind])
                     # set the image corresponding to that point
                     imagebox.set_data(images[ind])
+                    c = label_sub[ind]
+                    data = low_dim_emb[label_sub == c, :]
+                    plot[0].set_visible(True)
+                    sample_plots[0].set_data(data.transpose())
 
                     ac.xybox = (xybox_ac[0] * ws, xybox_ac[1] * hs)
                     ac.xy = (x[ind], y[ind])
-                    text = "Indices={} \n Label={}".format(indices[ind], label_sub[ind])
+                    text = "Training data indices={} \n Label={}".format(indices[ind], label_sub[ind])
                     ac.set_visible(True)
                     ac.set_text(text)
 
@@ -326,10 +327,14 @@ if __name__ == '__main__':
                     ab2.xy = (x_test[ind], y_test[ind])
                     # set the image corresponding to that point
                     imagebox2.set_data(images_test[ind])
+                    c = test_label[ind]
+                    data = low_dim_emb_test[test_label == c, :]
+                    plot2[0].set_visible(True)
+                    sample_plots2[0].set_data(data.transpose())
 
                     ac.xybox = (xybox_ac[0] * ws, xybox_ac[1] * hs)
                     ac.xy = (x_test[ind], y_test[ind])
-                    text = "Indices={} \n Label={}".format(indices_test[ind], label_sub_test[ind])
+                    text = "Testing data indices={} \n Label={}".format(indices_test[ind], label_sub_test[ind])
                     ac.set_visible(True)
                     ac.set_text(text)
 
@@ -356,7 +361,6 @@ if __name__ == '__main__':
                 else:
                     ac.set_visible(False)
                 fig.canvas.draw_idle()
-
 
             # # add callback for mouse moves
             fig.canvas.mpl_connect('motion_notify_event', hover)
