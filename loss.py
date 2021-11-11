@@ -428,14 +428,9 @@ class ProxyNCA_prob_mixup(torch.nn.Module):
             # between dfferent class with proxy
             virtual_classes_inter, virtual_samples_inter, virtual_proxies_inter = self.intercls_mixup_proxy(X, T, P, IP)
 
-            Xall = torch.cat((X,
-                                self.scale * virtual_samples_inter,
-                                self.scale * virtual_samples_intra), dim=0) # (N+N_inter+N_intra, sz_embed)
-            Tall = torch.cat([T,
-                                virtual_classes_inter,
-                                virtual_classes_intra], 0) # (N+N_inter+N_intra, )
-            Pall = torch.cat([P,
-                                self.scale * virtual_proxies_inter])  # (C+C_inter, sz_embed)
+            Xall = torch.cat((X, self.scale * virtual_samples_inter, self.scale * virtual_samples_intra), dim=0) # (N+N_inter+N_intra, sz_embed)
+            Tall = torch.cat([T, virtual_classes_inter, virtual_classes_intra], 0) # (N+N_inter+N_intra, )
+            Pall = torch.cat([P, self.scale * virtual_proxies_inter])  # (C+C_inter, sz_embed)
 
             Tall = binarize_and_smooth_labels(
                T=Tall, nb_classes=len(Pall), smoothing_const=0
