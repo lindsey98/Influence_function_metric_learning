@@ -1,5 +1,8 @@
 import matplotlib.pyplot as plt
 import os
+
+import torch
+
 import utils
 import dataset
 from tqdm import tqdm
@@ -170,7 +173,12 @@ def get_wrong_indices(X, T):
     Y = torch.from_numpy(Y)
     correct = [1 if t in y[:k] else 0 for t, y in zip(T, Y)]
     wrong_ind = np.where(np.asarray(correct) == 0)[0]
-    return wrong_ind
+    wrong_labels = T[wrong_ind]
+    unique_labels, wrong_freq = torch.unique(wrong_labels, return_counts=True)
+    top10_wrong_classes = unique_labels[torch.argsort(wrong_freq, descending=True)[:10]].numpy()
+    return wrong_ind, top10_wrong_classes
+
+
 
 if __name__ == '__main__':
 
@@ -231,24 +239,32 @@ if __name__ == '__main__':
         images = [dl_tr.dataset.__getitem__(ind)[0].permute(1, 2, 0).numpy() for ind in indices]
 
         # Testing
-        indices_test = range(len(low_dim_emb_test))
-        label_sub_test = test_label[indices_test].numpy()
-        low_dim_emb_test = low_dim_emb_test[indices_test, :]
-        images_test = [dl_ev.dataset.__getitem__(ind)[0].permute(1, 2, 0).numpy() for ind in indices_test]
+        # indices_test = range(len(low_dim_emb_test))
+        # label_sub_test = test_label[indices_test].numpy()
+        # low_dim_emb_test = low_dim_emb_test[indices_test, :]
 
         # Wrong testing
         testing_embedding = torch.load('{}/Epoch_{}/testing_embeddings.pth'.format(model_dir, e + 1))
         testing_label = torch.load('{}/Epoch_{}/testing_labels.pth'.format(model_dir, e + 1))
-        wrong_ind = get_wrong_indices(testing_embedding, testing_label)
-        label_sub_test_wrong = test_label[wrong_ind].numpy()
-        low_dim_emb_test_wrong = low_dim_emb_test[wrong_ind, :]
-        images_test_wrong = [dl_ev.dataset.__getitem__(ind)[0].permute(1, 2, 0).numpy() for ind in wrong_ind]
+        wrong_ind, top10_wrong_classes = get_wrong_indices(testing_embedding, testing_label)
+        # label_sub_test_wrong = test_label[wrong_ind].numpy()
+        # low_dim_emb_test_wrong = low_dim_emb_test[wrong_ind, :]
+        # images_test_wrong = [dl_ev.dataset.__getitem__(ind)[0].permute(1, 2, 0).numpy() for ind in wrong_ind]
+        top10_wrong_class_ind = np.where(np.isin(np.asarray(test_label), top10_wrong_classes))[0]
+        top10_label_sub_test = test_label[top10_wrong_class_ind].numpy()
+        top10_low_dim_emb_test = low_dim_emb_test[top10_wrong_class_ind, :]
+        images_test = [dl_ev.dataset.__getitem__(ind)[0].permute(1, 2, 0).numpy() for ind in top10_wrong_class_ind]
+
+        intersect_wrong_class_ind = np.asarray(list(set(wrong_ind).intersection(set(top10_wrong_class_ind))))
+        label_sub_test_wrong = test_label[intersect_wrong_class_ind].numpy()
+        low_dim_emb_test_wrong = low_dim_emb_test[intersect_wrong_class_ind, :]
+
 
         # # Visualize
         fig, ax = plt.subplots()
         # For embedding points
         x, y = low_dim_emb[:, 0], low_dim_emb[:, 1]
-        x_test, y_test = low_dim_emb_test[:, 0], low_dim_emb_test[:, 1]
+        x_test, y_test = top10_low_dim_emb_test[:, 0], top10_low_dim_emb_test[:, 1]
         x_test_wrong, y_test_wrong = low_dim_emb_test_wrong[:, 0], low_dim_emb_test_wrong[:, 1]
         px, py = low_dim_proxy[:, 0], low_dim_proxy[:, 1]
         ax.set_xlim(min(min(x), min(px), min(x_test)), max(max(x), max(px), max(x_test)))
@@ -305,11 +321,7 @@ if __name__ == '__main__':
                 dot[0].set_visible(False)
 
             def hover(event):
-
-                '''
-                For training
-                '''
-
+                # Training
                 if line4tr.contains(event)[0]:
                     # find out the index within the array from the event
                     ind = line4tr.contains(event)[1]["ind"][0]
@@ -339,7 +351,6 @@ if __name__ == '__main__':
                     text = "Training data indices={} \n Label={}".format(indices[ind], label_sub[ind])
                     ac.set_visible(True)
                     ac.set_text(text)
-
                 else:
                     # if the mouse is not over a scatter point
                     ab.set_visible(False)
@@ -348,9 +359,7 @@ if __name__ == '__main__':
                     sample_dot[0].set_visible(False)
                 fig.canvas.draw_idle()
 
-                '''
-                For testing
-                '''
+                # Testing
                 if line4ev.contains(event)[0]:
                     # find out the index within the array from the event
                     ind = line4ev.contains(event)[1]["ind"][0]
@@ -367,8 +376,8 @@ if __name__ == '__main__':
                     # set the image corresponding to that point
                     imagebox2.set_data(images_test[ind])
                     if highlight:
-                        c = label_sub_test[ind]
-                        data = low_dim_emb_test[test_label == c, :]
+                        c = top10_label_sub_test[ind]
+                        data = top10_low_dim_emb_test[top10_label_sub_test == c, :]
                         plot2[0].set_visible(True)
                         sample_plots2[0].set_data(data.transpose())
 
@@ -377,7 +386,8 @@ if __name__ == '__main__':
 
                     ac.xybox = (xybox_ac[0] * -ws, xybox_ac[1] * -hs)
                     ac.xy = (x_test[ind], y_test[ind])
-                    text = "Testing data indices={} \n Label={}".format(indices_test[ind], label_sub_test[ind])
+                    text = "Testing data indices={} \n Label={}".format(top10_wrong_class_ind[ind],
+                                                                        top10_label_sub_test[ind])
                     ac.set_visible(True)
                     ac.set_text(text)
 

@@ -2,11 +2,10 @@
     "name": "str('example')",
     "gpu_id": "int(0)",
     "criterion": {
-        "type": "loss.ProxyNCA_prob_mixup",
+        "type": "loss.Proxy_Anchor",
         "args": {
-            "scale": "3",
-            "mixup_method": "str('both')",
-            "sampling_method": "2",
+            "mixup_method": "str('inter_noproxy')",
+            "sampling_method": "1",
             "shifts": "4",
             "pairs_per_cls": "4"
         }
