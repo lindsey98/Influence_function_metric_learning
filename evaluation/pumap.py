@@ -10,8 +10,11 @@ import tensorflow as tf
 from loss import *
 from utils import predict_batchwise
 import torch.nn.functional as F
+import matplotlib
+matplotlib.use('TkAgg')
 from matplotlib.offsetbox import TextArea, DrawingArea, OffsetImage, \
     AnnotationBbox
+import evaluation
 
 os.environ['CUDA_VISIBLE_DEVICES'] = "1,0"
 
@@ -87,6 +90,7 @@ def encoder_model(n_components=2):
         :param n_components: low dimensional projection dimensions
     '''
     encoder = tf.keras.Sequential([
+        tf.keras.layers.InputLayer(input_shape=(512)),
         tf.keras.layers.Dense(units=256, activation="relu"),
         tf.keras.layers.Dense(units=256, activation="relu"),
         tf.keras.layers.Dense(units=n_components),
@@ -114,7 +118,7 @@ def pumap_training(model, model_dir, e,
     else:
         embedding = torch.load('{}/Epoch_{}/training_embeddings.pth'.format(model_dir, e + 1))
         label = torch.load('{}/Epoch_{}/training_labels.pth'.format(model_dir, e + 1))
-        indices = torch.load('{}/Epoch_{}/indices.pth'.format(model_dir, e + 1))
+        indices = torch.load('{}/Epoch_{}/training_indices.pth'.format(model_dir, e + 1))
 
         testing_embedding = torch.load('{}/Epoch_{}/testing_embeddings.pth'.format(model_dir, e + 1))
         testing_label = torch.load('{}/Epoch_{}/testing_labels.pth'.format(model_dir, e + 1))
@@ -130,7 +134,9 @@ def pumap_training(model, model_dir, e,
 
     # Parametric Umap model
     encoder = encoder_model()
-    embedder = ParametricUMAP(encoder=encoder, verbose=False, batch_size=128)
+    embedder = ParametricUMAP(encoder=encoder,
+                              dims=(512,),
+                              verbose=False, batch_size=64)
 
     if not pretrained:
         if e > 0:
@@ -154,18 +160,27 @@ def pumap_training(model, model_dir, e,
     low_dim_proxy = embedder.transform(stacked_proxies.cpu().numpy())
 
     return embedder, \
-            low_dim_proxy,\
+           low_dim_proxy,\
            (low_dim_emb, label, indices),\
            (low_dim_emb_test, testing_label, testing_indices)
+
+def get_wrong_indices(X, T):
+    k = 1
+    Y = evaluation.assign_by_euclidian_at_k(X, T, k)
+    Y = torch.from_numpy(Y)
+    correct = [1 if t in y[:k] else 0 for t, y in zip(T, Y)]
+    wrong_ind = np.where(np.asarray(correct) == 0)[0]
+    return wrong_ind
 
 if __name__ == '__main__':
 
     dataset_name = 'cub'
     loss_type = 'ProxyNCA_prob_orig'
+    # loss_type = 'ProxyAnchor'
     sz_embedding = 512
     presaved = True
     pretrained = True
-    interactive = False
+    interactive = True
     highlight = True
     folder = 'dvi_data_{}_loss{}/'.format(dataset_name, loss_type)
     model_dir = '{}/ResNet_{}_Model'.format(folder, sz_embedding)
@@ -190,16 +205,16 @@ if __name__ == '__main__':
     # load loss
     # TODO: should echange criterion accordingly
     criterion = ProxyNCA_prob_orig(nb_classes=dl_tr.dataset.nb_classes(),
-                              sz_embed=sz_embedding,
-                              scale=3)
+                                  sz_embed=sz_embedding,
+                                   scale=3 )
+    # criterion = Proxy_Anchor(nb_classes=dl_tr.dataset.nb_classes(),
+    #                               sz_embed=sz_embedding)
 
     for e in [39]:
-        model.load_state_dict(torch.load(
-            '{}/Epoch_{}/{}_{}_trainval_512_0.pth'.format(model_dir, e + 1, dataset_name, dataset_name)))
+        model.load_state_dict(torch.load('{}/Epoch_{}/{}_{}_trainval_512_0.pth'.format(model_dir, e + 1, dataset_name, dataset_name)))
         proxies = torch.load('{}/Epoch_{}/proxy.pth'.format(model_dir, e + 1), map_location='cpu')['proxies'].detach()
-
-        # TODO: reload criterion
         criterion.proxies.data = proxies
+
         embedder, low_dim_proxy, (low_dim_emb, label, _), (low_dim_emb_test, test_label, _) = pumap_training(model=model,
                                                                                        model_dir=model_dir,
                                                                                        e=e,
@@ -211,32 +226,43 @@ if __name__ == '__main__':
         '''Visualize'''
         # Training
         indices = range(len(low_dim_emb))
-        images = [dl_tr.dataset.__getitem__(ind)[0].permute(1, 2, 0).numpy() for ind in indices]
         label_sub = label[indices].numpy()
         low_dim_emb = low_dim_emb[indices, :]
+        images = [dl_tr.dataset.__getitem__(ind)[0].permute(1, 2, 0).numpy() for ind in indices]
 
         # Testing
         indices_test = range(len(low_dim_emb_test))
-        images_test = [dl_ev.dataset.__getitem__(ind)[0].permute(1, 2, 0).numpy() for ind in indices_test]
         label_sub_test = test_label[indices_test].numpy()
         low_dim_emb_test = low_dim_emb_test[indices_test, :]
+        images_test = [dl_ev.dataset.__getitem__(ind)[0].permute(1, 2, 0).numpy() for ind in indices_test]
+
+        # Wrong testing
+        testing_embedding = torch.load('{}/Epoch_{}/testing_embeddings.pth'.format(model_dir, e + 1))
+        testing_label = torch.load('{}/Epoch_{}/testing_labels.pth'.format(model_dir, e + 1))
+        wrong_ind = get_wrong_indices(testing_embedding, testing_label)
+        label_sub_test_wrong = test_label[wrong_ind].numpy()
+        low_dim_emb_test_wrong = low_dim_emb_test[wrong_ind, :]
+        images_test_wrong = [dl_ev.dataset.__getitem__(ind)[0].permute(1, 2, 0).numpy() for ind in wrong_ind]
 
         # # Visualize
         fig, ax = plt.subplots()
         # For embedding points
         x, y = low_dim_emb[:, 0], low_dim_emb[:, 1]
         x_test, y_test = low_dim_emb_test[:, 0], low_dim_emb_test[:, 1]
+        x_test_wrong, y_test_wrong = low_dim_emb_test_wrong[:, 0], low_dim_emb_test_wrong[:, 1]
         px, py = low_dim_proxy[:, 0], low_dim_proxy[:, 1]
         ax.set_xlim(min(min(x), min(px), min(x_test)), max(max(x), max(px), max(x_test)))
         ax.set_ylim(min(min(y), min(py), min(y_test)), max(max(y), max(py), max(y_test)))
 
         line4tr = ax.scatter(x, y, c='gray',  s=5)
-        line4proxy = ax.scatter(px, py, c='blue', marker=(5, 1), edgecolors='black')
+        # line4proxy = ax.scatter(px, py, c='blue', marker=(5, 1), edgecolors='black')
         line4ev = ax.scatter(x_test, y_test, c='pink', s=5)
+        line4ev_wrong = ax.scatter(x_test_wrong, y_test_wrong, c='orange', s=5)
+
 
         if interactive:
             imagebox = OffsetImage(dl_tr.dataset.__getitem__(0)[0].permute(1, 2, 0).numpy(), zoom=0.2)
-            xybox = (32., 32.)
+            xybox = (50., 50.)
             ab = AnnotationBbox(imagebox, (0, 0),
                                 xybox=xybox,
                                 xycoords='data',
@@ -254,7 +280,7 @@ if __name__ == '__main__':
             ax.add_artist(ab2)
             ab2.set_visible(False)
 
-            xybox_ac = (50., 50.)
+            xybox_ac = (-50., -50.)
             ac = ax.annotate("", xy=(0, 0),
                              xytext=xybox_ac, textcoords="offset points",
                              bbox=dict(boxstyle='round4', fc='linen', ec='k', lw=1),
@@ -273,6 +299,11 @@ if __name__ == '__main__':
                 sample_plots2.append(plot2[0])
                 plot2[0].set_visible(False)
 
+                sample_dot = []
+                dot = ax.plot([], [], '.', ms=5, color='blue', markeredgecolor='black', zorder=6)
+                sample_dot.append(dot[0])
+                dot[0].set_visible(False)
+
             def hover(event):
 
                 '''
@@ -281,7 +312,7 @@ if __name__ == '__main__':
 
                 if line4tr.contains(event)[0]:
                     # find out the index within the array from the event
-                    ind, = line4tr.contains(event)[1]["ind"]
+                    ind = line4tr.contains(event)[1]["ind"][0]
                     # get the figure size
                     w, h = fig.get_size_inches() * fig.dpi
                     ws = (event.x > w / 2.) * -1 + (event.x <= w / 2.)
@@ -300,7 +331,10 @@ if __name__ == '__main__':
                         plot[0].set_visible(True)
                         sample_plots[0].set_data(data.transpose())
 
-                    ac.xybox = (xybox_ac[0] * ws, xybox_ac[1] * hs)
+                        dot[0].set_visible(True)
+                        sample_dot[0].set_data((x[ind], y[ind]))
+
+                    ac.xybox = (xybox_ac[0] * -ws, xybox_ac[1] * -hs)
                     ac.xy = (x[ind], y[ind])
                     text = "Training data indices={} \n Label={}".format(indices[ind], label_sub[ind])
                     ac.set_visible(True)
@@ -310,6 +344,8 @@ if __name__ == '__main__':
                     # if the mouse is not over a scatter point
                     ab.set_visible(False)
                     ac.set_visible(False)
+                    plot[0].set_visible(False)
+                    sample_dot[0].set_visible(False)
                 fig.canvas.draw_idle()
 
                 '''
@@ -317,7 +353,7 @@ if __name__ == '__main__':
                 '''
                 if line4ev.contains(event)[0]:
                     # find out the index within the array from the event
-                    ind, = line4ev.contains(event)[1]["ind"]
+                    ind = line4ev.contains(event)[1]["ind"][0]
                     # get the figure size
                     w, h = fig.get_size_inches() * fig.dpi
                     ws = (event.x > w / 2.) * -1 + (event.x <= w / 2.)
@@ -331,12 +367,15 @@ if __name__ == '__main__':
                     # set the image corresponding to that point
                     imagebox2.set_data(images_test[ind])
                     if highlight:
-                        c = test_label[ind]
+                        c = label_sub_test[ind]
                         data = low_dim_emb_test[test_label == c, :]
                         plot2[0].set_visible(True)
                         sample_plots2[0].set_data(data.transpose())
 
-                    ac.xybox = (xybox_ac[0] * ws, xybox_ac[1] * hs)
+                        dot[0].set_visible(True)
+                        sample_dot[0].set_data((x[ind], y[ind]))
+
+                    ac.xybox = (xybox_ac[0] * -ws, xybox_ac[1] * -hs)
                     ac.xy = (x_test[ind], y_test[ind])
                     text = "Testing data indices={} \n Label={}".format(indices_test[ind], label_sub_test[ind])
                     ac.set_visible(True)
@@ -344,35 +383,15 @@ if __name__ == '__main__':
 
                 else:
                     # if the mouse is not over a scatter point
-                    ab.set_visible(False)
+                    ab2.set_visible(False)
                     ac.set_visible(False)
+                    plot2[0].set_visible(False)
+                    sample_dot[0].set_visible(False)
                 fig.canvas.draw_idle()
 
-                '''
-                For Proxy
-                '''
-                if line4proxy.contains(event)[0]:
-                    # find out the index within the array from the event
-                    ind, = line4proxy.contains(event)[1]["ind"]
-                    w, h = fig.get_size_inches() * fig.dpi
-                    ws = (event.x > w / 2.) * -1 + (event.x <= w / 2.)
-                    hs = (event.y > h / 2.) * -1 + (event.y <= h / 2.)
-                    ac.xybox = (xybox[0] * ws, xybox[1] * hs)
-                    ac.xy = (px[ind], py[ind])
-                    text = "Proxy for class: {}".format(ind)
-                    ac.set_visible(True)
-                    ac.set_text(text)
-                else:
-                    ac.set_visible(False)
-                fig.canvas.draw_idle()
 
             # # add callback for mouse moves
             fig.canvas.mpl_connect('motion_notify_event', hover)
             plt.draw()
             plt.show()
-
-        # else:
-            # os.makedirs('{}/{}th_batch'.format(plot_dir, str(i)), exist_ok=True)
-            # fig.savefig('{}/{}th_batch/Epoch_{}.png'.format(plot_dir, str(i), e + 1))
-
 

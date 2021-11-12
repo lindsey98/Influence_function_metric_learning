@@ -110,7 +110,10 @@ def l2_norm(input):
     return output
 
 class Proxy_Anchor(torch.nn.Module):
-    def __init__(self, nb_classes, sz_embed, mrg=0.1, alpha=32):
+    def __init__(self, nb_classes, sz_embed,
+                 mixup_method='none', sampling_method=1,
+                 shifts=4, pairs_per_cls=4,
+                 mrg=0.1, alpha=32):
         torch.nn.Module.__init__(self)
         # Proxy Anchor Initialization
         self.proxies = torch.nn.Parameter(torch.randn(nb_classes, sz_embed).cuda())
@@ -119,16 +122,124 @@ class Proxy_Anchor(torch.nn.Module):
         self.sz_embed = sz_embed
         self.mrg = mrg
         self.alpha = alpha
+        self.mixup_method = mixup_method
+        self.sampling_method = sampling_method
+        self.shifts = shifts
+        self.pairs_per_cls = pairs_per_cls
+        assert self.mixup_method in ['none', 'intra', 'inter_noproxy', 'both']
+        assert self.sampling_method in [1, 2]  # 1 is weighted sampling, 2 is random sampling
 
-    def cross_attention(self, X, T, P):
-        '''
-            Cross attention calculation, give more weightage to neighbors closer to (corresponding) decision boundary or closer to the anchor itself
-        '''
-        P_batch = P[T.long(), :] # ground-truth proxies (N, sz_embed)
-        decision_boundaries = (P_batch.unsqueeze(0) + P_batch.unsqueeze(1)) / 2 # (N, N, sz_embed) decision boundaries (middle point between 2 proxies)
-        affinity2boundary = F.relu(torch.einsum("bkj,kj->bk", decision_boundaries, X)) # boundary-to-data affinity, (N, N)
-        affinity2x = F.relu(torch.einsum("bj,kj->bk", X, X)) # data-to-data affinity (N, N)
-        return affinity2boundary + affinity2x
+    @staticmethod
+    def random_lambdas(alpha=1.0):
+        return np.random.beta(alpha, alpha)  # sample a lambda from beta distribution
+
+    @staticmethod
+    def uncertainty_lambdas(index1s, index2s, T, IP):
+        C1, C2 = T[index1s], T[index2s]
+        X1P1, X1P2 = torch.clamp(IP[index1s, C1], min=-1., max=1.), \
+                     torch.clamp(IP[index1s, C2], min=-1., max=1.)  # (n_samples, )
+        X2P1, X2P2 = torch.clamp(IP[index2s, C1], min=-1., max=1.), \
+                     torch.clamp(IP[index2s, C2], min=-1., max=1.)
+        lambdas = (X2P2 - X2P1) / ((X2P2 - X2P1) + (X1P1 - X1P2))  # lambda_best
+        noises = torch.from_numpy((np.random.uniform(size=len(index1s)) * 0.4 - 0.2)).to(lambdas.device)
+        lambdas = lambdas + noises  # add small random noises ~ U(-0.2, 0.2)
+        lambdas = torch.clamp(lambdas, min=0.2, max=0.8)  # clamp
+
+        return lambdas
+
+    def intracls_mixup(self, X, T, IP):
+
+        T = binarize_and_smooth_labels(
+            T=T, nb_classes=len(self.proxies), smoothing_const=0
+        )  # (N, C)
+        D2T = IP * T  # (N, C) sparse matrix
+        non_empty_mask = D2T.abs().sum(dim=0).bool()
+        T_sub = torch.where(non_empty_mask == True)[0]  # record the class labels
+        T_sub = torch.repeat_interleave(T_sub, self.pairs_per_cls)
+
+        D2T_normalize = D2T[:,
+                        non_empty_mask]  # (N, C_sub) filter out non-zero columns which are the classes not sampled in this batch
+        D2T_normalize = masked_softmax(D2T_normalize,
+                                       dim=0)  # normalize for each class to find highest confidence samples to mix (N, C_sub)
+
+        # weighted sampling weighted by inverted confidence
+        if self.sampling_method == 1:
+            mixup_ind_samecls = torch.tensor([])
+            for j in range(D2T_normalize.size()[1]):
+                for _ in range(self.pairs_per_cls):
+                    prob_vec = D2T_normalize[:, j].detach().cpu().numpy()  # take j column
+                    index_pool = np.where(prob_vec != 0)[
+                        0]  # find the indices withint the batch that takes class label j
+                    prob_vec = (1. - prob_vec[index_pool])  # inverse its probability
+
+                    if np.sum(prob_vec == 0) == len(prob_vec):  # by right, this should not happen
+                        logging.info('All probabilities are zeros')
+                        pair_ind = np.random.choice(index_pool, 2,
+                                                    replace=False).tolist()
+                    else:
+                        pair_ind = np.random.choice(index_pool, 2,
+                                                    p=(prob_vec + 1e-8) / (prob_vec.sum() + 1e-8),
+                                                    # numerical stability
+                                                    replace=False).tolist()
+                    mixup_ind_samecls = torch.cat((mixup_ind_samecls, torch.tensor([pair_ind]).T), dim=-1)
+            mixup_ind_samecls = mixup_ind_samecls.long()  # (2, C_sub*pairs_percls)
+
+        # uniform random sampling
+        elif self.sampling_method == 2:
+            mixup_ind_samecls = torch.tensor([])
+            for j in range(D2T_normalize.size()[1]):
+                for _ in range(self.pairs_per_cls):
+                    pair_ind = np.random.choice(D2T_normalize.size()[0], 2,
+                                                replace=False).tolist()
+                    mixup_ind_samecls = torch.cat((mixup_ind_samecls, torch.tensor([pair_ind]).T), dim=-1)
+            mixup_ind_samecls = mixup_ind_samecls.long()  # (2, C_sub*pairs_percls)
+
+        selectedX_samecls = torch.stack([X[index, :] for index in mixup_ind_samecls],
+                                        dim=-1)  # of shape (C_sub*pairs_percls, sz_embed, 2)
+
+        # sample lambda coefficients
+        lambda_samecls = self.random_lambdas() * torch.ones((len(selectedX_samecls), self.sz_embed))
+        lambda_samecls = torch.stack((lambda_samecls, 1. - lambda_samecls), dim=-1).to(
+            selectedX_samecls.device)  # (C_sub*pairs_percls, sz_embed, 2)
+
+        # perform MixUp
+        virtual_samples = torch.sum(selectedX_samecls * lambda_samecls, dim=-1)  # (C_sub*pairs_percls, sz_embed)
+        virtual_samples = F.normalize(virtual_samples, p=2, dim=-1)
+        assert T_sub.size()[0] == virtual_samples.size()[0]
+        return T_sub, virtual_samples
+
+    def intercls_mixup(self, X, T, IP):
+        # we only sythesize samples and interpolating class labels
+        # get some inter-class pairs to mixup
+        index1s = torch.arange(X.size()[0])
+        index2s = torch.roll(index1s,
+                             -self.shifts)  # shifts should be equal to n_samples_per_cls in your balanced sampler
+        index1s, index2s = index1s.long(), index2s.long()
+        cls_index1s, cls_index2s = T[index1s], T[index2s]
+
+        if self.sampling_method == 1:
+            # uncertainty-based sampling
+            lambdas_diffcls = self.uncertainty_lambdas(index1s, index2s, T, IP).unsqueeze(-1).repeat(1, self.sz_embed)
+        elif self.sampling_method == 2:
+            # pure random sampling
+            lambdas_diffcls = self.random_lambdas() * torch.ones((len(index1s), self.sz_embed))
+
+        # virtual samples
+        selectedX_diffcls = torch.stack([X[index1s, :], X[index2s, :]], dim=-1)  # of shape (n_samples, sz_embed, 2)
+        lambdas_diffcls = torch.stack((lambdas_diffcls, 1. - lambdas_diffcls), dim=-1).to(
+            selectedX_diffcls.device)  # (n_samples, sz_embed, 2)
+        virtual_samples = torch.sum(selectedX_diffcls * lambdas_diffcls, dim=-1)  # (n_samples, sz_embed)
+        virtual_samples = F.normalize(virtual_samples, p=2, dim=-1)
+
+        # interpolating class labels
+        C1 = binarize_and_smooth_labels(T=cls_index1s, nb_classes=self.nb_classes, smoothing_const=0)  # (n_samples, C)
+        C2 = binarize_and_smooth_labels(T=cls_index2s, nb_classes=self.nb_classes, smoothing_const=0)  # (n_samples, C)
+        C = torch.stack((C1, C2), dim=-1)  # (n_samples, C, 2)
+        lambdas_diffcls = lambdas_diffcls[:, :self.nb_classes, :]  # same lambdas used as when creating virtual proxies
+        virtual_classes = torch.sum(C * lambdas_diffcls, dim=-1)  # (n_samples, C)
+
+        assert virtual_classes.size()[0] == virtual_samples.size()[0]
+        return virtual_classes, virtual_samples
 
     def forward(self, X, indices, T):
         P = self.proxies
@@ -136,28 +247,140 @@ class Proxy_Anchor(torch.nn.Module):
         X = F.normalize(X, p=2, dim=-1)
 
         # self-attention update like simplified message passing network
-        attention = self.cross_attention(X, T, P) # (N, N)
-        attention = attention / (attention.sum(-1) + 1e-5) # normalize over batch (N, N), each row is the importance of all other intra-batch samples relative to this sample
-        attention_weights = torch.einsum("bk,kj->bj", attention, X) # weighted average of neighbors (N, sz_embed)
-        X = X + attention_weights # weighted average + residual connection
+        # attention = self.cross_attention(X, T, P)  # (N, N)
+        # attention = attention / (attention.sum(
+        #     -1) + 1e-5)  # normalize over batch (N, N), each row is the importance of all other intra-batch samples relative to this sample
+        # attention_weights = torch.einsum("bk,kj->bj", attention, X)  # weighted average of neighbors (N, sz_embed)
+        # X = X + attention_weights  # weighted average + residual connection
 
-        cos = F.linear(l2_norm(X), l2_norm(P))  # Calcluate cosine similarity
-        P_one_hot = binarize_and_smooth_labels(T=T,
-                                               nb_classes=self.nb_classes)
-        N_one_hot = 1 - P_one_hot
+        if self.mixup_method == 'none':
+            # no MixUp applied
+            cos = F.linear(l2_norm(X), l2_norm(P))  # Calcluate cosine similarity
+            P_one_hot = binarize_and_smooth_labels(T=T, nb_classes=self.nb_classes)
+            N_one_hot = 1 - P_one_hot
 
-        pos_exp = torch.exp(-self.alpha * (cos - self.mrg))
-        neg_exp = torch.exp(self.alpha * (cos + self.mrg))
+            pos_exp = torch.exp(-self.alpha * (cos - self.mrg))
+            neg_exp = torch.exp(self.alpha * (cos + self.mrg))
 
-        with_pos_proxies = torch.nonzero(P_one_hot.sum(dim=0) != 0).squeeze(dim=1)  # The set of positive proxies of data in the batch
-        num_valid_proxies = len(with_pos_proxies)  # The number of positive proxies
+            with_pos_proxies = torch.nonzero(P_one_hot.sum(dim=0) != 0).squeeze(dim=1)  # The set of positive proxies of data in the batch
+            num_valid_proxies = len(with_pos_proxies)  # The number of positive proxies
 
-        P_sim_sum = torch.where(P_one_hot == 1, pos_exp, torch.zeros_like(pos_exp)).sum(dim=0)
-        N_sim_sum = torch.where(N_one_hot == 1, neg_exp, torch.zeros_like(neg_exp)).sum(dim=0)
+            P_sim_sum = torch.where(P_one_hot == 1, pos_exp, torch.zeros_like(pos_exp)).sum(dim=0)
+            N_sim_sum = torch.where(N_one_hot == 1, neg_exp, torch.zeros_like(neg_exp)).sum(dim=0)
 
-        pos_term = torch.log(1 + P_sim_sum).sum() / num_valid_proxies
-        neg_term = torch.log(1 + N_sim_sum).sum() / self.nb_classes
-        loss = pos_term + neg_term
+            pos_term = torch.log(1 + P_sim_sum).sum() / num_valid_proxies
+            neg_term = torch.log(1 + N_sim_sum).sum() / self.nb_classes
+            loss = pos_term + neg_term
+
+        elif self.mixup_method == 'intra':
+            IP = pairwise_distance(
+                torch.cat(
+                    [X, P]
+                ),
+                squared=True
+            )[1][:X.size()[0], X.size()[0]:]  # (N, C)
+
+            # intra-class mixup
+            T_sub, virtual_X = self.intracls_mixup(X, T, IP)
+            Xall = torch.cat((X, virtual_X), dim=0)
+            Tall = torch.cat([T, T_sub])
+
+            cos = F.linear(l2_norm(Xall), l2_norm(P))  # Calcluate cosine similarity
+            P_one_hot = binarize_and_smooth_labels(T=Tall, nb_classes=self.nb_classes)
+            N_one_hot = 1 - P_one_hot
+
+            with_pos_proxies = torch.nonzero(P_one_hot.sum(dim=0) != 0).squeeze(dim=1)  # The set of positive proxies of data in the batch
+            num_valid_proxies = len(with_pos_proxies)  # The number of positive proxies
+
+            pos_exp = torch.exp(-self.alpha * (cos - self.mrg))
+            neg_exp = torch.exp(self.alpha * (cos + self.mrg))
+            P_sim_sum = torch.where(P_one_hot == 1, pos_exp, torch.zeros_like(pos_exp)).sum(dim=0)
+            N_sim_sum = torch.where(N_one_hot == 1, neg_exp, torch.zeros_like(neg_exp)).sum(dim=0)
+
+            pos_term = torch.log(1 + P_sim_sum).sum() / num_valid_proxies
+            neg_term = torch.log(1 + N_sim_sum).sum() / self.nb_classes
+            loss = pos_term + neg_term
+
+        elif self.mixup_method == 'inter_noproxy':
+            '''
+                Original data
+            '''
+            cos = F.linear(l2_norm(X), l2_norm(P))  # Calcluate cosine similarity
+            P_one_hot = binarize_and_smooth_labels(T=T, nb_classes=self.nb_classes)
+            N_one_hot = 1 - P_one_hot
+
+            pos_exp = torch.exp(-self.alpha * (cos - self.mrg))
+            neg_exp = torch.exp(self.alpha * (cos + self.mrg))
+
+            with_pos_proxies = torch.nonzero(P_one_hot.sum(dim=0) != 0).squeeze(
+                dim=1)  # The set of positive proxies of data in the batch
+            num_valid_proxies = len(with_pos_proxies)  # The number of positive proxies
+
+            P_sim_sum = torch.where(P_one_hot == 1, pos_exp, torch.zeros_like(pos_exp)).sum(dim=0) # (C,)
+            N_sim_sum = torch.where(N_one_hot == 1, neg_exp, torch.zeros_like(neg_exp)).sum(dim=0) # (C,)
+
+            '''
+                Synthetic data
+            '''
+            IP = pairwise_distance(torch.cat([X, P]),
+                squared=True
+            )[1][:X.size()[0], X.size()[0]:]  # (N, C)
+
+            # interclass without synthetic proxy
+            virtual_classes, virtual_samples = self.intercls_mixup(X, T, IP)
+            cos_smooth = F.linear(l2_norm(virtual_samples), l2_norm(P).double())  # Calcluate cosine similarity (N', C)
+            P_smooth = virtual_classes # this is smooth label (N', C)
+            N_smooth = 1 - P_smooth
+
+            pos_exp_smooth = torch.exp(-self.alpha * (cos_smooth - self.mrg)) # (N', C)
+            neg_exp_smooth = torch.exp(self.alpha * (cos_smooth + self.mrg))
+
+            pos_exp_smooth = torch.where(P_smooth > 0, pos_exp_smooth * P_smooth, torch.zeros_like(pos_exp_smooth)).sum(dim=0) # (C,)
+            neg_exp_smooth = torch.where(N_smooth == 1, neg_exp_smooth, torch.zeros_like(neg_exp_smooth)).sum(dim=0) # (C,)
+
+            pos_term = torch.log(1 + P_sim_sum + pos_exp_smooth).sum() / num_valid_proxies
+            neg_term = torch.log(1 + N_sim_sum + neg_exp_smooth).sum() / self.nb_classes
+            loss = pos_term + neg_term
+
+        elif self.mixup_method == 'both':
+            '''original data with intra class mixup'''
+            IP = pairwise_distance(torch.cat([X, P]), squared=True)[1][:X.size()[0], X.size()[0]:]  # (N, C)
+
+            # Both intra-class and inter-class
+            virtual_classes_intra, virtual_samples_intra = self.intracls_mixup(X, T, IP)
+            Xall = torch.cat((X, virtual_samples_intra), dim=0)
+            Tall = torch.cat([T, virtual_classes_intra], 0)
+
+            cos = F.linear(l2_norm(Xall), l2_norm(P))  # Calcluate cosine similarity
+            P_one_hot = binarize_and_smooth_labels(T=Tall, nb_classes=self.nb_classes)
+            N_one_hot = 1 - P_one_hot
+
+            pos_exp = torch.exp(-self.alpha * (cos - self.mrg))
+            neg_exp = torch.exp(self.alpha * (cos + self.mrg))
+
+            with_pos_proxies = torch.nonzero(P_one_hot.sum(dim=0) != 0).squeeze(dim=1)  # The set of positive proxies of data in the batch
+            num_valid_proxies = len(with_pos_proxies)  # The number of positive proxies
+
+            P_sim_sum = torch.where(P_one_hot == 1, pos_exp, torch.zeros_like(pos_exp)).sum(dim=0) # (C,)
+            N_sim_sum = torch.where(N_one_hot == 1, neg_exp, torch.zeros_like(neg_exp)).sum(dim=0) # (C,)
+
+            '''Inter class'''
+            virtual_classes_inter, virtual_samples_inter = self.intercls_mixup(X, T, IP)
+            cos_smooth = F.linear(l2_norm(virtual_samples_inter), l2_norm(P).double())  # Calcluate cosine similarity (N', C)
+            P_smooth = virtual_classes_inter # this is smooth label (N', C)
+            N_smooth = 1 - P_smooth
+
+            pos_exp_smooth = torch.exp(-self.alpha * (cos_smooth - self.mrg)) # (N', C)
+            neg_exp_smooth = torch.exp(self.alpha * (cos_smooth + self.mrg))
+            pos_exp_smooth = torch.where(P_smooth > 0, pos_exp_smooth * P_smooth, torch.zeros_like(pos_exp_smooth)).sum(dim=0) # (C,)
+            neg_exp_smooth = torch.where(N_smooth == 1, neg_exp_smooth, torch.zeros_like(neg_exp_smooth)).sum(dim=0) # (C,)
+
+            pos_term = torch.log(1 + P_sim_sum + pos_exp_smooth).sum() / num_valid_proxies
+            neg_term = torch.log(1 + N_sim_sum + neg_exp_smooth).sum() / self.nb_classes
+            loss = pos_term + neg_term
+
+        else:
+            raise NotImplementedError
 
         return loss
 
@@ -468,7 +691,6 @@ class ProxyNCA_prob_mixup(torch.nn.Module):
             raise NotImplementedError
 
         return loss
-
 
 class ProxyNCA_prob_pregularizer(torch.nn.Module):
     '''
