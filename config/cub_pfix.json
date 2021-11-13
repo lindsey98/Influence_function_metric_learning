@@ -15,8 +15,11 @@
         }
     },
     "lr_scheduler2": {
-        "type": "torch.optim.lr_scheduler.MultiStepLR"
-        
+        "type": "torch.optim.lr_scheduler.MultiStepLR",
+        "args": {
+            "milestones": "[10, 20, 30]",
+            "gamma": "0.5"
+        }
     },
    
     "nb_epochs": "40*1",
@@ -39,7 +42,7 @@
                 "weight_decay": "0"
             },
             "base": {
-                "lr": "4e-2",
+                "lr": "4e-3",
                 "eps": "1.0"
             }
         }

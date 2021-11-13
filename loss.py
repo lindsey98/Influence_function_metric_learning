@@ -756,11 +756,12 @@ class ProxyNCA_pfix(torch.nn.Module):
     @torch.no_grad()
     def assign_cls4proxy(self, cls_mean):
         cls2proxy = torch.einsum('bi,mi->bm', cls_mean, self.proxies) # class mean to proxy affinity
-        row_ind, col_ind = linear_sum_assignment((1-cls2proxy).numpy()) # row_ind: which class, col_ind: which proxy
+        row_ind, col_ind = linear_sum_assignment((1-cls2proxy.detach().cpu()).numpy()) # row_ind: which class, col_ind: which proxy
         cls_indx = row_ind.argsort()
         sorted_class = row_ind[cls_indx]
         sorted_proxies = col_ind[cls_indx]
         self.proxies.data = self.proxies[sorted_proxies]
+        logging.info('Number of updated proxies: {}'.format(np.sum(sorted_proxies != np.asarray(range(len(self.proxies))))))
 
     def forward(self, X, indices, T):
         P = self.proxies

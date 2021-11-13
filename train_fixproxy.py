@@ -16,7 +16,7 @@ from tqdm import tqdm
 from torch.utils.data import Dataset, DataLoader
 from train import save_best_checkpoint, load_best_checkpoint
 import torch.nn.functional as F
-os.environ["CUDA_VISIBLE_DEVICES"]="1,0"
+os.environ["CUDA_VISIBLE_DEVICES"]="1"
 
 parser = argparse.ArgumentParser(description='Training ProxyNCA++')
 parser.add_argument('--epochs', default = 40, type=int, dest = 'nb_epochs')
@@ -30,7 +30,7 @@ parser.add_argument('--apex', default=False, action='store_true')
 parser.add_argument('--warmup_k', default=5, type=int)
 
 parser.add_argument('--dataset', default='cub')
-parser.add_argument('--seed', default=3, type=int)
+parser.add_argument('--seed', default=0, type=int)
 parser.add_argument('--eval_nmi', default=True, action='store_true')
 parser.add_argument('--embedding-size', default = 512, type=int, dest = 'sz_embedding')
 parser.add_argument('--config', default='config/cub_pfix.json')
@@ -43,6 +43,22 @@ parser.add_argument('--loss-type', default='Proxy_pfix', type=str)
 parser.add_argument('--workers', default = 4, type=int, dest = 'nb_workers')
 
 args = parser.parse_args()
+
+def proxy_assignment(model, dl_tr_noshuffle, criterion):
+    X, T, *_ = utils.predict_batchwise(model, dl_tr_noshuffle)
+    cls_means = torch.tensor([])
+    for cls in range(dl_tr_noshuffle.dataset.nb_classes()):
+        indices = T == cls
+        X_cls = X[indices, :]  # class-specific embedding
+        X_cls = F.normalize(X_cls, dim=-1, p=2)
+        clsmean = X_cls.mean(0)
+        cls_means = torch.cat([cls_means, clsmean.unsqueeze(0)], dim=0)
+
+    cls_means = F.normalize(cls_means, dim=-1, p=2).to(criterion.proxies.device)
+    logging.info('Proxy re-assigned!')
+    criterion.assign_cls4proxy(cls_means) # assign proxy to closest class
+    criterion = criterion.cuda()
+    return criterion
 
 if __name__ == '__main__':
 
@@ -343,9 +359,7 @@ if __name__ == '__main__':
     elif args.mode == 'trainval':
         scheduler = config['lr_scheduler2']['type'](
             opt,
-            milestones=args.lr_steps,
-            gamma=0.1
-            #opt, **config['lr_scheduler2']['args']
+            **config['lr_scheduler2']['args']
         )
 
     logging.info("Training parameters: {}".format(vars(args)))
@@ -393,17 +407,7 @@ if __name__ == '__main__':
 
 
     # initialization
-    X, T, *_ = utils.predict_batchwise(model, dl_tr_noshuffle)
-    cls_means = torch.tensor([])
-    for cls in range(dl_tr_noshuffle.dataset.nb_classes()):
-        indices = T == cls
-        X_cls = X[indices, :]  # class-specific embedding
-        X_cls = F.normalize(X_cls, dim=-1, p=2)
-        clsmean = X_cls.mean(0)
-        cls_means = torch.cat([cls_means, clsmean.unsqueeze(0)], dim=0)
-    cls_means = F.normalize(cls_means, dim=-1, p=2).detach().cpu()
-    criterion.assign_cls4proxy(cls_means) # assign proxy to closest class
-    criterion = criterion.cuda()
+    criterion = proxy_assignment(model, dl_tr_noshuffle, criterion)
 
     '''Warmup training'''
     if not args.no_warmup: # TODO: now dont use warmup
@@ -524,6 +528,8 @@ if __name__ == '__main__':
             utils.evaluate(model, dl_ev, args.eval_nmi, args.recall)
 
         if e % 10 == 0 or e == args.nb_epochs-1:
+            criterion = proxy_assignment(model, dl_tr_noshuffle, criterion)
+
             save_dir = 'dvi_data_{}_{}_loss{}/ResNet_{}_Model'.format(args.dataset, args.seed,
                                                                       args.loss_type, str(args.sz_embedding))
             os.makedirs('{}'.format(save_dir), exist_ok=True)
