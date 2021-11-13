@@ -8,6 +8,9 @@ from typing import Union
 import sklearn.preprocessing
 from itertools import combinations
 import logging
+from scipy.optimize import linear_sum_assignment
+import utils
+
 
 def masked_softmax(A, dim, t=1.0):
     '''
@@ -386,10 +389,7 @@ class ProxyNCA_prob_mixup(torch.nn.Module):
         X1P1 = torch.clamp(IP[index1s, C1], min=0., max=1.)
         X2P2 =  torch.clamp(IP[index2s, C2], min=0., max=1.)
         lambdas = (X1P1 + (1-X2P2)) / 2 # lambda_best
-        noises = torch.from_numpy((np.random.uniform(size=len(index1s))*0.4 - 0.2)).to(lambdas.device)
-        lambdas = lambdas + noises # add small random noises ~ U(-0.2, 0.2)
         lambdas = torch.clamp(lambdas, min=0., max=1.) # clamp
-
         return lambdas
 
     def intracls_mixup(self, X, T, IP):
@@ -508,7 +508,7 @@ class ProxyNCA_prob_mixup(torch.nn.Module):
         virtual_samples = F.normalize(virtual_samples, p=2, dim=-1)
 
         P_pairs = torch.stack((P[cls_index1s, :], P[cls_index2s, :]), dim=-1)  # (n_samples, sz_embed, 2)
-        if self.sampling_method == 1:
+        if self.sampling_method in [1, 3]:
             virtual_proxies = torch.sum(P_pairs * 0.5, dim=-1)  # (n_samples, sz_embed)  virtual proxies with mix ratio 0.5
         elif self.sampling_method == 2:
             virtual_proxies = torch.sum(P_pairs * lambdas_diffcls, dim=-1)  # (n_samples, sz_embed)
@@ -729,4 +729,55 @@ class ProxyNCA_prob_match(torch.nn.Module):
 
         return loss
 
+class ProxyNCA_pfix(torch.nn.Module):
+    '''
+        Original loss in ProxyNCA++
+    '''
+    def __init__(self, nb_classes, sz_embed, scale, **kwargs):
+        torch.nn.Module.__init__(self)
+        self.proxies = torch.nn.Parameter(torch.randn(nb_classes, sz_embed)) # not training
+        self.proxies.requires_grad = False
+        self._proxy_init(nb_classes, sz_embed)
+        self.scale = scale
 
+    def _proxy_init(self, nb_classes, sz_embed):
+        proxies = torch.randn((nb_classes, sz_embed), requires_grad=True)
+        _optimizer = torch.optim.Adam(params={proxies}, lr=0.1)
+        for _ in range(100):
+            mean, var = utils.inter_proxy_dist(proxies, cosine=True)
+            _loss = mean + var
+            _optimizer.zero_grad()
+            _loss.backward()
+            _optimizer.step()
+
+        proxies = F.normalize(proxies, p=2, dim=-1)
+        self.proxies.data = proxies.detach()
+
+    @torch.no_grad()
+    def assign_cls4proxy(self, cls_mean):
+        cls2proxy = torch.einsum('bi,mi->bm', cls_mean, self.proxies) # class mean to proxy affinity
+        row_ind, col_ind = linear_sum_assignment((1-cls2proxy).numpy()) # row_ind: which class, col_ind: which proxy
+        cls_indx = row_ind.argsort()
+        sorted_class = row_ind[cls_indx]
+        sorted_proxies = col_ind[cls_indx]
+        self.proxies.data = self.proxies[sorted_proxies]
+
+    def forward(self, X, indices, T):
+        P = self.proxies
+        P = self.scale * F.normalize(P, p=2, dim=-1)
+        X = self.scale * F.normalize(X, p=2, dim=-1)
+
+        D = pairwise_distance(
+            torch.cat(
+                [X, P]
+            ),
+            squared=True
+        )[0][:X.size()[0], X.size()[0]:]
+
+        T = binarize_and_smooth_labels(
+            T=T, nb_classes=len(P), smoothing_const=0
+        )
+
+        loss = torch.sum(- T * F.log_softmax(-D, -1), -1)
+        loss = loss.mean()
+        return loss

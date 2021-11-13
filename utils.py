@@ -327,13 +327,15 @@ def calc_gap(model, dl, proxies, topk=5):
 
     return gaps.mean()
 
-
-def inter_proxy_dist(proxies):
-    # logging.info('Proxies of shape ', proxies.shape)
-    IP = pairwise_distance(proxies, squared=True)[1]
-    upper_triu = torch.triu(IP, diagonal=1)
+def inter_proxy_dist(proxies, cosine=True):
+    D, IP = pairwise_distance(proxies, squared=True)
+    if cosine:
+        upper_triu = torch.triu(IP, diagonal=1)
+    else:
+        upper_triu = torch.triu(D, diagonal=1)
     reduced_mean = upper_triu.mean()
-    return reduced_mean
+    reduced_var = torch.std(upper_triu)
+    return reduced_mean, reduced_var
 
 def batch_lbl_stats(y):
     '''

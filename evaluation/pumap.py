@@ -19,7 +19,7 @@ from matplotlib.offsetbox import TextArea, DrawingArea, OffsetImage, \
     AnnotationBbox
 import evaluation
 
-os.environ['CUDA_VISIBLE_DEVICES'] = "1,0"
+os.environ['CUDA_VISIBLE_DEVICES'] = "0,1"
 
 def prepare_data(data_name='cub', root='dvi_data_cub200/', save=False):
     '''
@@ -175,22 +175,22 @@ def get_wrong_indices(X, T):
     wrong_ind = np.where(np.asarray(correct) == 0)[0]
     wrong_labels = T[wrong_ind]
     unique_labels, wrong_freq = torch.unique(wrong_labels, return_counts=True)
-    top10_wrong_classes = unique_labels[torch.argsort(wrong_freq, descending=True)[:10]].numpy()
+    top10_wrong_classes = unique_labels[torch.argsort(wrong_freq, descending=True)[:15]].numpy()
     return wrong_ind, top10_wrong_classes
-
 
 
 if __name__ == '__main__':
 
     dataset_name = 'cub'
-    loss_type = 'ProxyNCA_prob_orig'
-    # loss_type = 'ProxyAnchor'
+    # loss_type = 'ProxyNCA_prob_orig'
+    loss_type = 'ProxyAnchor'
     sz_embedding = 512
-    presaved = True
-    pretrained = True
+    seed = 4
+    presaved = False
+    pretrained = False
     interactive = True
     highlight = True
-    folder = 'dvi_data_{}_loss{}/'.format(dataset_name, loss_type)
+    folder = 'dvi_data_{}_{}_loss{}/'.format(dataset_name, seed, loss_type)
     model_dir = '{}/ResNet_{}_Model'.format(folder, sz_embedding)
     plot_dir = '{}/resnet_{}_umap_plots'.format(folder, sz_embedding)
 
@@ -212,14 +212,14 @@ if __name__ == '__main__':
 
     # load loss
     # TODO: should echange criterion accordingly
-    criterion = ProxyNCA_prob_orig(nb_classes=dl_tr.dataset.nb_classes(),
-                                  sz_embed=sz_embedding,
-                                   scale=3 )
-    # criterion = Proxy_Anchor(nb_classes=dl_tr.dataset.nb_classes(),
-    #                               sz_embed=sz_embedding)
+    # criterion = ProxyNCA_prob_orig(nb_classes=dl_tr.dataset.nb_classes(),
+    #                               sz_embed=sz_embedding,
+    #                                scale=3 )
+    criterion = Proxy_Anchor(nb_classes=dl_tr.dataset.nb_classes(),
+                                  sz_embed=sz_embedding)
 
     for e in [39]:
-        model.load_state_dict(torch.load('{}/Epoch_{}/{}_{}_trainval_512_0.pth'.format(model_dir, e + 1, dataset_name, dataset_name)))
+        model.load_state_dict(torch.load('{}/Epoch_{}/{}_{}_trainval_512_{}.pth'.format(model_dir, e + 1, dataset_name, dataset_name, seed)))
         proxies = torch.load('{}/Epoch_{}/proxy.pth'.format(model_dir, e + 1), map_location='cpu')['proxies'].detach()
         criterion.proxies.data = proxies
 
