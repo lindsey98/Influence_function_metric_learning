@@ -183,9 +183,9 @@ if __name__ == '__main__':
 
     dataset_name = 'cub'
     # loss_type = 'ProxyNCA_prob_orig'
-    loss_type = 'ProxyAnchor'
+    loss_type = 'ProxyAnchor_pfix'
     sz_embedding = 512
-    seed = 4
+    seed = 0
     presaved = False
     pretrained = False
     interactive = True
@@ -215,8 +215,10 @@ if __name__ == '__main__':
     # criterion = ProxyNCA_prob_orig(nb_classes=dl_tr.dataset.nb_classes(),
     #                               sz_embed=sz_embedding,
     #                                scale=3 )
-    criterion = Proxy_Anchor(nb_classes=dl_tr.dataset.nb_classes(),
-                                  sz_embed=sz_embedding)
+    # criterion = Proxy_Anchor(nb_classes=dl_tr.dataset.nb_classes(),
+    #                               sz_embed=sz_embedding)
+    criterion = ProxyAnchor_pfix(nb_classes=dl_tr.dataset.nb_classes(),
+                                  sz_embed=sz_embedding, )
 
     for e in [39]:
         model.load_state_dict(torch.load('{}/Epoch_{}/{}_{}_trainval_512_{}.pth'.format(model_dir, e + 1, dataset_name, dataset_name, seed)))

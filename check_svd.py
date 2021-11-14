@@ -18,8 +18,8 @@ if __name__ == '__main__':
 
     for seed in range(6):
         print(seed)
-        model_dir = 'results/cub_cub_anchor_trainval_512_{}_lossProxyAnchor.pt'.format(seed)
-        proxy_dir = 'dvi_data_cub_{}_lossProxyAnchor/ResNet_512_Model/Epoch_40/proxy.pth'.format(seed)
+        model_dir = 'dvi_data_cub_{}_lossProxyAnchor_pfix/ResNet_512_Model/Epoch_40/cub_cub_trainval_512_{}.pth'.format(seed, seed)
+        proxy_dir = 'dvi_data_cub_{}_lossProxyAnchor_pfix/ResNet_512_Model/Epoch_40/proxy.pth'.format(seed)
         config = utils.load_config('config/cub.json')
 
         # load training dataset CUB200 dataset
@@ -91,10 +91,11 @@ if __name__ == '__main__':
         # plt.title(model_dir.split('/')[-1].split('.pt')[0])
         # plt.show()
 
-        print(utils.evaluate(model, dl_ev))
+        # print(utils.evaluate(model, dl_ev))
         proxies = torch.load(proxy_dir)['proxies']
-        avg_inter_proxy_ip, _ = utils.inter_proxy_dist(proxies, cosine=True)
+        avg_inter_proxy_ip, var_inter_proxy_ip = utils.inter_proxy_dist(proxies, cosine=True, neighbor_only=True)
         print(avg_inter_proxy_ip.item())
+        print(var_inter_proxy_ip.item())
 
         # gaps = utils.calc_gap(model, dl_tr_noshuffle, proxies)
         # print(gaps)

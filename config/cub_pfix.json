@@ -2,9 +2,9 @@
     "name": "str('example')",
     "gpu_id": "int(0)",
     "criterion": {
-        "type": "loss.ProxyNCA_pfix",
+        "type": "loss.ProxyAnchor_pfix",
         "args": {
-            "scale": "3"
+
         }
     },
     "lr_scheduler": {
@@ -17,8 +17,8 @@
     "lr_scheduler2": {
         "type": "torch.optim.lr_scheduler.MultiStepLR",
         "args": {
-            "milestones": "[10, 20, 30]",
-            "gamma": "0.5"
+            "milestones": "[10, 20]",
+            "gamma": "0.1"
         }
     },
    

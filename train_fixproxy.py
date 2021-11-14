@@ -16,7 +16,7 @@ from tqdm import tqdm
 from torch.utils.data import Dataset, DataLoader
 from train import save_best_checkpoint, load_best_checkpoint
 import torch.nn.functional as F
-os.environ["CUDA_VISIBLE_DEVICES"]="1"
+os.environ["CUDA_VISIBLE_DEVICES"]="1,0"
 
 parser = argparse.ArgumentParser(description='Training ProxyNCA++')
 parser.add_argument('--epochs', default = 40, type=int, dest = 'nb_epochs')
@@ -39,7 +39,7 @@ parser.add_argument('--mode', default='trainval', choices=['train', 'trainval', 
                     help='train with train data or train with trainval')
 parser.add_argument('--batch-size', default = 32, type=int, dest = 'sz_batch')
 parser.add_argument('--no_warmup', default=False, action='store_true')
-parser.add_argument('--loss-type', default='Proxy_pfix', type=str)
+parser.add_argument('--loss-type', default='ProxyAnchor_pfix_assignevery1epoch', type=str)
 parser.add_argument('--workers', default = 4, type=int, dest = 'nb_workers')
 
 args = parser.parse_args()
@@ -527,9 +527,9 @@ if __name__ == '__main__':
         else:
             utils.evaluate(model, dl_ev, args.eval_nmi, args.recall)
 
-        if e % 10 == 0 or e == args.nb_epochs-1:
-            criterion = proxy_assignment(model, dl_tr_noshuffle, criterion)
+        criterion = proxy_assignment(model, dl_tr_noshuffle, criterion)
 
+        if e % 10 == 0 or e == args.nb_epochs-1:
             save_dir = 'dvi_data_{}_{}_loss{}/ResNet_{}_Model'.format(args.dataset, args.seed,
                                                                       args.loss_type, str(args.sz_embedding))
             os.makedirs('{}'.format(save_dir), exist_ok=True)
