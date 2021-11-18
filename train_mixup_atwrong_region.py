@@ -18,7 +18,8 @@ from torch.utils.data import Dataset, DataLoader
 os.environ["CUDA_VISIBLE_DEVICES"]="1,0"
 
 parser = argparse.ArgumentParser(description='Training ProxyNCA++')
-parser.add_argument('--epochs', default = 40, type=int, dest = 'nb_epochs')
+parser.add_argument('--start_epochs', default = 40, type=int, dest = 'start epochs')
+parser.add_argument('--end_epochs', default = 50, type=int, dest = 'end epochs')
 parser.add_argument('--log-filename', default = 'example')
 parser.add_argument('--lr_steps', default=[1000], nargs='+', type=int)
 parser.add_argument('--source_dir', default='', type=str)
@@ -28,57 +29,24 @@ parser.add_argument('--init_eval', default=False, action='store_true')
 parser.add_argument('--apex', default=False, action='store_true')
 parser.add_argument('--warmup_k', default=5, type=int)
 
-parser.add_argument('--dataset', default='inshop')
+parser.add_argument('--dataset', default='cub')
 parser.add_argument('--seed', default=0, type=int)
 parser.add_argument('--eval_nmi', default=True, action='store_true')
 parser.add_argument('--embedding-size', default = 512, type=int, dest = 'sz_embedding')
-parser.add_argument('--config', default='config/inshop.json')
+parser.add_argument('--config', default='config/cub.json')
 parser.add_argument('--mode', default='trainval', choices=['train', 'trainval', 'test',
-                                                           'testontrain', 'testontrain_super'],
+                                                           'testontrain'],
                     help='train with train data or train with trainval')
 parser.add_argument('--batch-size', default = 32, type=int, dest = 'sz_batch')
 parser.add_argument('--no_warmup', default=False, action='store_true')
-parser.add_argument('--loss-type', default='ProxyNCA_prob_orig', type=str)
+parser.add_argument('--loss-type', default='ProxyNCA_prob_orig_regionmixup', type=str)
 parser.add_argument('--workers', default = 4, type=int, dest = 'nb_workers')
 
 args = parser.parse_args()
 
-def save_best_checkpoint(model):
-    torch.save(model.state_dict(), 'results/' + args.log_filename + '.pt')
-
-def load_best_checkpoint(model):
-    try:
-        model.load_state_dict(torch.load('results/' + args.log_filename + '.pt'))
-    except FileNotFoundError:
-        model.load_state_dict(torch.load('results/' + args.log_filename + '.pth'))
-    model = model.cuda()
-    return model
-
-def mixup_data(x, y, alpha=1.0, use_cuda=True):
-    '''Returns mixed inputs, pairs of targets, and lambda'''
-    if alpha > 0:
-        lam = np.random.beta(alpha, alpha)
-    else:
-        lam = 1
-
-    batch_size = x.size()[0]
-    if use_cuda:
-        index = torch.randperm(batch_size).cuda()
-    else:
-        index = torch.randperm(batch_size)
-
-    mixed_x = lam * x + (1 - lam) * x[index, :]
-    y_a, y_b = y, y[index]
-    return mixed_x, y_a, y_b, lam, (torch.arange(batch_size), index)
-
-def mixup_criterion(criterion, pred, y_a, y_b, indices_a, indices_b, lam):
-    return lam * criterion(pred, indices_a, y_a) + (1 - lam) * criterion(pred, indices_b, y_b)
-
 if __name__ == '__main__':
 
     # set random seed for all gpus
-    # random.seed(args.seed)
-    # np.random.seed(args.seed) # FIXME: to not set seed
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed_all(args.seed)
 
@@ -126,8 +94,6 @@ if __name__ == '__main__':
         args.log_filename = args.log_filename.replace('test', 'trainval')
     elif args.mode == 'testontrain':
         args.log_filename = args.log_filename.replace('testontrain', 'trainval')
-    elif args.mode == 'testontrain_super':
-        args.log_filename = args.log_filename.replace('testontrain_super', 'trainval')
     best_epoch = args.nb_epochs
 
     '''Dataloader'''
@@ -267,25 +233,6 @@ if __name__ == '__main__':
             batch_size=64,
     )
 
-
-    print("===")
-    if args.mode == 'train':
-        dl_val = torch.utils.data.DataLoader(
-            dataset.load(
-                name = args.dataset,
-                root = dataset_config['dataset'][args.dataset]['root'],
-                source = dataset_config['dataset'][args.dataset]['source'],
-                classes = dataset_config['dataset'][args.dataset]['classes']['val'],
-                transform = dataset.utils.make_transform(
-                    **dataset_config[transform_key],
-                    is_train = False
-                )
-            ),
-            batch_size = args.sz_batch,
-            shuffle = False,
-            num_workers = args.nb_workers,
-        )
-
     '''Model'''
     feat = config['model']['type']()
     feat.eval()
@@ -302,32 +249,6 @@ if __name__ == '__main__':
         sz_embed = args.sz_embedding,
         **config['criterion']['args']
     ).cuda()
-
-    opt_warmup = config['opt']['type'](
-        [
-            {
-                **{'params': list(feat.parameters()
-                    )
-                },
-                'lr': 0
-            },
-            {
-                **{'params': list(emb.parameters()
-                    )
-                },
-                **config['opt']['args']['embedding']
-
-            },
-
-            {
-                **{'params': criterion.proxies}
-                ,
-                **config['opt']['args']['proxynca']
-
-            },
-        ],
-        **config['opt']['args']['base']
-    )
 
     # options for model and loss
     opt = config['opt']['type'](
@@ -368,15 +289,6 @@ if __name__ == '__main__':
             logging.info("**Evaluating...(test mode, test on training set)**")
             model = load_best_checkpoint(model)
             utils.evaluate(model, dl_tr_noshuffle, args.eval_nmi, args.recall)
-        exit() # exit the program
-
-    if args.mode == 'testontrain_super':
-        with torch.no_grad():
-            logging.info("**Evaluating with gt super 100 classes...(test mode, test on training set)**")
-            model = load_best_checkpoint(model)
-            with open("mnt/datasets/logo2ksuperclass0.01.json", 'rt') as handle:
-                labeldict = json.load(handle)
-            utils.evaluate_super(model, dl_tr_noshuffle, labeldict, args.eval_nmi, args.recall)
         exit() # exit the program
 
     if args.mode == 'train':
@@ -434,20 +346,6 @@ if __name__ == '__main__':
         logging.info('Number of query set: {}'.format(len(dl_query.dataset)))
         logging.info('Number of gallery set: {}'.format(len(dl_gallery.dataset)))
 
-    '''Warmup training'''
-    if not args.no_warmup:
-        #warm up training for 5 epochs
-        logging.info("**warm up for %d epochs.**" % args.warmup_k)
-        for e in range(0, args.warmup_k):
-            for ct, (x, y, _) in tqdm(enumerate(dl_tr)):
-                opt_warmup.zero_grad()
-                m = model(x.cuda())
-                loss = criterion(m, None, y.cuda())
-                loss.backward()
-                torch.nn.utils.clip_grad_value_(model.parameters(), 10)
-                opt_warmup.step()
-            logging.info('warm up ends in %d epochs' % (args.warmup_k-e))
-
 
     '''training loop'''
     for e in range(0, args.nb_epochs):
@@ -471,12 +369,6 @@ if __name__ == '__main__':
             x, y = x.cuda(), y.cuda()
             m = model(x)
             loss = criterion(m, indices, y)
-            # mixed_inputs, targets_a, targets_b, lam, (indices_a, indices_b) = mixup_data(x, y, alpha=1.0, use_cuda=True)
-            # mixed_inputs, targets_a, targets_b = map(torch.autograd.Variable, (mixed_inputs, targets_a, targets_b))
-            # outputs = model(mixed_inputs)
-            # mixed_loss = mixup_criterion(criterion, outputs, targets_a, targets_b, indices_a, indices_b, lam)
-            # loss += mixed_loss
-
             opt.zero_grad()
             loss.backward() # backprop
             torch.nn.utils.clip_grad_value_(model.parameters(), 10) # clip gradient?

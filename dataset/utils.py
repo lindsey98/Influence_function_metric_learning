@@ -353,3 +353,65 @@ class ClsCohSampler(torch.utils.data.sampler.Sampler):
     def __len__(self):
         return self.n_dataset // self.batch_size
 
+
+
+class ClsSubsetSampler(torch.utils.data.sampler.Sampler):
+
+    def __init__(self, labels, n_classes, n_samples):
+        self.labels = labels
+        self.labels_set = list(set(self.labels.numpy()))
+        self.label_to_indices = {label: np.where(self.labels.numpy() == label)[0]
+                                 for label in self.labels_set}
+        for l in self.labels_set:
+            np.random.shuffle(self.label_to_indices[l])
+        self.used_label_indices_count = {label: 0 for label in self.labels_set}
+        self.count = 0
+        self.n_classes = n_classes
+        self.n_samples = n_samples
+        self.n_dataset = len(self.labels)
+        self.batch_size = self.n_samples * self.n_classes
+
+    def create_storage(self, test_loader, train_loader, model):  # this dataloader should be test/val loader
+
+        from utils import get_wrong_indices, predict_batchwise, pairwise_distance
+        X, T, *_ = predict_batchwise(model, test_loader)
+        _, top15wrongclasses = get_wrong_indices(X, T)
+        top15wrongclasses = torch.from_numpy(top15wrongclasses)
+        wrongcls_emb = X[torch.isin(T, top15wrongclasses)]
+
+        # find neighboring training classes
+        X_tr, T_tr, *_ = predict_batchwise(model, train_loader)
+        _, IP = pairwise_distance(
+            torch.cat([X_tr, wrongcls_emb]),
+            squared=True
+        ) # affinity to wrong classes' embeddings (N_tr, N')
+
+        M = torch.zeros((train_loader.dataset.nb_classes(), len(X_tr))) # (C_tr, N_tr)
+        M[T_tr, torch.arange(len(X_tr))] = 1
+        M = torch.nn.functional.normalize(M, p=1, dim=1) # average matrix average over all training samples for each class
+        similarity = torch.mm(M, IP) # (C_tr, N')
+        similarity = similarity.max(-1) # (C_tr)
+        self.storage = similarity
+        logging.info('Reinitialize Class Sampler by finding probably wrong region')
+
+    def __iter__(self):
+        self.count = 0
+        while self.count + self.batch_size < self.n_dataset:
+            # top classes that lie in the mostly likely wrong regions
+            classes = torch.argsort(self.storage, descending=True)[:self.n_classes]
+
+            indices = []
+            for cls in classes:
+                indices.extend(self.label_to_indices[cls][self.used_label_indices_count[cls]: \
+                                                          (self.used_label_indices_count[cls] + self.n_samples)])
+                self.used_label_indices_count[cls] += self.n_samples
+
+                if self.used_label_indices_count[cls] + self.n_samples > len(self.label_to_indices[cls]):
+                    np.random.shuffle(self.label_to_indices[cls])
+                    self.used_label_indices_count[cls] = 0
+
+            yield indices
+            self.count += self.n_classes * self.n_samples
+
+    def __len__(self):
+        return self.n_dataset // self.batch_size

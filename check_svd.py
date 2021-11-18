@@ -9,18 +9,20 @@ from tqdm import tqdm
 from torch.utils.data import Dataset
 import torch
 
-os.environ["CUDA_VISIBLE_DEVICES"]="1, 0"
+os.environ["CUDA_VISIBLE_DEVICES"]="1"
 
 
 if __name__ == '__main__':
     sz_embedding = 512
-    dataset_name = 'cub'
+    dataset_name = 'cars'
+    loss_type = 'ProxyAnchor_pfix_controlvariance'
 
     for seed in range(6):
         print(seed)
-        model_dir = 'dvi_data_cub_{}_lossProxyAnchor_pfix/ResNet_512_Model/Epoch_40/cub_cub_trainval_512_{}.pth'.format(seed, seed)
-        proxy_dir = 'dvi_data_cub_{}_lossProxyAnchor_pfix/ResNet_512_Model/Epoch_40/proxy.pth'.format(seed)
-        config = utils.load_config('config/cub.json')
+        model_dir = 'dvi_data_{}_{}_loss{}/ResNet_512_Model/Epoch_40/{}_{}_trainval_512_{}.pth'.format(dataset_name, seed, loss_type,
+                                                                                                       dataset_name, dataset_name, seed)
+        proxy_dir = 'dvi_data_{}_{}_loss{}/ResNet_512_Model/Epoch_40/proxy.pth'.format(dataset_name, seed, loss_type)
+        config = utils.load_config('config/cars.json')
 
         # load training dataset CUB200 dataset
         dataset_config = utils.load_config('dataset/config.json')
@@ -82,20 +84,19 @@ if __name__ == '__main__':
         # load state_dict
         model.load_state_dict(torch.load(model_dir))
 
-        # get svd
-        # svd = utils.get_svd(model, dl_tr_noshuffle, return_avg=True)
-        # print(svd.item())
-        # plt.plot(svd.detach().cpu().numpy())
-        # for i, j in zip(range(len(svd)), svd):
-        #     plt.annotate(str(round(j.item(), 2)), xy=(i, j))
-        # plt.title(model_dir.split('/')[-1].split('.pt')[0])
-        # plt.show()
+        print('Training')
+        print(utils.evaluate(model, dl_tr_noshuffle))
+        print('Testing')
+        print(utils.evaluate(model, dl_ev))
 
-        # print(utils.evaluate(model, dl_ev))
         proxies = torch.load(proxy_dir)['proxies']
-        avg_inter_proxy_ip, var_inter_proxy_ip = utils.inter_proxy_dist(proxies, cosine=True, neighbor_only=True)
+        avg_inter_proxy_ip, var_inter_proxy_ip = utils.inter_proxy_dist(proxies, cosine=True, neighbor_only=False)
+        print('Proxy-Proxy')
         print(avg_inter_proxy_ip.item())
         print(var_inter_proxy_ip.item())
 
-        # gaps = utils.calc_gap(model, dl_tr_noshuffle, proxies)
-        # print(gaps)
+        avg_inter_proxy_ip, var_inter_proxy_ip = utils.inter_proxy_dist(proxies, cosine=True, neighbor_only=True)
+        print('Proxy-Neighbor')
+        print(avg_inter_proxy_ip.item())
+        print(var_inter_proxy_ip.item())
+

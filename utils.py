@@ -363,3 +363,17 @@ def batch_lbl_stats(y):
     return kk_c
 
 
+def get_wrong_indices(X, T, N=15):
+    k = 1
+    Y = evaluation.assign_by_euclidian_at_k(X, T, k)
+    Y = torch.from_numpy(Y)
+    correct = [1 if t in y[:k] else 0 for t, y in zip(T, Y)]
+
+    wrong_ind = np.where(np.asarray(correct) == 0)[0]
+    wrong_labels = T[wrong_ind]
+    unique_labels, wrong_freq = torch.unique(wrong_labels, return_counts=True)
+    topN_wrong_classes = unique_labels[torch.argsort(wrong_freq, descending=True)[:N]].numpy()
+
+    return wrong_ind, topN_wrong_classes
+
+

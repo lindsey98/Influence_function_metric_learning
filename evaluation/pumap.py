@@ -182,12 +182,12 @@ def get_wrong_indices(X, T):
 if __name__ == '__main__':
 
     dataset_name = 'cub'
-    # loss_type = 'ProxyNCA_prob_orig'
     loss_type = 'ProxyAnchor_pfix'
+    # loss_type = 'ProxyAnchor_pfix_controlvariance'
     sz_embedding = 512
     seed = 0
-    presaved = False
-    pretrained = False
+    presaved = True
+    pretrained = True
     interactive = True
     highlight = True
     folder = 'dvi_data_{}_{}_loss{}/'.format(dataset_name, seed, loss_type)
@@ -212,13 +212,13 @@ if __name__ == '__main__':
 
     # load loss
     # TODO: should echange criterion accordingly
-    # criterion = ProxyNCA_prob_orig(nb_classes=dl_tr.dataset.nb_classes(),
-    #                               sz_embed=sz_embedding,
-    #                                scale=3 )
+    criterion = ProxyNCA_prob_orig(nb_classes=dl_tr.dataset.nb_classes(),
+                                  sz_embed=sz_embedding,
+                                   scale=3 )
     # criterion = Proxy_Anchor(nb_classes=dl_tr.dataset.nb_classes(),
     #                               sz_embed=sz_embedding)
-    criterion = ProxyAnchor_pfix(nb_classes=dl_tr.dataset.nb_classes(),
-                                  sz_embed=sz_embedding, )
+    # criterion = ProxyAnchor_pfix(nb_classes=dl_tr.dataset.nb_classes(),
+    #                               sz_embed=sz_embedding, )
 
     for e in [39]:
         model.load_state_dict(torch.load('{}/Epoch_{}/{}_{}_trainval_512_{}.pth'.format(model_dir, e + 1, dataset_name, dataset_name, seed)))
@@ -249,6 +249,7 @@ if __name__ == '__main__':
         testing_embedding = torch.load('{}/Epoch_{}/testing_embeddings.pth'.format(model_dir, e + 1))
         testing_label = torch.load('{}/Epoch_{}/testing_labels.pth'.format(model_dir, e + 1))
         wrong_ind, top10_wrong_classes = get_wrong_indices(testing_embedding, testing_label)
+        print(top10_wrong_classes)
         # label_sub_test_wrong = test_label[wrong_ind].numpy()
         # low_dim_emb_test_wrong = low_dim_emb_test[wrong_ind, :]
         # images_test_wrong = [dl_ev.dataset.__getitem__(ind)[0].permute(1, 2, 0).numpy() for ind in wrong_ind]
