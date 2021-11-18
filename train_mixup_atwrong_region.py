@@ -14,12 +14,13 @@ import argparse
 import json
 from tqdm import tqdm
 from torch.utils.data import Dataset, DataLoader
+from train import load_best_checkpoint, save_best_checkpoint
 
 os.environ["CUDA_VISIBLE_DEVICES"]="1,0"
 
 parser = argparse.ArgumentParser(description='Training ProxyNCA++')
-parser.add_argument('--start_epochs', default = 40, type=int, dest = 'start epochs')
-parser.add_argument('--end_epochs', default = 50, type=int, dest = 'end epochs')
+parser.add_argument('--start-epochs', default = 40, type=int, dest = 'start_epochs')
+parser.add_argument('--end-epochs', default = 50, type=int, dest = 'end_epochs')
 parser.add_argument('--log-filename', default = 'example')
 parser.add_argument('--lr_steps', default=[1000], nargs='+', type=int)
 parser.add_argument('--source_dir', default='', type=str)
@@ -30,10 +31,18 @@ parser.add_argument('--apex', default=False, action='store_true')
 parser.add_argument('--warmup_k', default=5, type=int)
 
 parser.add_argument('--dataset', default='cub')
+parser.add_argument('--model_weights',
+                    default='dvi_data_cub_0_lossProxyNCA_prob_orig/ResNet_512_Model/Epoch_40/cub_cub_trainval_512_0.pth',
+                    type=str,
+                    help='path to trained weights')
+parser.add_argument('--proxy_weights',
+                    default='dvi_data_cub_0_lossProxyNCA_prob_orig/ResNet_512_Model/Epoch_40/proxy.pth',
+                    type=str,
+                    help='path to trained proxies')
 parser.add_argument('--seed', default=0, type=int)
 parser.add_argument('--eval_nmi', default=True, action='store_true')
 parser.add_argument('--embedding-size', default = 512, type=int, dest = 'sz_embedding')
-parser.add_argument('--config', default='config/cub.json')
+parser.add_argument('--config', default='config/cub_mixup_region.json')
 parser.add_argument('--mode', default='trainval', choices=['train', 'trainval', 'test',
                                                            'testontrain'],
                     help='train with train data or train with trainval')
@@ -179,60 +188,30 @@ if __name__ == '__main__':
         ]
     )
 
-    if args.mode == 'train':
-        tr_dataset = dataset.load(
-                name = args.dataset,
-                root = dataset_config['dataset'][args.dataset]['root'],
-                source = dataset_config['dataset'][args.dataset]['source'],
-                classes = dataset_config['dataset'][args.dataset]['classes']['train'],
-                transform = train_transform
-            )
-
-    elif args.mode == 'trainval' or args.mode == 'test' \
-            or args.mode == 'testontrain' or args.mode == 'testontrain_super':
-        # print(dataset_config['dataset'][args.dataset]['root'])
-        tr_dataset = dataset.load(
-                name = args.dataset,
-                root = dataset_config['dataset'][args.dataset]['root'],
-                source = dataset_config['dataset'][args.dataset]['source'],
-                classes = dataset_config['dataset'][args.dataset]['classes']['trainval'],
-                transform = train_transform
-            )
-
-    num_class_per_batch = config['num_class_per_batch']
-    num_gradcum = config['num_gradcum']
-    is_random_sampler = config['is_random_sampler']
-    if is_random_sampler:
-        batch_sampler = dataset.utils.RandomBatchSampler(tr_dataset.ys, args.sz_batch, True, num_class_per_batch, num_gradcum)
-    else:
-
-        batch_sampler = dataset.utils.BalancedBatchSampler(torch.Tensor(tr_dataset.ys), num_class_per_batch,
-                                                           int(args.sz_batch / num_class_per_batch))
-
-
-    dl_tr = torch.utils.data.DataLoader(
-        tr_dataset,
-        batch_sampler = batch_sampler,
-        num_workers = args.nb_workers,
-    )
+    tr_dataset = dataset.load(
+            name = args.dataset,
+            root = dataset_config['dataset'][args.dataset]['root'],
+            source = dataset_config['dataset'][args.dataset]['source'],
+            classes = dataset_config['dataset'][args.dataset]['classes']['trainval'],
+            transform = train_transform
+        )
 
     # training dataloader without shuffling and without transformation
     dl_tr_noshuffle = torch.utils.data.DataLoader(
-            dataset=dataset.load(
-                    name=args.dataset,
-                    root=dataset_config['dataset'][args.dataset]['root'],
-                    source=dataset_config['dataset'][args.dataset]['source'],
-                    classes=dataset_config['dataset'][args.dataset]['classes']['trainval'],
-                    transform=dataset.utils.make_transform(
-                        **dataset_config[transform_key],
-                        is_train=False
-                    )
-                ),
-            num_workers = args.nb_workers,
-            shuffle=False,
-            batch_size=64,
+        dataset=dataset.load(
+            name=args.dataset,
+            root=dataset_config['dataset'][args.dataset]['root'],
+            source=dataset_config['dataset'][args.dataset]['source'],
+            classes=dataset_config['dataset'][args.dataset]['classes']['trainval'],
+            transform=dataset.utils.make_transform(
+                **dataset_config[transform_key],
+                is_train=False
+            )
+        ),
+        num_workers=args.nb_workers,
+        shuffle=False,
+        batch_size=64,
     )
-
     '''Model'''
     feat = config['model']['type']()
     feat.eval()
@@ -241,14 +220,36 @@ if __name__ == '__main__':
     emb = torch.nn.Linear(in_sz, args.sz_embedding)
     model = torch.nn.Sequential(feat, emb)
     model = torch.nn.DataParallel(model)
+    model.load_state_dict(torch.load(args.model_weights, map_location='cpu'))
     model = model.cuda()
 
     '''Loss'''
     criterion = config['criterion']['type'](
-        nb_classes = dl_tr.dataset.nb_classes(),
+        nb_classes = dl_tr_noshuffle.dataset.nb_classes(),
         sz_embed = args.sz_embedding,
         **config['criterion']['args']
-    ).cuda()
+    )
+    criterion.proxies.data = torch.load(args.proxy_weights, map_location='cpu')['proxies']
+    criterion = criterion.cuda()
+
+    num_class_per_batch = config['num_class_per_batch']
+    num_gradcum = config['num_gradcum']
+    is_random_sampler = config['is_random_sampler']
+    # if is_random_sampler:
+    #     batch_sampler = dataset.utils.RandomBatchSampler(tr_dataset.ys, args.sz_batch, True, num_class_per_batch, num_gradcum)
+    # else:
+    #
+    #     batch_sampler = dataset.utils.BalancedBatchSampler(torch.Tensor(tr_dataset.ys), num_class_per_batch,
+    #                                                        int(args.sz_batch / num_class_per_batch))
+
+    subset_cls_sampler = dataset.utils.ClsSubsetSampler(torch.Tensor(tr_dataset.ys), num_class_per_batch,
+                                                       int(args.sz_batch / num_class_per_batch))
+    subset_cls_sampler.create_storage(dl_ev, dl_tr_noshuffle, model)
+    dl_tr = torch.utils.data.DataLoader(
+        tr_dataset,
+        batch_sampler=subset_cls_sampler,
+        num_workers=args.nb_workers,
+    )
 
     # options for model and loss
     opt = config['opt']['type'](
@@ -310,16 +311,7 @@ if __name__ == '__main__':
     scores_tr = []
 
     t1 = time.time()
-
-    if args.init_eval:
-        logging.info("**Evaluating initial model...**")
-        with torch.no_grad():
-            if args.mode == 'train':
-                c_dl = dl_val
-            else:
-                c_dl = dl_ev
-
-            utils.evaluate(model, c_dl, args.eval_nmi, args.recall) #dl_val
+    utils.evaluate(model, dl_ev, args.eval_nmi, args.recall) #dl_val
 
     it = 0
     best_val_hmean = 0
@@ -348,10 +340,8 @@ if __name__ == '__main__':
 
 
     '''training loop'''
-    for e in range(0, args.nb_epochs):
+    for e in range(args.start_epochs, args.end_epochs):
         len_training = len(dl_tr_noshuffle.dataset)  # training
-        cached_sim = np.zeros(len_training)  # cache the similarity to ground-truth proxy
-        cached_cls = np.zeros(len_training) # cache the gt-class
 
         if args.mode == 'train':
             curr_lr = opt.param_groups[0]['lr']
@@ -368,7 +358,7 @@ if __name__ == '__main__':
             it += 1
             x, y = x.cuda(), y.cuda()
             m = model(x)
-            loss = criterion(m, indices, y)
+            loss = criterion(m, indices, y, activate=True)
             opt.zero_grad()
             loss.backward() # backprop
             torch.nn.utils.clip_grad_value_(model.parameters(), 10) # clip gradient?
@@ -395,57 +385,57 @@ if __name__ == '__main__':
         if e == best_epoch:
             break
 
-        if args.mode == 'train':
-            with torch.no_grad():
-                logging.info("**Validation...**")
-                nmi, recall, map_R = utils.evaluate(model, dl_val, args.eval_nmi, args.recall)
+        # if args.mode == 'train':
+        #     with torch.no_grad():
+        #         logging.info("**Validation...**")
+        #         nmi, recall, map_R = utils.evaluate(model, dl_val, args.eval_nmi, args.recall)
+        #
+        #     chmean = (2 * nmi * recall[0]) / (nmi + recall[0])
+        #
+        #     scheduler.step(chmean)
+        #
+        #     if chmean > best_val_hmean:
+        #         best_val_hmean = chmean
+        #         best_val_nmi = nmi
+        #         best_val_r1 = recall[0]
+        #         best_val_r2 = recall[1]
+        #         best_val_r4 = recall[2]
+        #         best_val_r8 = recall[3]
+        #         best_val_mapr = map_R
+        #         best_val_epoch = e
+        #         best_tnmi = torch.Tensor(tnmi).mean()
+        #
+        #     if e == (args.nb_epochs - 1):
+        #         #saving last epoch
+        #         results['last_NMI'] = nmi
+        #         results['last_hmean'] = chmean
+        #         results['best_epoch'] = best_val_epoch
+        #         results['last_R1'] = recall[0]
+        #         results['last_R2'] = recall[1]
+        #         results['last_R4'] = recall[2]
+        #         results['last_R8'] = recall[3]
+        #         results['last_mapr'] = map_R
+        #
+        #
+        #         #saving best epoch
+        #         results['best_NMI'] = best_val_nmi
+        #         results['best_hmean'] = best_val_hmean
+        #         results['best_R1'] = best_val_r1
+        #         results['best_R2'] = best_val_r2
+        #         results['best_R4'] = best_val_r4
+        #         results['best_R8'] = best_val_r8
+        #         results['best_mapr'] = best_val_mapr
+        #
+        #
+        #     logging.info('Best val epoch: %s', str(best_val_epoch))
+        #     logging.info('Best val hmean: %s', str(best_val_hmean))
+        #     logging.info('Best val nmi: %s', str(best_val_nmi))
+        #     logging.info('Best val r1: %s', str(best_val_r1))
+        #     logging.info('Best val MAP@R: %s', str(best_val_mapr))
+        #
+        #     logging.info(str(lr_steps))
 
-            chmean = (2 * nmi * recall[0]) / (nmi + recall[0])
-
-            scheduler.step(chmean)
-
-            if chmean > best_val_hmean:
-                best_val_hmean = chmean
-                best_val_nmi = nmi
-                best_val_r1 = recall[0]
-                best_val_r2 = recall[1]
-                best_val_r4 = recall[2]
-                best_val_r8 = recall[3]
-                best_val_mapr = map_R
-                best_val_epoch = e
-                best_tnmi = torch.Tensor(tnmi).mean()
-
-            if e == (args.nb_epochs - 1):
-                #saving last epoch
-                results['last_NMI'] = nmi
-                results['last_hmean'] = chmean
-                results['best_epoch'] = best_val_epoch
-                results['last_R1'] = recall[0]
-                results['last_R2'] = recall[1]
-                results['last_R4'] = recall[2]
-                results['last_R8'] = recall[3]
-                results['last_mapr'] = map_R
-
-
-                #saving best epoch
-                results['best_NMI'] = best_val_nmi
-                results['best_hmean'] = best_val_hmean
-                results['best_R1'] = best_val_r1
-                results['best_R2'] = best_val_r2
-                results['best_R4'] = best_val_r4
-                results['best_R8'] = best_val_r8
-                results['best_mapr'] = best_val_mapr
-
-
-            logging.info('Best val epoch: %s', str(best_val_epoch))
-            logging.info('Best val hmean: %s', str(best_val_hmean))
-            logging.info('Best val nmi: %s', str(best_val_nmi))
-            logging.info('Best val r1: %s', str(best_val_r1))
-            logging.info('Best val MAP@R: %s', str(best_val_mapr))
-
-            logging.info(str(lr_steps))
-
-        if e % 10 == 0 or e == args.nb_epochs-1:
+        if e % 10 == 0 or e == args.end_epochs-1:
             save_dir = 'dvi_data_{}_{}_loss{}/ResNet_{}_Model'.format(args.dataset, args.seed,
                                                                       args.loss_type, str(args.sz_embedding))
             os.makedirs('{}'.format(save_dir), exist_ok=True)
@@ -457,6 +447,14 @@ if __name__ == '__main__':
                                                                                    str(args.sz_embedding), str(args.seed)))
             torch.save({"proxies": criterion.proxies},
                        '{}/Epoch_{}/proxy.pth'.format(save_dir, e+1))
+
+        # evaluate at every epoch end
+        if 'inshop' in args.dataset:
+            utils.evaluate_inshop(model, dl_query, dl_gallery)
+        else:
+            utils.evaluate(model, dl_ev, args.eval_nmi, args.recall)
+        # compute highly likely wrong region again
+        subset_cls_sampler.create_storage(dl_ev, dl_tr_noshuffle, model)
         ######################################################################################
 
         if args.mode == 'trainval':
@@ -490,7 +488,6 @@ if __name__ == '__main__':
             results['R4'] = best_test_r4
             results['R8'] = best_test_r8
             results['MAP@R'] = best_test_mapr
-
 
     if args.mode == 'train':
         print('lr_steps', lr_steps)

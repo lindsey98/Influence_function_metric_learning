@@ -370,6 +370,7 @@ class ClsSubsetSampler(torch.utils.data.sampler.Sampler):
         self.n_samples = n_samples
         self.n_dataset = len(self.labels)
         self.batch_size = self.n_samples * self.n_classes
+        self.storage = None
 
     def create_storage(self, test_loader, train_loader, model):  # this dataloader should be test/val loader
 
@@ -384,22 +385,25 @@ class ClsSubsetSampler(torch.utils.data.sampler.Sampler):
         _, IP = pairwise_distance(
             torch.cat([X_tr, wrongcls_emb]),
             squared=True
-        ) # affinity to wrong classes' embeddings (N_tr, N')
+        )
+        IP = IP[:len(X_tr), len(X_tr):] # affinity to wrong classes' embeddings (N_tr, N')
 
         M = torch.zeros((train_loader.dataset.nb_classes(), len(X_tr))) # (C_tr, N_tr)
         M[T_tr, torch.arange(len(X_tr))] = 1
         M = torch.nn.functional.normalize(M, p=1, dim=1) # average matrix average over all training samples for each class
         similarity = torch.mm(M, IP) # (C_tr, N')
-        similarity = similarity.max(-1) # (C_tr)
+        similarity = similarity.max(-1)[0] # (C_tr)
         self.storage = similarity
         logging.info('Reinitialize Class Sampler by finding probably wrong region')
 
     def __iter__(self):
         self.count = 0
         while self.count + self.batch_size < self.n_dataset:
-            # top classes that lie in the mostly likely wrong regions
-            classes = torch.argsort(self.storage, descending=True)[:self.n_classes]
-
+            if isinstance(self.storage, torch.Tensor):
+                # top classes that lie in the mostly likely wrong regions
+                classes = torch.argsort(self.storage, descending=True)[:self.n_classes].numpy()
+            else:
+                classes = np.random.choice(self.labels_set, self.n_classes, replace=False)
             indices = []
             for cls in classes:
                 indices.extend(self.label_to_indices[cls][self.used_label_indices_count[cls]: \
