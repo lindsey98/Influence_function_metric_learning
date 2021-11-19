@@ -18,7 +18,7 @@ from train import load_best_checkpoint, save_best_checkpoint
 
 os.environ["CUDA_VISIBLE_DEVICES"]="1,0"
 
-parser = argparse.ArgumentParser(description='Training ProxyNCA++')
+parser = argparse.ArgumentParser(description='Training ProxyAnchor')
 parser.add_argument('--start-epochs', default = 40, type=int, dest = 'start_epochs')
 parser.add_argument('--end-epochs', default = 50, type=int, dest = 'end_epochs')
 parser.add_argument('--log-filename', default = 'example')
@@ -30,25 +30,25 @@ parser.add_argument('--init_eval', default=False, action='store_true')
 parser.add_argument('--apex', default=False, action='store_true')
 parser.add_argument('--warmup_k', default=5, type=int)
 
-parser.add_argument('--dataset', default='cub')
+parser.add_argument('--dataset', default='cars')
 parser.add_argument('--model_weights',
-                    default='dvi_data_cub_0_lossProxyNCA_prob_orig/ResNet_512_Model/Epoch_40/cub_cub_trainval_512_0.pth',
+                    default='dvi_data_cars_0_lossProxyAnchor/ResNet_512_Model/Epoch_40/cars_cars_trainval_512_0.pth',
                     type=str,
                     help='path to trained weights')
 parser.add_argument('--proxy_weights',
-                    default='dvi_data_cub_0_lossProxyNCA_prob_orig/ResNet_512_Model/Epoch_40/proxy.pth',
+                    default='dvi_data_cars_0_lossProxyAnchor/ResNet_512_Model/Epoch_40/proxy.pth',
                     type=str,
                     help='path to trained proxies')
 parser.add_argument('--seed', default=0, type=int)
 parser.add_argument('--eval_nmi', default=True, action='store_true')
 parser.add_argument('--embedding-size', default = 512, type=int, dest = 'sz_embedding')
-parser.add_argument('--config', default='config/cub_mixup_region.json')
+parser.add_argument('--config', default='config/cars_mixup_region.json')
 parser.add_argument('--mode', default='trainval', choices=['train', 'trainval', 'test',
                                                            'testontrain'],
                     help='train with train data or train with trainval')
 parser.add_argument('--batch-size', default = 32, type=int, dest = 'sz_batch')
 parser.add_argument('--no_warmup', default=False, action='store_true')
-parser.add_argument('--loss-type', default='ProxyNCA_prob_orig_regionmixup', type=str)
+parser.add_argument('--loss-type', default='ProxyAnchor_regionmixup', type=str)
 parser.add_argument('--workers', default = 4, type=int, dest = 'nb_workers')
 
 args = parser.parse_args()
@@ -245,6 +245,8 @@ if __name__ == '__main__':
     subset_cls_sampler = dataset.utils.ClsSubsetSampler(torch.Tensor(tr_dataset.ys), num_class_per_batch,
                                                        int(args.sz_batch / num_class_per_batch))
     subset_cls_sampler.create_storage(dl_ev, dl_tr_noshuffle, model)
+    logging.info("Sampled training class {}".format(
+                 torch.argsort(subset_cls_sampler.storage, descending=True)[:subset_cls_sampler.n_classes].numpy().tolist()))
     dl_tr = torch.utils.data.DataLoader(
         tr_dataset,
         batch_sampler=subset_cls_sampler,
@@ -341,8 +343,6 @@ if __name__ == '__main__':
 
     '''training loop'''
     for e in range(args.start_epochs, args.end_epochs):
-        len_training = len(dl_tr_noshuffle.dataset)  # training
-
         if args.mode == 'train':
             curr_lr = opt.param_groups[0]['lr']
             print(prev_lr, curr_lr)
@@ -382,60 +382,10 @@ if __name__ == '__main__':
         model.losses = losses
         model.current_epoch = e
 
-        if e == best_epoch:
-            break
+        # if e == best_epoch:
+        #     break
 
-        # if args.mode == 'train':
-        #     with torch.no_grad():
-        #         logging.info("**Validation...**")
-        #         nmi, recall, map_R = utils.evaluate(model, dl_val, args.eval_nmi, args.recall)
-        #
-        #     chmean = (2 * nmi * recall[0]) / (nmi + recall[0])
-        #
-        #     scheduler.step(chmean)
-        #
-        #     if chmean > best_val_hmean:
-        #         best_val_hmean = chmean
-        #         best_val_nmi = nmi
-        #         best_val_r1 = recall[0]
-        #         best_val_r2 = recall[1]
-        #         best_val_r4 = recall[2]
-        #         best_val_r8 = recall[3]
-        #         best_val_mapr = map_R
-        #         best_val_epoch = e
-        #         best_tnmi = torch.Tensor(tnmi).mean()
-        #
-        #     if e == (args.nb_epochs - 1):
-        #         #saving last epoch
-        #         results['last_NMI'] = nmi
-        #         results['last_hmean'] = chmean
-        #         results['best_epoch'] = best_val_epoch
-        #         results['last_R1'] = recall[0]
-        #         results['last_R2'] = recall[1]
-        #         results['last_R4'] = recall[2]
-        #         results['last_R8'] = recall[3]
-        #         results['last_mapr'] = map_R
-        #
-        #
-        #         #saving best epoch
-        #         results['best_NMI'] = best_val_nmi
-        #         results['best_hmean'] = best_val_hmean
-        #         results['best_R1'] = best_val_r1
-        #         results['best_R2'] = best_val_r2
-        #         results['best_R4'] = best_val_r4
-        #         results['best_R8'] = best_val_r8
-        #         results['best_mapr'] = best_val_mapr
-        #
-        #
-        #     logging.info('Best val epoch: %s', str(best_val_epoch))
-        #     logging.info('Best val hmean: %s', str(best_val_hmean))
-        #     logging.info('Best val nmi: %s', str(best_val_nmi))
-        #     logging.info('Best val r1: %s', str(best_val_r1))
-        #     logging.info('Best val MAP@R: %s', str(best_val_mapr))
-        #
-        #     logging.info(str(lr_steps))
-
-        if e % 10 == 0 or e == args.end_epochs-1:
+        if e % 1 == 0 or e == args.end_epochs-1:
             save_dir = 'dvi_data_{}_{}_loss{}/ResNet_{}_Model'.format(args.dataset, args.seed,
                                                                       args.loss_type, str(args.sz_embedding))
             os.makedirs('{}'.format(save_dir), exist_ok=True)
@@ -453,8 +403,11 @@ if __name__ == '__main__':
             utils.evaluate_inshop(model, dl_query, dl_gallery)
         else:
             utils.evaluate(model, dl_ev, args.eval_nmi, args.recall)
+
         # compute highly likely wrong region again
         subset_cls_sampler.create_storage(dl_ev, dl_tr_noshuffle, model)
+        logging.info("Sampled training class {}".format(
+            torch.argsort(subset_cls_sampler.storage, descending=True)[:subset_cls_sampler.n_classes].numpy().tolist()))
         ######################################################################################
 
         if args.mode == 'trainval':

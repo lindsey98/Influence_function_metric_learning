@@ -946,3 +946,124 @@ class ProxyNCA_wrong_mixup(torch.nn.Module):
             raise NotImplementedError
 
         return loss
+
+
+class Proxy_Anchor_wrong_mixup(torch.nn.Module):
+    def __init__(self, nb_classes, sz_embed,
+                 mixup_method='none',
+                 shifts=4, pairs_per_cls=4,
+                 mrg=0.1, alpha=32):
+
+        torch.nn.Module.__init__(self)
+        # Proxy Anchor Initialization
+        self.proxies = torch.nn.Parameter(torch.randn(nb_classes, sz_embed).cuda())
+        torch.nn.init.kaiming_normal_(self.proxies, mode='fan_out')
+        self.nb_classes = nb_classes
+        self.sz_embed = sz_embed
+        self.mrg = mrg
+        self.alpha = alpha
+        self.mixup_method = mixup_method
+        self.shifts = shifts
+        self.pairs_per_cls = pairs_per_cls
+        assert self.mixup_method in ['none', 'inter_noproxy']
+
+    @staticmethod
+    def random_lambdas(alpha=1.0):
+        return np.random.beta(alpha, alpha)  # sample a lambda from beta distribution
+
+    def intercls_mixup(self, X, T, IP):
+        # we only sythesize samples and interpolating class labels
+        # get some inter-class pairs to mixup
+        index1s = torch.arange(X.size()[0])
+        index2s = torch.roll(index1s,
+                             -self.shifts)  # shifts should be equal to n_samples_per_cls in your balanced sampler
+        index1s, index2s = index1s.long(), index2s.long()
+        cls_index1s, cls_index2s = T[index1s], T[index2s]
+
+        # pure random sampling
+        lambdas_diffcls = self.random_lambdas() * torch.ones((len(index1s), self.sz_embed))
+
+        # virtual samples
+        selectedX_diffcls = torch.stack([X[index1s, :], X[index2s, :]], dim=-1)  # of shape (n_samples, sz_embed, 2)
+        lambdas_diffcls = torch.stack((lambdas_diffcls, 1. - lambdas_diffcls), dim=-1).to(
+            selectedX_diffcls.device)  # (n_samples, sz_embed, 2)
+        virtual_samples = torch.sum(selectedX_diffcls * lambdas_diffcls, dim=-1)  # (n_samples, sz_embed)
+        virtual_samples = F.normalize(virtual_samples, p=2, dim=-1)
+
+        # interpolating class labels
+        C1 = binarize_and_smooth_labels(T=cls_index1s, nb_classes=self.nb_classes, smoothing_const=0)  # (n_samples, C)
+        C2 = binarize_and_smooth_labels(T=cls_index2s, nb_classes=self.nb_classes, smoothing_const=0)  # (n_samples, C)
+        C = torch.stack((C1, C2), dim=-1)  # (n_samples, C, 2)
+        lambdas_diffcls = lambdas_diffcls[:, :self.nb_classes, :]  # same lambdas used as when creating virtual proxies
+        virtual_classes = torch.sum(C * lambdas_diffcls, dim=-1)  # (n_samples, C)
+
+        assert virtual_classes.size()[0] == virtual_samples.size()[0]
+        return virtual_classes, virtual_samples
+
+    def forward(self, X, indices, T, activate=False):
+        P = self.proxies
+        P = F.normalize(P, p=2, dim=-1)
+        X = F.normalize(X, p=2, dim=-1)
+
+        if activate == False or self.mixup_method == 'none':
+            # no MixUp applied
+            cos = F.linear(l2_norm(X), l2_norm(P))  # Calcluate cosine similarity
+            P_one_hot = binarize_and_smooth_labels(T=T, nb_classes=self.nb_classes)
+            N_one_hot = 1 - P_one_hot
+
+            pos_exp = torch.exp(-self.alpha * (cos - self.mrg))
+            neg_exp = torch.exp(self.alpha * (cos + self.mrg))
+
+            with_pos_proxies = torch.nonzero(P_one_hot.sum(dim=0) != 0).squeeze(dim=1)  # The set of positive proxies of data in the batch
+            num_valid_proxies = len(with_pos_proxies)  # The number of positive proxies
+
+            P_sim_sum = torch.where(P_one_hot == 1, pos_exp, torch.zeros_like(pos_exp)).sum(dim=0)
+            N_sim_sum = torch.where(N_one_hot == 1, neg_exp, torch.zeros_like(neg_exp)).sum(dim=0)
+
+            pos_term = torch.log(1 + P_sim_sum).sum() / num_valid_proxies
+            neg_term = torch.log(1 + N_sim_sum).sum() / self.nb_classes
+            loss = pos_term + neg_term
+
+        elif activate == True and self.mixup_method == 'inter_noproxy':
+            '''
+                Original data
+            '''
+            cos = F.linear(l2_norm(X), l2_norm(P))  # Calcluate cosine similarity
+            P_one_hot = binarize_and_smooth_labels(T=T, nb_classes=self.nb_classes)
+            N_one_hot = 1 - P_one_hot
+
+            pos_exp = torch.exp(-self.alpha * (cos - self.mrg))
+            neg_exp = torch.exp(self.alpha * (cos + self.mrg))
+
+            with_pos_proxies = torch.nonzero(P_one_hot.sum(dim=0) != 0).squeeze(
+                dim=1)  # The set of positive proxies of data in the batch
+            num_valid_proxies = len(with_pos_proxies)  # The number of positive proxies
+
+            P_sim_sum = torch.where(P_one_hot == 1, pos_exp, torch.zeros_like(pos_exp)).sum(dim=0) # (C,)
+            N_sim_sum = torch.where(N_one_hot == 1, neg_exp, torch.zeros_like(neg_exp)).sum(dim=0) # (C,)
+
+            IP = pairwise_distance(torch.cat([X, P]),
+                squared=True
+            )[1][:X.size()[0], X.size()[0]:]  # (N, C)
+
+            # interclass without synthetic proxy
+            virtual_classes, virtual_samples = self.intercls_mixup(X, T, IP)
+            cos_smooth = F.linear(l2_norm(virtual_samples), l2_norm(P))  # Calcluate cosine similarity (N', C)
+            P_smooth = virtual_classes # this is smooth label (N', C)
+            N_smooth = 1 - P_smooth
+
+            pos_exp_smooth = torch.exp(-self.alpha * (cos_smooth - self.mrg)) # (N', C)
+            neg_exp_smooth = torch.exp(self.alpha * (cos_smooth + self.mrg))
+
+            pos_exp_smooth = torch.where(P_smooth > 0, pos_exp_smooth * P_smooth, torch.zeros_like(pos_exp_smooth)).sum(dim=0) # (C,)
+            neg_exp_smooth = torch.where(N_smooth == 1, neg_exp_smooth, torch.zeros_like(neg_exp_smooth)).sum(dim=0) # (C,)
+
+            pos_term = torch.log(1 + P_sim_sum + pos_exp_smooth).sum() / num_valid_proxies
+            neg_term = torch.log(1 + N_sim_sum + neg_exp_smooth).sum() / self.nb_classes
+            loss = pos_term + neg_term
+
+        else:
+            raise NotImplementedError
+
+        return loss
+

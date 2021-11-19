@@ -1,6 +1,8 @@
 import matplotlib.pyplot as plt
+import numpy as np
 
 import dataset
+import evaluation.neighborhood
 import utils
 
 import os
@@ -14,10 +16,10 @@ os.environ["CUDA_VISIBLE_DEVICES"]="1"
 
 if __name__ == '__main__':
     sz_embedding = 512
-    dataset_name = 'cars'
-    loss_type = 'ProxyAnchor_pfix_controlvariance'
+    dataset_name = 'cub'
+    loss_type = 'ProxyAnchor'
 
-    for seed in range(6):
+    for seed in range(4, 6):
         print(seed)
         model_dir = 'dvi_data_{}_{}_loss{}/ResNet_512_Model/Epoch_40/{}_{}_trainval_512_{}.pth'.format(dataset_name, seed, loss_type,
                                                                                                        dataset_name, dataset_name, seed)
@@ -84,19 +86,29 @@ if __name__ == '__main__':
         # load state_dict
         model.load_state_dict(torch.load(model_dir))
 
-        print('Training')
-        print(utils.evaluate(model, dl_tr_noshuffle))
-        print('Testing')
-        print(utils.evaluate(model, dl_ev))
-
-        proxies = torch.load(proxy_dir)['proxies']
-        avg_inter_proxy_ip, var_inter_proxy_ip = utils.inter_proxy_dist(proxies, cosine=True, neighbor_only=False)
-        print('Proxy-Proxy')
-        print(avg_inter_proxy_ip.item())
-        print(var_inter_proxy_ip.item())
-
-        avg_inter_proxy_ip, var_inter_proxy_ip = utils.inter_proxy_dist(proxies, cosine=True, neighbor_only=True)
-        print('Proxy-Neighbor')
-        print(avg_inter_proxy_ip.item())
-        print(var_inter_proxy_ip.item())
+        # evaluation.neighborhood.neighboring_emb_finding(model, dl_tr=dl_tr_noshuffle, dl_ev=dl_ev)
+        # calculate embeddings with model and get targets
+        X_train, T_train, *_ = utils.predict_batchwise(model, dl_tr_noshuffle)
+        X_test, T_test, *_ = utils.predict_batchwise(model, dl_ev)
+        print('done collecting prediction')
+        for length_scale in np.linspace(0.5, 1, 10):
+            for weight in np.linspace(0.1, 0.5, 10):
+                print(length_scale, weight)
+                evaluation.neighborhood.evaluate_neighborhood(model, X_train, X_test, T_test, weight=weight, length_scale=length_scale)
+        exit()
+        # print('Training')
+        # print(utils.evaluate(model, dl_tr_noshuffle))
+        # print('Testing')
+        # print(utils.evaluate(model, dl_ev))
+        #
+        # proxies = torch.load(proxy_dir)['proxies']
+        # avg_inter_proxy_ip, var_inter_proxy_ip = utils.inter_proxy_dist(proxies, cosine=True, neighbor_only=False)
+        # print('Proxy-Proxy')
+        # print(avg_inter_proxy_ip.item())
+        # print(var_inter_proxy_ip.item())
+        #
+        # avg_inter_proxy_ip, var_inter_proxy_ip = utils.inter_proxy_dist(proxies, cosine=True, neighbor_only=True)
+        # print('Proxy-Neighbor')
+        # print(avg_inter_proxy_ip.item())
+        # print(var_inter_proxy_ip.item())
 
