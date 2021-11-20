@@ -76,39 +76,28 @@ def predict_batchwise(model, dataloader):
     model.train(model_is_training) # revert to previous training state
     return [torch.stack(A[i]) for i in range(len(A))]
 
+@torch.no_grad()
 def predict_batchwise_loss(model, dataloader, criterion):
     '''
         Predict on a batch
         :return: list with N lists, where N = |{image, label, index}|
     '''
     model.eval()
-    indices = torch.tensor([])
-    normalize_prob = torch.tensor([])
     base_loss = torch.tensor([])
     embeddings = torch.tensor([])
     labels = torch.tensor([])
-    gt_D_weighted = torch.tensor([])
 
     with torch.no_grad():
         # extract batches (A becomes list of samples)
         for (x, y, indices) in tqdm(dataloader, desc="Batch-wise prediction"):
             x, y = x.to(list(model.parameters())[0].device), y.to(list(model.parameters())[0].device)
             m = model(x)
-            indices_bth, normalize_prob_bth, gt_D_weighted_bth, base_loss_bth, Proxy_IP = criterion.loss4debug(m, indices, y)
-            indices = torch.cat((indices, indices_bth.detach().cpu()), dim=0)
-            normalize_prob = torch.cat((normalize_prob, normalize_prob_bth.detach().cpu()), dim=0)
-            base_loss = torch.cat((base_loss, base_loss_bth.detach().cpu()), dim=0)
+            loss = criterion.debug(m, indices, y)
+            base_loss = torch.cat((base_loss, loss.detach().cpu()), dim=0)
             embeddings = torch.cat((embeddings, m.detach().cpu()), dim=0)
             labels = torch.cat((labels, y.detach().cpu()), dim=0)
-            gt_D_weighted = torch.cat((gt_D_weighted, gt_D_weighted_bth.detach().cpu()), dim=0)
 
-    # compute proxy2proxy similarity
-    _blk_mask = [torch.ones((criterion.max_proxy_per_class, criterion.max_proxy_per_class)) \
-                    for _ in range(criterion.nb_classes)]
-    blk_mask = torch.block_diag(*_blk_mask).to(Proxy_IP.device)
-    p2p_sim = Proxy_IP * blk_mask
-
-    return embeddings, labels, indices, normalize_prob, gt_D_weighted, base_loss, p2p_sim
+    return embeddings, labels, indices, base_loss
 
 def predict_batchwise_inshop(model, dataloader):
     '''
@@ -375,5 +364,22 @@ def get_wrong_indices(X, T, N=15):
     topN_wrong_classes = unique_labels[torch.argsort(wrong_freq, descending=True)[:N]].numpy()
 
     return wrong_ind, topN_wrong_classes
+
+
+@torch.no_grad()
+def inner_product_sim(X: torch.Tensor,
+                      P: torch.nn.Parameter,
+                      T: torch.Tensor):
+
+    X_copy, P_copy, T_copy = X.clone(), P.clone(), T.clone()
+
+    X_copy = F.normalize(X_copy, dim=-1, p=2).to(P_copy.device)
+    P_copy = F.normalize(P_copy, dim=-1, p=2)
+    IP = torch.mm(X_copy, P_copy.T)  # inner product between X and P
+
+    IP_gt = IP[torch.arange(X_copy.shape[0]), T_copy.long()]  # get similarities to gt-class's proxies
+
+    return IP_gt
+
 
 

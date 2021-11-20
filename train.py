@@ -32,13 +32,13 @@ parser.add_argument('--dataset', default='cub')
 parser.add_argument('--seed', default=0, type=int)
 parser.add_argument('--eval_nmi', default=True, action='store_true')
 parser.add_argument('--embedding-size', default = 512, type=int, dest = 'sz_embedding')
-parser.add_argument('--config', default='config/cub_rhoregularize.json')
+parser.add_argument('--config', default='config/cub.json')
 parser.add_argument('--mode', default='trainval', choices=['train', 'trainval', 'test',
-                                                           'testontrain', 'testontrain_super'],
+                                                           'testontrain'],
                     help='train with train data or train with trainval')
 parser.add_argument('--batch-size', default = 32, type=int, dest = 'sz_batch')
 parser.add_argument('--no_warmup', default=False, action='store_true')
-parser.add_argument('--loss-type', default='ProxyNCA_prob_rhoregularizer', type=str)
+parser.add_argument('--loss-type', default='ProxyNCA_prob_orig_test', type=str)
 parser.add_argument('--workers', default = 4, type=int, dest = 'nb_workers')
 
 args = parser.parse_args()
@@ -106,8 +106,6 @@ if __name__ == '__main__':
         args.log_filename = args.log_filename.replace('test', 'trainval')
     elif args.mode == 'testontrain':
         args.log_filename = args.log_filename.replace('testontrain', 'trainval')
-    elif args.mode == 'testontrain_super':
-        args.log_filename = args.log_filename.replace('testontrain_super', 'trainval')
     best_epoch = args.nb_epochs
 
     '''Dataloader'''
@@ -203,7 +201,7 @@ if __name__ == '__main__':
             )
 
     elif args.mode == 'trainval' or args.mode == 'test' \
-            or args.mode == 'testontrain' or args.mode == 'testontrain_super':
+            or args.mode == 'testontrain':
         # print(dataset_config['dataset'][args.dataset]['root'])
         tr_dataset = dataset.load(
                 name = args.dataset,
@@ -350,15 +348,6 @@ if __name__ == '__main__':
             utils.evaluate(model, dl_tr_noshuffle, args.eval_nmi, args.recall)
         exit() # exit the program
 
-    if args.mode == 'testontrain_super':
-        with torch.no_grad():
-            logging.info("**Evaluating with gt super 100 classes...(test mode, test on training set)**")
-            model = load_best_checkpoint(model)
-            with open("mnt/datasets/logo2ksuperclass0.01.json", 'rt') as handle:
-                labeldict = json.load(handle)
-            utils.evaluate_super(model, dl_tr_noshuffle, labeldict, args.eval_nmi, args.recall)
-        exit() # exit the program
-
     if args.mode == 'train':
         scheduler = config['lr_scheduler']['type'](
             opt, **config['lr_scheduler']['args']
@@ -435,6 +424,14 @@ if __name__ == '__main__':
         cached_sim = np.zeros(len_training)  # cache the similarity to ground-truth proxy
         cached_cls = np.zeros(len_training) # cache the gt-class
 
+        # loss recorder similarity recorder
+        if e == 0:
+            process_recorder = {}
+            with open("{0}/{1}_recorder.json".format('log', args.log_filename), 'wt') as handle:
+                json.dump(process_recorder, handle)
+        with open("{0}/{1}_recorder.json".format('log', args.log_filename), 'rt') as handle:
+            process_recorder = json.load(handle)
+
         if args.mode == 'train':
             curr_lr = opt.param_groups[0]['lr']
             print(prev_lr, curr_lr)
@@ -451,12 +448,6 @@ if __name__ == '__main__':
             x, y = x.cuda(), y.cuda()
             m = model(x)
             loss = criterion(m, indices, y)
-            # mixed_inputs, targets_a, targets_b, lam, (indices_a, indices_b) = mixup_data(x, y, alpha=1.0, use_cuda=True)
-            # mixed_inputs, targets_a, targets_b = map(torch.autograd.Variable, (mixed_inputs, targets_a, targets_b))
-            # outputs = model(mixed_inputs)
-            # mixed_loss = mixup_criterion(criterion, outputs, targets_a, targets_b, indices_a, indices_b, lam)
-            # loss += mixed_loss
-
             opt.zero_grad()
             loss.backward() # backprop
             torch.nn.utils.clip_grad_value_(model.parameters(), 10) # clip gradient?
@@ -479,6 +470,16 @@ if __name__ == '__main__':
 
         model.losses = losses
         model.current_epoch = e
+
+        # save proxy-similarity and class labels
+        train_embs, train_cls, _, base_loss = utils.predict_batchwise_loss(model, dl_tr_noshuffle, criterion)
+        cached_sim = utils.inner_product_sim(X=train_embs, P=criterion.proxies, T=train_cls)
+        process_recorder[e] = {'epoch': e,
+                               'losses': base_loss.detach().cpu().numpy().tolist(),
+                               'classes': train_cls.detach().cpu().numpy().tolist(),
+                               'similarity': cached_sim.detach().cpu().numpy().tolist()}
+        with open("{0}/{1}_ip.json".format('log', args.log_filename), 'wt') as handle:
+            json.dump(process_recorder, handle)
 
         if e == best_epoch:
             break
@@ -578,7 +579,6 @@ if __name__ == '__main__':
             results['R4'] = best_test_r4
             results['R8'] = best_test_r8
             results['MAP@R'] = best_test_mapr
-
 
     if args.mode == 'train':
         print('lr_steps', lr_steps)
