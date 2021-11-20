@@ -30,15 +30,15 @@ parser.add_argument('--init_eval', default=False, action='store_true')
 parser.add_argument('--apex', default=False, action='store_true')
 parser.add_argument('--warmup_k', default=5, type=int)
 
-parser.add_argument('--dataset', default='logo2k_subset')
+parser.add_argument('--dataset', default='cub')
 parser.add_argument('--embedding-size', default = 512, type=int, dest = 'sz_embedding')
-parser.add_argument('--config', default='config/logo2k_subset_mixup.json')
+parser.add_argument('--config', default='config/cub.json')
 parser.add_argument('--mode', default='trainval', choices=['train', 'trainval', 'test',
                                                            'testontrain', 'testontrain_super'],
                     help='train with train data or train with trainval')
 parser.add_argument('--batch-size', default = 32, type=int, dest = 'sz_batch')
 parser.add_argument('--no_warmup', default=False, action='store_true')
-parser.add_argument('--loss-type', default='ProxyNCA_prob_mixup_both_weighted_with_classsamplerdiverse', type=str)
+parser.add_argument('--loss-type', default='ProxyNCA_prob_orig_subsetsampler', type=str)
 parser.add_argument('--workers', default = 2, type=int, dest = 'nb_workers')
 
 args = parser.parse_args()
@@ -217,8 +217,13 @@ if __name__ == '__main__':
     num_class_per_batch = config['num_class_per_batch']
     num_gradcum = config['num_gradcum']
 
-    batch_sampler = dataset.utils.ClsDistSampler(torch.Tensor(tr_dataset.ys), num_class_per_batch,
-                                                  int(args.sz_batch / num_class_per_batch))
+    excluded_indices = np.load(os.path.join('hard_samples_ind', '{}_ProxyNCA_prob_orig_hard_increase.npy'.format(args.dataset)))
+
+    batch_sampler = dataset.utils.BalancedBatchExcludeSampler(labels=torch.Tensor(tr_dataset.ys),
+                                                              n_classes=num_class_per_batch,
+                                                              n_samples=int(args.sz_batch / num_class_per_batch),
+                                                              exclude_ind=excluded_indices
+                                                              )
 
     # batch_sampler = dataset.utils.ClsCohSampler(torch.Tensor(tr_dataset.ys), num_class_per_batch,
     #                                             int(args.sz_batch / num_class_per_batch))
@@ -531,21 +536,8 @@ if __name__ == '__main__':
             torch.save(model.state_dict(), '{}/Epoch_{}/{}_{}_{}_{}_{}.pth'.format(save_dir, e+1, args.dataset,
                                                                                    args.dataset, args.mode,
                                                                                    str(args.sz_embedding), str(args.seed)))
-            # # TODO
-            # if 'ProxyNCA_prob_orig' in args.loss_type or 'ProxyNCA_prob_smooth' in args.loss_type \
-            #     or 'ProxyNCA_prob_mixup' in args.loss_type or 'ProxyNCA_prob_dynamic' in args.loss_type:
             torch.save({"proxies": criterion.proxies},
                        '{}/Epoch_{}/proxy.pth'.format(save_dir, e+1))
-            # elif 'ProxyNCA_prob' in args.loss_type:
-            #     torch.save({"proxies": criterion.proxies, "mask": criterion.mask},
-            #                '{}/Epoch_{}/proxy.pth'.format(save_dir, e+1))
-            # elif 'ProxyNCA_distribution_loss' in args.loss_type:
-            #     torch.save({"proxies": criterion.proxies, "sigma_inv": criterion.sigmas_inv},
-            #                '{}/Epoch_{}/proxy.pth'.format(save_dir, e+1))
-            # elif 'ProxyNCA_dist_mixup' in args.loss_type:
-            #     torch.save({"proxies": criterion.proxies, "sigma_inv": criterion.sigmas_inv},
-            #                '{}/Epoch_{}/proxy.pth'.format(save_dir, e+1))
-
         ######################################################################################
 
         if args.mode == 'trainval':

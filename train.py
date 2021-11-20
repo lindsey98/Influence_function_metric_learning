@@ -28,13 +28,13 @@ parser.add_argument('--init_eval', default=False, action='store_true')
 parser.add_argument('--apex', default=False, action='store_true')
 parser.add_argument('--warmup_k', default=5, type=int)
 
-parser.add_argument('--dataset', default='cub')
+parser.add_argument('--dataset', default='cars')
 parser.add_argument('--seed', default=0, type=int)
 parser.add_argument('--eval_nmi', default=True, action='store_true')
 parser.add_argument('--embedding-size', default = 512, type=int, dest = 'sz_embedding')
-parser.add_argument('--config', default='config/cub.json')
-parser.add_argument('--mode', default='trainval', choices=['train', 'trainval', 'test',
-                                                           'testontrain'],
+parser.add_argument('--config', default='config/cars.json')
+parser.add_argument('--mode', default='trainval', choices=['train', 'trainval',
+                                                           'test', 'testontrain'],
                     help='train with train data or train with trainval')
 parser.add_argument('--batch-size', default = 32, type=int, dest = 'sz_batch')
 parser.add_argument('--no_warmup', default=False, action='store_true')
@@ -476,9 +476,9 @@ if __name__ == '__main__':
         cached_sim = utils.inner_product_sim(X=train_embs, P=criterion.proxies, T=train_cls)
         process_recorder[e] = {'epoch': e,
                                'losses': base_loss.detach().cpu().numpy().tolist(),
-                               'classes': train_cls.detach().cpu().numpy().tolist(),
+                               'classes': train_cls.long().detach().cpu().numpy().tolist(),
                                'similarity': cached_sim.detach().cpu().numpy().tolist()}
-        with open("{0}/{1}_ip.json".format('log', args.log_filename), 'wt') as handle:
+        with open("{0}/{1}_recorder.json".format('log', args.log_filename), 'wt') as handle:
             json.dump(process_recorder, handle)
 
         if e == best_epoch:

@@ -13,6 +13,9 @@ import numpy as np
 import numbers
 import torch.nn.functional as F
 import logging
+from torch.utils.data.sampler import Sampler, SubsetRandomSampler
+
+
 
 def std_per_channel(images):
     images = torch.stack(images, dim = 0)
@@ -208,6 +211,68 @@ class BalancedBatchSampler(BatchSampler):
     def __len__(self):
         return self.n_dataset // self.batch_size
 
+
+class SubSampler(Sampler):
+    '''
+    Customized sampler to subsample data
+    '''
+    def __init__(self, idlist):
+        self.idlist = idlist
+
+    def __iter__(self):
+        return iter(self.idlist)
+
+    def __len__(self):
+        return len(self.idlist)
+
+class BalancedBatchExcludeSampler(BatchSampler):
+    """
+    BatchSampler -samples n_classes and within these classes samples n_samples, but exclude some of the indices
+    Returns batches of size n_classes * n_samples
+    """
+
+    def __init__(self, labels, n_classes, n_samples, exclude_ind):
+        self.labels = labels
+        self.labels_set = list(set(self.labels.numpy()))
+        self.label_to_indices = {label: np.where(self.labels.numpy() == label)[0]
+                                 for label in self.labels_set}
+        for l in self.labels_set:
+            np.random.shuffle(self.label_to_indices[l])
+        self.exclude_ind = exclude_ind
+
+        # remove excluded_inds
+        for l in self.labels_set:
+            compare = self.label_to_indices[l][:, None] == self.exclude_ind # (N, N_exclude)
+            isexclude = compare.sum(-1) # (N,)
+            self.label_to_indices[l] = np.delete(self.label_to_indices[l], isexclude == True)
+
+        self.used_label_indices_count = {label: 0 for label in self.labels_set}
+        self.count = 0
+        self.n_classes = n_classes
+        self.n_samples = n_samples
+        self.n_dataset = len(self.labels)
+        self.batch_size = self.n_samples * self.n_classes
+
+    def __iter__(self):
+        self.count = 0
+        while self.count + self.batch_size < self.n_dataset:
+            classes = np.random.choice(self.labels_set, self.n_classes, replace=False)
+            indices = []
+            for class_ in classes:
+                indices.extend(self.label_to_indices[class_][
+                               self.used_label_indices_count[class_]:\
+                               self.used_label_indices_count[class_] + self.n_samples])
+                self.used_label_indices_count[class_] += self.n_samples
+                if self.used_label_indices_count[class_] + self.n_samples > len(self.label_to_indices[class_]):
+                    np.random.shuffle(self.label_to_indices[class_])
+                    self.used_label_indices_count[class_] = 0
+            yield indices
+            self.count += self.n_classes * self.n_samples
+
+    def __len__(self):
+        return self.n_dataset // self.batch_size
+
+
 class ClsDistSampler(torch.utils.data.sampler.Sampler):
     """
     Plugs into PyTorch Batchsampler Package.
@@ -352,8 +417,6 @@ class ClsCohSampler(torch.utils.data.sampler.Sampler):
 
     def __len__(self):
         return self.n_dataset // self.batch_size
-
-
 
 class ClsSubsetSampler(torch.utils.data.sampler.Sampler):
 
