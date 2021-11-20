@@ -25,11 +25,12 @@ def neighboring_emb_finding(X_train, X_test, K=50, length_scale=1.):
     return neighboring_weighted_emb
 
 
-def evaluate_neighborhood(model, X_train, X_test, T_test, length_scale, weight, recall_list=[1, 2, 4, 8]):
+def evaluate_neighborhood(X_train, X_test, T_test, length_scale, weight, recall_list=[1, 2, 4, 8]):
     # need to do L2 normalize
     X_train_normalize = F.normalize(X_train, p=2, dim=-1)
     X_test_normalize = F.normalize(X_test, p=2, dim=-1)
-    X_test_neighbor = neighboring_emb_finding(X_train_normalize, X_test_normalize, K=2000, length_scale=length_scale)
+    X_test_neighbor = neighboring_emb_finding(X_train_normalize, X_test_normalize,
+                                              K=2000, length_scale=length_scale)
 
     # skip connection
     X_enriched = X_test + weight * X_test_neighbor

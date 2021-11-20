@@ -28,17 +28,17 @@ parser.add_argument('--init_eval', default=False, action='store_true')
 parser.add_argument('--apex', default=False, action='store_true')
 parser.add_argument('--warmup_k', default=5, type=int)
 
-parser.add_argument('--dataset', default='inshop')
+parser.add_argument('--dataset', default='cub')
 parser.add_argument('--seed', default=0, type=int)
 parser.add_argument('--eval_nmi', default=True, action='store_true')
 parser.add_argument('--embedding-size', default = 512, type=int, dest = 'sz_embedding')
-parser.add_argument('--config', default='config/inshop.json')
+parser.add_argument('--config', default='config/cub_rhoregularize.json')
 parser.add_argument('--mode', default='trainval', choices=['train', 'trainval', 'test',
                                                            'testontrain', 'testontrain_super'],
                     help='train with train data or train with trainval')
 parser.add_argument('--batch-size', default = 32, type=int, dest = 'sz_batch')
 parser.add_argument('--no_warmup', default=False, action='store_true')
-parser.add_argument('--loss-type', default='ProxyNCA_prob_orig', type=str)
+parser.add_argument('--loss-type', default='ProxyNCA_prob_rhoregularizer', type=str)
 parser.add_argument('--workers', default = 4, type=int, dest = 'nb_workers')
 
 args = parser.parse_args()
@@ -53,26 +53,6 @@ def load_best_checkpoint(model):
         model.load_state_dict(torch.load('results/' + args.log_filename + '.pth'))
     model = model.cuda()
     return model
-
-def mixup_data(x, y, alpha=1.0, use_cuda=True):
-    '''Returns mixed inputs, pairs of targets, and lambda'''
-    if alpha > 0:
-        lam = np.random.beta(alpha, alpha)
-    else:
-        lam = 1
-
-    batch_size = x.size()[0]
-    if use_cuda:
-        index = torch.randperm(batch_size).cuda()
-    else:
-        index = torch.randperm(batch_size)
-
-    mixed_x = lam * x + (1 - lam) * x[index, :]
-    y_a, y_b = y, y[index]
-    return mixed_x, y_a, y_b, lam, (torch.arange(batch_size), index)
-
-def mixup_criterion(criterion, pred, y_a, y_b, indices_a, indices_b, lam):
-    return lam * criterion(pred, indices_a, y_a) + (1 - lam) * criterion(pred, indices_b, y_b)
 
 if __name__ == '__main__':
 
