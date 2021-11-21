@@ -410,8 +410,8 @@ class ClsCohSampler(torch.utils.data.sampler.Sampler):
                 avg_pairwise_dist = np.sum(pairwise_dists) / (np.prod(pairwise_dists.shape) - len(pairwise_dists.diagonal())) # take mean (ignore diagonal)
                 dist_mat[i, j] = dist_mat[j, i] = avg_pairwise_dist
 
-        ratio_mat = dist_mat / (dist_mat.diagonal()[:, np.newaxis]+1e-8) # (C, C) inter/intra ratio matrix
-        ratio_mat = 1./(ratio_mat + 1e-8) # (C, C) intra/inter distance ratio
+        ratio_mat = dist_mat / (dist_mat.diagonal()[:, np.newaxis] + 1e-8) # (C, C) inter/intra ratio matrix
+        ratio_mat = 1. / (ratio_mat + 1e-8) # (C, C) intra/inter distance ratio
         # if this ratio is sufficiently low, you dont want to optimize any more
         ratio_mat = ratio_mat.mean(-1) # (C,)
         return ratio_mat

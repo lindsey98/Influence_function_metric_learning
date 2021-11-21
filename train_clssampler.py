@@ -38,7 +38,7 @@ parser.add_argument('--mode', default='trainval', choices=['train', 'trainval', 
                     help='train with train data or train with trainval')
 parser.add_argument('--batch-size', default = 32, type=int, dest = 'sz_batch')
 parser.add_argument('--no_warmup', default=False, action='store_true')
-parser.add_argument('--loss-type', default='ProxyNCA_prob_orig_hard_remove_by_increase_rate', type=str)
+parser.add_argument('--loss-type', default='ProxyNCA_prob_orig_hard_remove_by_final_sim', type=str)
 parser.add_argument('--workers', default = 2, type=int, dest = 'nb_workers')
 
 args = parser.parse_args()
@@ -214,7 +214,7 @@ if __name__ == '__main__':
     num_class_per_batch = config['num_class_per_batch']
     num_gradcum = config['num_gradcum']
 
-    excluded_indices = np.load(os.path.join('hard_samples_ind', '{}_ProxyNCA_prob_orig_hard_increase.npy'.format(args.dataset)))
+    excluded_indices = np.load(os.path.join('hard_samples_ind', '{}_ProxyNCA_prob_orig_hard_final.npy'.format(args.dataset)))
 
     batch_sampler = dataset.utils.BalancedBatchExcludeSampler(labels=torch.Tensor(tr_dataset.ys),
                                                               n_classes=num_class_per_batch,
