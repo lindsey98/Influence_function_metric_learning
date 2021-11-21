@@ -14,7 +14,8 @@ import numbers
 import torch.nn.functional as F
 import logging
 from torch.utils.data.sampler import Sampler, SubsetRandomSampler
-
+import scipy
+from scipy.spatial import distance
 
 
 def std_per_channel(images):
@@ -212,19 +213,6 @@ class BalancedBatchSampler(BatchSampler):
         return self.n_dataset // self.batch_size
 
 
-class SubSampler(Sampler):
-    '''
-    Customized sampler to subsample data
-    '''
-    def __init__(self, idlist):
-        self.idlist = idlist
-
-    def __iter__(self):
-        return iter(self.idlist)
-
-    def __len__(self):
-        return len(self.idlist)
-
 class BalancedBatchExcludeSampler(BatchSampler):
     """
     BatchSampler -samples n_classes and within these classes samples n_samples, but exclude some of the indices
@@ -239,33 +227,38 @@ class BalancedBatchExcludeSampler(BatchSampler):
         for l in self.labels_set:
             np.random.shuffle(self.label_to_indices[l])
         self.exclude_ind = exclude_ind
+        self._remove_exclude()
 
+        self.used_label_indices_count = {label: 0 for label in self.labels_set}
+        self.count = 0
+        self.n_classes = n_classes
+        self.n_samples = n_samples
+        self.n_dataset = len(self.labels) - len(exclude_ind)
+        self.batch_size = self.n_samples * self.n_classes
+
+    def _remove_exclude(self):
         # remove excluded_inds
         for l in self.labels_set:
             compare = self.label_to_indices[l][:, None] == self.exclude_ind # (N, N_exclude)
             isexclude = compare.sum(-1) # (N,)
             self.label_to_indices[l] = np.delete(self.label_to_indices[l], isexclude == True)
 
-        self.used_label_indices_count = {label: 0 for label in self.labels_set}
-        self.count = 0
-        self.n_classes = n_classes
-        self.n_samples = n_samples
-        self.n_dataset = len(self.labels)
-        self.batch_size = self.n_samples * self.n_classes
-
     def __iter__(self):
         self.count = 0
-        while self.count + self.batch_size < self.n_dataset:
-            classes = np.random.choice(self.labels_set, self.n_classes, replace=False)
+        while self.count + self.batch_size < self.n_dataset: # exceed number of data we have
+            classes = np.random.choice(self.labels_set, self.n_classes, replace=False) # randomlly choose n classes
+
             indices = []
             for class_ in classes:
                 indices.extend(self.label_to_indices[class_][
                                self.used_label_indices_count[class_]:\
                                self.used_label_indices_count[class_] + self.n_samples])
                 self.used_label_indices_count[class_] += self.n_samples
+
                 if self.used_label_indices_count[class_] + self.n_samples > len(self.label_to_indices[class_]):
                     np.random.shuffle(self.label_to_indices[class_])
                     self.used_label_indices_count[class_] = 0
+
             yield indices
             self.count += self.n_classes * self.n_samples
 
@@ -355,7 +348,7 @@ class ClsDistSampler(torch.utils.data.sampler.Sampler):
 
 class ClsCohSampler(torch.utils.data.sampler.Sampler):
     """
-    Plugs into PyTorch Batchsampler Package.
+    Sample class by compression degree
     """
 
     def __init__(self, labels, n_classes, n_samples):
@@ -379,28 +372,63 @@ class ClsCohSampler(torch.utils.data.sampler.Sampler):
         X, T, *_ = predict_batchwise(model, dataloader)
 
         # similarity matrix
+        self.intra_inter_ratio = self.get_intra_inter_dist(X, T)
         self.storage = self.get_class_svd(X, T)
         logging.info('Reinitialize Class Sampler')
 
     def get_class_svd(self, X, T):
-        singular_values = torch.tensor([])
+        X = F.normalize(X, p=2, dim=-1)
+        rho_values = []
         for cls in self.labels_set:
             indices = T == cls
             X_cls = X[indices, :]  # class-specific embedding
             u, s, v = torch.linalg.svd(X_cls)  # compute singular value, lower value implies lower data variance
-            s = s[:1]  # only take top 1 singular values
-            singular_values = torch.cat((singular_values, s.unsqueeze(0)), dim=0)
-        return singular_values # (C, 1)
+            s = s[1:].detach().cpu().numpy()  # remove first singular value cause it is over-dominant
+            # TODO: use the definition in "Revisiting Training Strategies and Generalization Performance in Deep Metric"
+            s_norm = s / s.sum()
+            uniform = np.ones(len(s)) / (len(s))
+            kl = scipy.stats.entropy(uniform, s_norm)
+            rho_values.append(kl)
+        return rho_values # (C,)
+
+    def get_intra_inter_dist(self, X, T):
+        X = F.normalize(X, p=2, dim=-1)
+        X = X.detach().cpu().numpy()
+        dist_mat = np.zeros((len(self.labels_set), len(self.labels_set)))
+
+        # Get class-specific embedding
+        X_arrange_byT = []
+        for cls in self.labels_set:
+            indices = T == cls
+            X_cls = X[indices, :]
+            X_arrange_byT.append(X_cls)
+
+        # O(C^2) to calculate inter, intra distance
+        for i in range(len(self.labels_set)):
+            for j in range(i, len(self.labels_set)):
+                pairwise_dists = distance.cdist(X_arrange_byT[i], X_arrange_byT[j], 'cosine')
+                avg_pairwise_dist = np.sum(pairwise_dists) / (np.prod(pairwise_dists.shape) - len(pairwise_dists.diagonal())) # take mean (ignore diagonal)
+                dist_mat[i, j] = dist_mat[j, i] = avg_pairwise_dist
+
+        ratio_mat = dist_mat / (dist_mat.diagonal()[:, np.newaxis]+1e-8) # (C, C) inter/intra ratio matrix
+        ratio_mat = 1./(ratio_mat + 1e-8) # (C, C) intra/inter distance ratio
+        # if this ratio is sufficiently low, you dont want to optimize any more
+        ratio_mat = ratio_mat.mean(-1) # (C,)
+        return ratio_mat
 
     def __iter__(self):
         self.count = 0
         while self.count + self.batch_size < self.n_dataset:
-            # random sample a class and the other classes
-            classes_prob = self.storage.squeeze().detach().cpu().numpy()
+            # sample large variance classes
+            classes_prob = -np.asarray(self.storage) # lower rho -> more directions with significant variance -> choose
             classes_prob = classes_prob / classes_prob.sum()
             classes = np.random.choice(self.labels_set, self.n_classes,
                              p=classes_prob, replace=False)
-            # sample large variance classes
+            # sample large intra/inter ratio classes
+            # classes_prob = np.asarray(self.intra_inter_ratio)  # larger intra/inter ratio -> densely populated embedding space, low compression degree, directions with significant variance -> choose
+            # classes_prob = classes_prob / classes_prob.sum()
+            # classes = np.random.choice(self.labels_set, self.n_classes,
+            #                            p=classes_prob, replace=False)
 
             indices = []
             for cls in classes:

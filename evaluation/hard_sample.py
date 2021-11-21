@@ -35,7 +35,7 @@ def hard_potential(sim_dict, cls_dict, current_t, rolling_t=5, ts_sim=0.5, ts_ra
 
 
 if __name__ == '__main__':
-    log_filename = 'cub_cub_trainval_512_0_lossProxyNCA_prob_orig_test'
+    log_filename = 'cars_cars_trainval_512_0_lossProxyNCA_prob_orig_test'
     with open("{0}/{1}_recorder.json".format('log', log_filename), 'rt') as handle:
         process_recorder = json.load(handle)
 
@@ -45,17 +45,20 @@ if __name__ == '__main__':
 
     sim_list = [process_recorder[str(epoch)]['similarity'] for epoch in range(len(process_recorder.keys()))]
     sim_list = np.stack(sim_list).T # (N, T)
+    sim_list += 1 # shift distribution to (0, 2)
 
     # for j in range(loss_list.shape[0]):
     #     plt.plot(range(sim_list.shape[1]), sim_list[j, :], linestyle='-', color='k', linewidth=0.5)
     # plt.show()
 
     # TODO: how to define a sample is hard to fit (1) rate of increasing (similarity) is slow (2) final similarity is low
-    increasing_rate = (sim_list[:, -1] - sim_list[:, 0]) / np.abs(sim_list[:, 0]) # (final_sim-initial_sim)/initial_sim
+    increasing_rate = (sim_list[:, -1] - sim_list[:, 0]) / sim_list[:, 0] # (final_sim-initial_sim)/initial_sim
     final_sim = sim_list[:, -1]
 
     # TODO: delete those top x% hard samples and observe the performance change
     bottom_increasing_rate = np.argsort(increasing_rate)[:int(len(increasing_rate)*0.05)]
     bottom_final_sim = np.argsort(final_sim)[:int(len(final_sim)*0.05)]
-    np.save(os.path.join('hard_samples_ind', 'cub_ProxyNCA_prob_orig_hard_increase.npy'), bottom_increasing_rate)
-    np.save(os.path.join('hard_samples_ind', 'cub_ProxyNCA_prob_orig_hard_final.npy'), bottom_final_sim)
+    np.save(os.path.join('hard_samples_ind',
+                         'cars_ProxyNCA_prob_orig_hard_increase.npy'), bottom_increasing_rate)
+    np.save(os.path.join('hard_samples_ind',
+                         'cars_ProxyNCA_prob_orig_hard_final.npy'), bottom_final_sim)

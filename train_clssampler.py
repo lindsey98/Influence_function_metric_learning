@@ -15,12 +15,11 @@ import json
 from tqdm import tqdm
 from torch.utils.data import Dataset, DataLoader
 
-os.environ["CUDA_VISIBLE_DEVICES"]="0"
+os.environ["CUDA_VISIBLE_DEVICES"]="1,0"
 
 parser = argparse.ArgumentParser(description='Training ProxyNCA++')
 parser.add_argument('--epochs', default = 40, type=int, dest = 'nb_epochs')
 parser.add_argument('--log-filename', default = 'example')
-parser.add_argument('--seed', default=0, type=int)
 parser.add_argument('--lr_steps', default=[1000], nargs='+', type=int)
 parser.add_argument('--source_dir', default='', type=str)
 parser.add_argument('--root_dir', default='', type=str)
@@ -30,15 +29,16 @@ parser.add_argument('--init_eval', default=False, action='store_true')
 parser.add_argument('--apex', default=False, action='store_true')
 parser.add_argument('--warmup_k', default=5, type=int)
 
-parser.add_argument('--dataset', default='cub')
+parser.add_argument('--dataset', default='cars')
+parser.add_argument('--seed', default=4, type=int)
 parser.add_argument('--embedding-size', default = 512, type=int, dest = 'sz_embedding')
-parser.add_argument('--config', default='config/cub.json')
+parser.add_argument('--config', default='config/cars.json')
 parser.add_argument('--mode', default='trainval', choices=['train', 'trainval', 'test',
                                                            'testontrain', 'testontrain_super'],
                     help='train with train data or train with trainval')
 parser.add_argument('--batch-size', default = 32, type=int, dest = 'sz_batch')
 parser.add_argument('--no_warmup', default=False, action='store_true')
-parser.add_argument('--loss-type', default='ProxyNCA_prob_orig_subsetsampler', type=str)
+parser.add_argument('--loss-type', default='ProxyNCA_prob_orig_hard_remove_by_increase_rate', type=str)
 parser.add_argument('--workers', default = 2, type=int, dest = 'nb_workers')
 
 args = parser.parse_args()
@@ -57,8 +57,6 @@ def load_best_checkpoint(model):
 if __name__ == '__main__':
 
     # set random seed for all gpus
-    # random.seed(args.seed)
-    # np.random.seed(args.seed) # FIXME: to not set seed
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed_all(args.seed)
 
@@ -205,7 +203,6 @@ if __name__ == '__main__':
 
     elif args.mode == 'trainval' or args.mode == 'test' \
             or args.mode == 'testontrain' or args.mode == 'testontrain_super':
-        # print(dataset_config['dataset'][args.dataset]['root'])
         tr_dataset = dataset.load(
                 name = args.dataset,
                 root = dataset_config['dataset'][args.dataset]['root'],
@@ -222,8 +219,7 @@ if __name__ == '__main__':
     batch_sampler = dataset.utils.BalancedBatchExcludeSampler(labels=torch.Tensor(tr_dataset.ys),
                                                               n_classes=num_class_per_batch,
                                                               n_samples=int(args.sz_batch / num_class_per_batch),
-                                                              exclude_ind=excluded_indices
-                                                              )
+                                                              exclude_ind=excluded_indices )
 
     # batch_sampler = dataset.utils.ClsCohSampler(torch.Tensor(tr_dataset.ys), num_class_per_batch,
     #                                             int(args.sz_batch / num_class_per_batch))
@@ -279,7 +275,7 @@ if __name__ == '__main__':
     model = torch.nn.DataParallel(model)
     model = model.cuda()
 
-    dl_tr.batch_sampler.create_storage(dl_tr_noshuffle, model)
+    # dl_tr.batch_sampler.create_storage(dl_tr_noshuffle, model)
 
     '''Loss'''
     # TODO
@@ -434,9 +430,14 @@ if __name__ == '__main__':
 
     '''training loop'''
     for e in range(0, args.nb_epochs):
-        len_training = len(dl_tr_noshuffle.dataset)  # training
-        cached_sim = np.zeros(len_training)  # cache the similarity to ground-truth proxy
-        cached_cls = np.zeros(len_training) # cache the gt-class
+
+        # loss recorder similarity recorder
+        if e == 0:
+            process_recorder = {}
+            with open("{0}/{1}_recorder.json".format('log', args.log_filename), 'wt') as handle:
+                json.dump(process_recorder, handle)
+        with open("{0}/{1}_recorder.json".format('log', args.log_filename), 'rt') as handle:
+            process_recorder = json.load(handle)
 
         if args.mode == 'train':
             curr_lr = opt.param_groups[0]['lr']
@@ -476,7 +477,17 @@ if __name__ == '__main__':
 
         model.losses = losses
         model.current_epoch = e
-        dl_tr.batch_sampler.create_storage(dl_tr_noshuffle, model)
+        # dl_tr.batch_sampler.create_storage(dl_tr_noshuffle, model)
+
+        # save proxy-similarity and class labels
+        train_embs, train_cls, _, base_loss = utils.predict_batchwise_loss(model, dl_tr_noshuffle, criterion)
+        cached_sim = utils.inner_product_sim(X=train_embs, P=criterion.proxies, T=train_cls)
+        process_recorder[e] = {'epoch': e,
+                               'losses': base_loss.detach().cpu().numpy().tolist(),
+                               'classes': train_cls.long().detach().cpu().numpy().tolist(),
+                               'similarity': cached_sim.detach().cpu().numpy().tolist()}
+        with open("{0}/{1}_recorder.json".format('log', args.log_filename), 'wt') as handle:
+            json.dump(process_recorder, handle)
 
         if e == best_epoch:
             break
