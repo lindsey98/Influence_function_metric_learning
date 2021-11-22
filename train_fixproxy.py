@@ -405,7 +405,6 @@ if __name__ == '__main__':
         logging.info('Number of query set: {}'.format(len(dl_query.dataset)))
         logging.info('Number of gallery set: {}'.format(len(dl_gallery.dataset)))
 
-
     # initialization
     criterion = proxy_assignment(model, dl_tr_noshuffle, criterion)
 
