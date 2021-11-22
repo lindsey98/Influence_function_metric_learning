@@ -266,6 +266,57 @@ class BalancedBatchExcludeSampler(BatchSampler):
     def __len__(self):
         return self.n_dataset // self.batch_size
 
+
+class BalancedBatchExcludeSamplerNoshuffle(BatchSampler):
+    """
+    BatchSampler -samples n_classes and within these classes samples n_samples, but exclude some of the indices
+    Returns batches of size n_classes * n_samples
+    """
+
+    def __init__(self, labels, n_classes, n_samples, exclude_ind):
+        self.labels = labels
+        self.labels_set = list(set(self.labels.numpy()))
+        self.label_to_indices = {label: np.where(self.labels.numpy() == label)[0]
+                                 for label in self.labels_set}
+        self.exclude_ind = exclude_ind
+        self._remove_exclude()
+
+        self.used_label_indices_count = {label: 0 for label in self.labels_set}
+        self.count = 0
+        self.n_classes = n_classes
+        self.n_samples = n_samples
+        self.n_dataset = len(self.labels) - len(exclude_ind)
+        self.batch_size = self.n_samples * self.n_classes
+
+    def _remove_exclude(self):
+        # remove excluded indices
+        for l in self.labels_set:
+            compare = self.label_to_indices[l][:, None] == self.exclude_ind # (N, N_exclude)
+            isexclude = compare.sum(-1) # (N,)
+            self.label_to_indices[l] = np.delete(self.label_to_indices[l], isexclude == True) # delete the indice where it is included in the excluded_list
+        return
+
+    def __iter__(self):
+        self.count = 0
+        while self.count + self.batch_size < self.n_dataset: # exceed number of data we have
+            classes = np.random.choice(self.labels_set, self.n_classes, replace=False) # randomlly choose n classes
+
+            indices = []
+            for class_ in classes:
+                indices.extend(self.label_to_indices[class_][
+                               self.used_label_indices_count[class_]:\
+                               self.used_label_indices_count[class_] + self.n_samples])
+                self.used_label_indices_count[class_] += self.n_samples
+
+                if self.used_label_indices_count[class_] + self.n_samples > len(self.label_to_indices[class_]):
+                    self.used_label_indices_count[class_] = 0
+
+            yield indices
+            self.count += self.n_classes * self.n_samples
+
+    def __len__(self):
+        return self.n_dataset // self.batch_size
+
 class ClsCohSampler(torch.utils.data.sampler.Sampler):
     """
     Sample class by compression degree

@@ -30,7 +30,7 @@ parser.add_argument('--apex', default=False, action='store_true')
 parser.add_argument('--warmup_k', default=5, type=int)
 
 parser.add_argument('--dataset', default='cars49')
-parser.add_argument('--seed', default=0, type=int)
+parser.add_argument('--seed', default=2, type=int)
 parser.add_argument('--eval_nmi', default=True, action='store_true')
 parser.add_argument('--embedding-size', default = 512, type=int, dest = 'sz_embedding')
 parser.add_argument('--config', default='config/cars49_pfix.json')
@@ -39,7 +39,7 @@ parser.add_argument('--mode', default='trainval', choices=['train', 'trainval', 
                     help='train with train data or train with trainval')
 parser.add_argument('--batch-size', default = 32, type=int, dest = 'sz_batch')
 parser.add_argument('--no_warmup', default=False, action='store_true')
-parser.add_argument('--loss-type', default='ProxyNCA_pfix', type=str)
+parser.add_argument('--loss-type', default='ProxyNCA_pfix_hard_fit', type=str)
 parser.add_argument('--workers', default = 4, type=int, dest = 'nb_workers')
 
 args = parser.parse_args()
@@ -222,21 +222,21 @@ if __name__ == '__main__':
 
     num_class_per_batch = config['num_class_per_batch']
     num_gradcum = config['num_gradcum']
-    is_random_sampler = config['is_random_sampler']
-    if is_random_sampler:
-        batch_sampler = dataset.utils.RandomBatchSampler(tr_dataset.ys, args.sz_batch, True, num_class_per_batch, num_gradcum)
-    else:
+    # is_random_sampler = config['is_random_sampler']
+    # if is_random_sampler:
+    #     batch_sampler = dataset.utils.RandomBatchSampler(tr_dataset.ys, args.sz_batch, True, num_class_per_batch, num_gradcum)
+    # else:
+    #
+    #     batch_sampler = dataset.utils.BalancedBatchSampler(torch.Tensor(tr_dataset.ys), num_class_per_batch,
+    #                                                        int(args.sz_batch / num_class_per_batch))
 
-        batch_sampler = dataset.utils.BalancedBatchSampler(torch.Tensor(tr_dataset.ys), num_class_per_batch,
-                                                           int(args.sz_batch / num_class_per_batch))
+    excluded_indices = np.load(os.path.join('hard_samples_ind',
+                                            '{}_ProxyNCA_pfix_hard_fit.npy'.format(args.dataset)))
 
-    # excluded_indices = np.load(os.path.join('hard_samples_ind',
-    #                                         '{}_ProxyNCA_pfix_easy_fit.npy'.format(args.dataset)))
-
-    # batch_sampler = dataset.utils.BalancedBatchExcludeSampler(labels=torch.Tensor(tr_dataset.ys),
-    #                                                           n_classes=num_class_per_batch,
-    #                                                           n_samples=int(args.sz_batch / num_class_per_batch),
-    #                                                           exclude_ind=excluded_indices )
+    batch_sampler = dataset.utils.BalancedBatchExcludeSampler(labels=torch.Tensor(tr_dataset.ys),
+                                                              n_classes=num_class_per_batch,
+                                                              n_samples=int(args.sz_batch / num_class_per_batch),
+                                                              exclude_ind=excluded_indices )
 
     dl_tr = torch.utils.data.DataLoader(
         tr_dataset,
@@ -245,22 +245,31 @@ if __name__ == '__main__':
     )
 
     # training dataloader without shuffling and without transformation
-    dl_tr_noshuffle = torch.utils.data.DataLoader(
-            dataset=dataset.load(
-                    name=args.dataset,
-                    root=dataset_config['dataset'][args.dataset]['root'],
-                    source=dataset_config['dataset'][args.dataset]['source'],
-                    classes=dataset_config['dataset'][args.dataset]['classes']['trainval'],
-                    transform=dataset.utils.make_transform(
-                        **dataset_config[transform_key],
-                        is_train=False # no transformation
-                    )
-                ),
-            num_workers = args.nb_workers,
-            shuffle=False, # no shuffle, retain its ordering
-            batch_size=64,
-    )
+    #FIXME
+    # dl_tr_noshuffle = torch.utils.data.DataLoader(
+    #         dataset=dataset.load(
+    #                 name=args.dataset,
+    #                 root=dataset_config['dataset'][args.dataset]['root'],
+    #                 source=dataset_config['dataset'][args.dataset]['source'],
+    #                 classes=dataset_config['dataset'][args.dataset]['classes']['trainval'],
+    #                 transform=dataset.utils.make_transform(
+    #                     **dataset_config[transform_key],
+    #                     is_train=False # no transformation
+    #                 )
+    #             ),
+    #         num_workers = args.nb_workers,
+    #         shuffle=False, # no shuffle, retain its ordering
+    #         batch_size=64,
+    # )
 
+    dl_tr_noshuffle = torch.utils.data.DataLoader(
+        tr_dataset,
+        batch_sampler = dataset.utils.BalancedBatchExcludeSamplerNoshuffle(labels=torch.Tensor(tr_dataset.ys),
+                                                                          n_classes=num_class_per_batch,
+                                                                          n_samples=int(args.sz_batch / num_class_per_batch),
+                                                                          exclude_ind=excluded_indices),
+        num_workers = args.nb_workers,
+    )
 
     print("===")
     if args.mode == 'train':
