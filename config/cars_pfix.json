@@ -2,9 +2,9 @@
     "name": "str('example')",
     "gpu_id": "int(0)",
     "criterion": {
-        "type": "loss.ProxyAnchor_pfix",
+        "type": "loss.ProxyNCA_pfix",
         "args": {
-
+            "scale": "3"
         }
     },
     "lr_scheduler": {

@@ -237,7 +237,7 @@ class BalancedBatchExcludeSampler(BatchSampler):
         self.batch_size = self.n_samples * self.n_classes
 
     def _remove_exclude(self):
-        # remove excluded_inds
+        # remove excluded indices
         for l in self.labels_set:
             compare = self.label_to_indices[l][:, None] == self.exclude_ind # (N, N_exclude)
             isexclude = compare.sum(-1) # (N,)
@@ -258,87 +258,6 @@ class BalancedBatchExcludeSampler(BatchSampler):
                 if self.used_label_indices_count[class_] + self.n_samples > len(self.label_to_indices[class_]):
                     np.random.shuffle(self.label_to_indices[class_])
                     self.used_label_indices_count[class_] = 0
-
-            yield indices
-            self.count += self.n_classes * self.n_samples
-
-    def __len__(self):
-        return self.n_dataset // self.batch_size
-
-
-class ClsDistSampler(torch.utils.data.sampler.Sampler):
-    """
-    Plugs into PyTorch Batchsampler Package.
-    """
-    def __init__(self, labels, n_classes, n_samples):
-
-        self.labels = labels
-        self.labels_set = list(set(self.labels.numpy()))
-        self.label_to_indices = {label: np.where(self.labels.numpy() == label)[0]
-                                 for label in self.labels_set}
-        for l in self.labels_set:
-            np.random.shuffle(self.label_to_indices[l])
-        self.used_label_indices_count = {label: 0 for label in self.labels_set}
-        self.count = 0
-        self.n_classes = n_classes
-        self.n_samples = n_samples
-        self.n_dataset = len(self.labels)
-        self.batch_size = self.n_samples * self.n_classes
-
-    def create_storage(self, dataloader, model): # this dataloader should be no shuffled version
-
-        from utils import predict_batchwise
-        X, T, *_ = predict_batchwise(model, dataloader)
-
-        # similarity matrix
-        cls_sim_matrix = torch.zeros((len(self.labels_set), len(self.labels_set)))
-        for i in self.labels_set:
-            for j in self.labels_set:
-                if j > i:
-                    indices_i = self.label_to_indices[i]
-                    indices_j = self.label_to_indices[j]
-                    Xi, Xj = X[indices_i], X[indices_j]
-                    sim = self.inner_prod(Xi, Xj) # get sample pairwise similarity
-                    cls_sim_matrix[int(i), int(j)] = (sim.item() + 1.)
-                    cls_sim_matrix[int(j), int(i)] = (sim.item() + 1.)
-
-        normalization_factor = torch.sum(cls_sim_matrix, dim=1, keepdim=True)
-        cls_sim_matrix = cls_sim_matrix / normalization_factor  # normalize to be between 0 and 1
-        self.storage = cls_sim_matrix
-        logging.info('Reinitialize Class Sampler')
-
-    def inner_prod(self, X1, X2):
-        X1, X2 = F.normalize(X1, dim=-1), F.normalize(X2, dim=-1)
-        sim = torch.matmul(X1, X2.T)
-        return sim.mean()
-
-
-    def diverse_class_sampling(self):
-        chosen_cls = np.random.choice(self.labels_set, 1, replace=False)[0] # first class is chosen at random
-
-        prob = self.storage[int(chosen_cls), :].numpy()
-        prob = ((1. - prob) * (prob != 0))  # sample far away class to have more diverse selection
-        rest_classes = np.random.choice(self.labels_set, self.n_classes-1,
-                                        p=(prob + 1e-8) / (prob.sum() + 1e-8), replace=False)
-        classes = [chosen_cls] + rest_classes.tolist()
-
-        return classes
-
-    def __iter__(self):
-        self.count = 0
-        while self.count + self.batch_size < self.n_dataset:
-            # random sample a class and the other classes
-            classes = self.diverse_class_sampling()
-
-            indices = []
-            for cls in classes:
-                indices.extend(self.label_to_indices[cls][self.used_label_indices_count[cls]:\
-                                                            (self.used_label_indices_count[cls] + self.n_samples)])
-                self.used_label_indices_count[cls] += self.n_samples
-
-                if self.used_label_indices_count[cls] + self.n_samples > len(self.label_to_indices[cls]):
-                    np.random.shuffle(self.label_to_indices[cls])
-                    self.used_label_indices_count[cls] = 0
 
             yield indices
             self.count += self.n_classes * self.n_samples
@@ -372,7 +291,7 @@ class ClsCohSampler(torch.utils.data.sampler.Sampler):
         X, T, *_ = predict_batchwise(model, dataloader)
 
         # similarity matrix
-        self.intra_inter_ratio = self.get_intra_inter_dist(X, T)
+        # self.intra_inter_ratio = self.get_intra_inter_dist(X, T)
         self.storage = self.get_class_svd(X, T)
         logging.info('Reinitialize Class Sampler')
 
@@ -446,67 +365,149 @@ class ClsCohSampler(torch.utils.data.sampler.Sampler):
     def __len__(self):
         return self.n_dataset // self.batch_size
 
-class ClsSubsetSampler(torch.utils.data.sampler.Sampler):
 
-    def __init__(self, labels, n_classes, n_samples):
-        self.labels = labels
-        self.labels_set = list(set(self.labels.numpy()))
-        self.label_to_indices = {label: np.where(self.labels.numpy() == label)[0]
-                                 for label in self.labels_set}
-        for l in self.labels_set:
-            np.random.shuffle(self.label_to_indices[l])
-        self.used_label_indices_count = {label: 0 for label in self.labels_set}
-        self.count = 0
-        self.n_classes = n_classes
-        self.n_samples = n_samples
-        self.n_dataset = len(self.labels)
-        self.batch_size = self.n_samples * self.n_classes
-        self.storage = None
+# class ClsDistSampler(torch.utils.data.sampler.Sampler):
+#     """
+#     Plugs into PyTorch Batchsampler Package.
+#     """
+#     def __init__(self, labels, n_classes, n_samples):
+#
+#         self.labels = labels
+#         self.labels_set = list(set(self.labels.numpy()))
+#         self.label_to_indices = {label: np.where(self.labels.numpy() == label)[0]
+#                                  for label in self.labels_set}
+#         for l in self.labels_set:
+#             np.random.shuffle(self.label_to_indices[l])
+#         self.used_label_indices_count = {label: 0 for label in self.labels_set}
+#         self.count = 0
+#         self.n_classes = n_classes
+#         self.n_samples = n_samples
+#         self.n_dataset = len(self.labels)
+#         self.batch_size = self.n_samples * self.n_classes
+#
+#     def create_storage(self, dataloader, model): # this dataloader should be no shuffled version
+#
+#         from utils import predict_batchwise
+#         X, T, *_ = predict_batchwise(model, dataloader)
+#
+#         # similarity matrix
+#         cls_sim_matrix = torch.zeros((len(self.labels_set), len(self.labels_set)))
+#         for i in self.labels_set:
+#             for j in self.labels_set:
+#                 if j > i:
+#                     indices_i = self.label_to_indices[i]
+#                     indices_j = self.label_to_indices[j]
+#                     Xi, Xj = X[indices_i], X[indices_j]
+#                     sim = self.inner_prod(Xi, Xj) # get sample pairwise similarity
+#                     cls_sim_matrix[int(i), int(j)] = (sim.item() + 1.)
+#                     cls_sim_matrix[int(j), int(i)] = (sim.item() + 1.)
+#
+#         normalization_factor = torch.sum(cls_sim_matrix, dim=1, keepdim=True)
+#         cls_sim_matrix = cls_sim_matrix / normalization_factor  # normalize to be between 0 and 1
+#         self.storage = cls_sim_matrix
+#         logging.info('Reinitialize Class Sampler')
+#
+#     def inner_prod(self, X1, X2):
+#         X1, X2 = F.normalize(X1, dim=-1), F.normalize(X2, dim=-1)
+#         sim = torch.matmul(X1, X2.T)
+#         return sim.mean()
+#
+#
+#     def diverse_class_sampling(self):
+#         chosen_cls = np.random.choice(self.labels_set, 1, replace=False)[0] # first class is chosen at random
+#
+#         prob = self.storage[int(chosen_cls), :].numpy()
+#         prob = ((1. - prob) * (prob != 0))  # sample far away class to have more diverse selection
+#         rest_classes = np.random.choice(self.labels_set, self.n_classes-1,
+#                                         p=(prob + 1e-8) / (prob.sum() + 1e-8), replace=False)
+#         classes = [chosen_cls] + rest_classes.tolist()
+#
+#         return classes
+#
+#     def __iter__(self):
+#         self.count = 0
+#         while self.count + self.batch_size < self.n_dataset:
+#             # random sample a class and the other classes
+#             classes = self.diverse_class_sampling()
+#
+#             indices = []
+#             for cls in classes:
+#                 indices.extend(self.label_to_indices[cls][self.used_label_indices_count[cls]:\
+#                                                             (self.used_label_indices_count[cls] + self.n_samples)])
+#                 self.used_label_indices_count[cls] += self.n_samples
+#
+#                 if self.used_label_indices_count[cls] + self.n_samples > len(self.label_to_indices[cls]):
+#                     np.random.shuffle(self.label_to_indices[cls])
+#                     self.used_label_indices_count[cls] = 0
+#
+#             yield indices
+#             self.count += self.n_classes * self.n_samples
+#
+#     def __len__(self):
+#         return self.n_dataset // self.batch_size
 
-    def create_storage(self, test_loader, train_loader, model):  # this dataloader should be test/val loader
 
-        from utils import get_wrong_indices, predict_batchwise, pairwise_distance
-        X, T, *_ = predict_batchwise(model, test_loader)
-        _, top15wrongclasses = get_wrong_indices(X, T)
-        top15wrongclasses = torch.from_numpy(top15wrongclasses)
-        wrongcls_emb = X[torch.isin(T, top15wrongclasses)]
-
-        # find neighboring training classes
-        X_tr, T_tr, *_ = predict_batchwise(model, train_loader)
-        _, IP = pairwise_distance(
-            torch.cat([X_tr, wrongcls_emb]),
-            squared=True
-        )
-        IP = IP[:len(X_tr), len(X_tr):] # affinity to wrong classes' embeddings (N_tr, N')
-
-        M = torch.zeros((train_loader.dataset.nb_classes(), len(X_tr))) # (C_tr, N_tr)
-        M[T_tr, torch.arange(len(X_tr))] = 1
-        M = torch.nn.functional.normalize(M, p=1, dim=1) # average matrix average over all training samples for each class
-        similarity = torch.mm(M, IP) # (C_tr, N')
-        similarity = similarity.max(-1)[0] # (C_tr)
-        self.storage = similarity
-        logging.info('Reinitialize Class Sampler by finding probably wrong region')
-
-    def __iter__(self):
-        self.count = 0
-        while self.count + self.batch_size < self.n_dataset:
-            if isinstance(self.storage, torch.Tensor):
-                # top classes that lie in the mostly likely wrong regions
-                classes = torch.argsort(self.storage, descending=True)[:self.n_classes].numpy()
-            else:
-                classes = np.random.choice(self.labels_set, self.n_classes, replace=False)
-            indices = []
-            for cls in classes:
-                indices.extend(self.label_to_indices[cls][self.used_label_indices_count[cls]: \
-                                                          (self.used_label_indices_count[cls] + self.n_samples)])
-                self.used_label_indices_count[cls] += self.n_samples
-
-                if self.used_label_indices_count[cls] + self.n_samples > len(self.label_to_indices[cls]):
-                    np.random.shuffle(self.label_to_indices[cls])
-                    self.used_label_indices_count[cls] = 0
-
-            yield indices
-            self.count += self.n_classes * self.n_samples
-
-    def __len__(self):
-        return self.n_dataset // self.batch_size
+# class ClsSubsetSampler(torch.utils.data.sampler.Sampler):
+#
+#     def __init__(self, labels, n_classes, n_samples):
+#         self.labels = labels
+#         self.labels_set = list(set(self.labels.numpy()))
+#         self.label_to_indices = {label: np.where(self.labels.numpy() == label)[0]
+#                                  for label in self.labels_set}
+#         for l in self.labels_set:
+#             np.random.shuffle(self.label_to_indices[l])
+#         self.used_label_indices_count = {label: 0 for label in self.labels_set}
+#         self.count = 0
+#         self.n_classes = n_classes
+#         self.n_samples = n_samples
+#         self.n_dataset = len(self.labels)
+#         self.batch_size = self.n_samples * self.n_classes
+#         self.storage = None
+#
+#     def create_storage(self, test_loader, train_loader, model):  # this dataloader should be test/val loader
+#
+#         from utils import get_wrong_indices, predict_batchwise, pairwise_distance
+#         X, T, *_ = predict_batchwise(model, test_loader)
+#         _, top15wrongclasses = get_wrong_indices(X, T)
+#         top15wrongclasses = torch.from_numpy(top15wrongclasses)
+#         wrongcls_emb = X[torch.isin(T, top15wrongclasses)]
+#
+#         # find neighboring training classes
+#         X_tr, T_tr, *_ = predict_batchwise(model, train_loader)
+#         _, IP = pairwise_distance(
+#             torch.cat([X_tr, wrongcls_emb]),
+#             squared=True
+#         )
+#         IP = IP[:len(X_tr), len(X_tr):] # affinity to wrong classes' embeddings (N_tr, N')
+#
+#         M = torch.zeros((train_loader.dataset.nb_classes(), len(X_tr))) # (C_tr, N_tr)
+#         M[T_tr, torch.arange(len(X_tr))] = 1
+#         M = torch.nn.functional.normalize(M, p=1, dim=1) # average matrix average over all training samples for each class
+#         similarity = torch.mm(M, IP) # (C_tr, N')
+#         similarity = similarity.max(-1)[0] # (C_tr)
+#         self.storage = similarity
+#         logging.info('Reinitialize Class Sampler by finding probably wrong region')
+#
+#     def __iter__(self):
+#         self.count = 0
+#         while self.count + self.batch_size < self.n_dataset:
+#             if isinstance(self.storage, torch.Tensor):
+#                 # top classes that lie in the mostly likely wrong regions
+#                 classes = torch.argsort(self.storage, descending=True)[:self.n_classes].numpy()
+#             else:
+#                 classes = np.random.choice(self.labels_set, self.n_classes, replace=False)
+#             indices = []
+#             for cls in classes:
+#                 indices.extend(self.label_to_indices[cls][self.used_label_indices_count[cls]: \
+#                                                           (self.used_label_indices_count[cls] + self.n_samples)])
+#                 self.used_label_indices_count[cls] += self.n_samples
+#
+#                 if self.used_label_indices_count[cls] + self.n_samples > len(self.label_to_indices[cls]):
+#                     np.random.shuffle(self.label_to_indices[cls])
+#                     self.used_label_indices_count[cls] = 0
+#
+#             yield indices
+#             self.count += self.n_classes * self.n_samples
+#
+#     def __len__(self):
+#         return self.n_dataset // self.batch_size

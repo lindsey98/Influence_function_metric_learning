@@ -29,17 +29,17 @@ parser.add_argument('--init_eval', default=True, action='store_true')
 parser.add_argument('--apex', default=False, action='store_true')
 parser.add_argument('--warmup_k', default=5, type=int)
 
-parser.add_argument('--dataset', default='cub')
-parser.add_argument('--seed', default=5, type=int)
+parser.add_argument('--dataset', default='cars')
+parser.add_argument('--seed', default=0, type=int)
 parser.add_argument('--eval_nmi', default=True, action='store_true')
 parser.add_argument('--embedding-size', default = 512, type=int, dest = 'sz_embedding')
-parser.add_argument('--config', default='config/cub_pfix.json')
+parser.add_argument('--config', default='config/cars_pfix.json')
 parser.add_argument('--mode', default='trainval', choices=['train', 'trainval', 'test',
                                                            'testontrain', 'testontrain_super'],
                     help='train with train data or train with trainval')
 parser.add_argument('--batch-size', default = 32, type=int, dest = 'sz_batch')
 parser.add_argument('--no_warmup', default=False, action='store_true')
-parser.add_argument('--loss-type', default='ProxyNCA_pfix_rho', type=str)
+parser.add_argument('--loss-type', default='ProxyNCA_pfix_test', type=str)
 parser.add_argument('--workers', default = 4, type=int, dest = 'nb_workers')
 
 args = parser.parse_args()
@@ -426,9 +426,13 @@ if __name__ == '__main__':
 
     '''training loop'''
     for e in range(0, args.nb_epochs):
-        len_training = len(dl_tr_noshuffle.dataset)  # training
-        cached_sim = np.zeros(len_training)  # cache the similarity to ground-truth proxy
-        cached_cls = np.zeros(len_training) # cache the gt-class
+        # loss recorder similarity recorder
+        if e == 0:
+            process_recorder = {}
+            with open("{0}/{1}_recorder.json".format('log', args.log_filename), 'wt') as handle:
+                json.dump(process_recorder, handle)
+        with open("{0}/{1}_recorder.json".format('log', args.log_filename), 'rt') as handle:
+            process_recorder = json.load(handle)
 
         if args.mode == 'train':
             curr_lr = opt.param_groups[0]['lr']
@@ -468,6 +472,16 @@ if __name__ == '__main__':
 
         model.losses = losses
         model.current_epoch = e
+
+        # save proxy-similarity and class labels
+        train_embs, train_cls, _, base_loss = utils.predict_batchwise_loss(model, dl_tr_noshuffle, criterion)
+        cached_sim = utils.inner_product_sim(X=train_embs, P=criterion.proxies, T=train_cls)
+        process_recorder[e] = {'epoch': e,
+                               'losses': base_loss.detach().cpu().numpy().tolist(),
+                               'classes': train_cls.long().detach().cpu().numpy().tolist(),
+                               'similarity': cached_sim.detach().cpu().numpy().tolist()}
+        with open("{0}/{1}_recorder.json".format('log', args.log_filename), 'wt') as handle:
+            json.dump(process_recorder, handle)
 
         if e == best_epoch:
             break
@@ -522,10 +536,10 @@ if __name__ == '__main__':
 
             logging.info(str(lr_steps))
 
-        if 'inshop' in args.dataset:
-            utils.evaluate_inshop(model, dl_query, dl_gallery)
-        else:
-            utils.evaluate(model, dl_ev, args.eval_nmi, args.recall)
+        # if 'inshop' in args.dataset:
+        #     utils.evaluate_inshop(model, dl_query, dl_gallery)
+        # else:
+        #     utils.evaluate(model, dl_ev, args.eval_nmi, args.recall)
 
         criterion = proxy_assignment(model, dl_tr_noshuffle, criterion)
 

@@ -356,6 +356,26 @@ class ProxyNCA_pfix(torch.nn.Module):
         proxies = F.normalize(proxies, p=2, dim=-1)
         self.proxies.data = proxies.detach()
 
+
+    @torch.no_grad()
+    def debug(self, X, indices, T):
+        P = self.scale * F.normalize(self.proxies, p=2, dim=-1)
+        X = self.scale * F.normalize(X, p=2, dim=-1)
+
+        D = pairwise_distance(
+            torch.cat(
+                [X, P]
+            ),
+            squared=True
+        )[0][:X.size()[0], X.size()[0]:]
+
+        T = binarize_and_smooth_labels(
+            T=T, nb_classes=len(P), smoothing_const=0
+        )
+
+        loss = torch.sum(- T * F.log_softmax(-D, -1), -1)
+        return loss
+
     @torch.no_grad()
     def assign_cls4proxy(self, cls_mean):
         cls2proxy = torch.einsum('bi,mi->bm', cls_mean, self.proxies) # class mean to proxy affinity

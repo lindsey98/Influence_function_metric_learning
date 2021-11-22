@@ -420,10 +420,6 @@ if __name__ == '__main__':
 
     '''training loop'''
     for e in range(0, args.nb_epochs):
-        len_training = len(dl_tr_noshuffle.dataset)  # training
-        cached_sim = np.zeros(len_training)  # cache the similarity to ground-truth proxy
-        cached_cls = np.zeros(len_training) # cache the gt-class
-
         # loss recorder similarity recorder
         if e == 0:
             process_recorder = {}
