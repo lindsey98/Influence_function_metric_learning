@@ -32,6 +32,15 @@
             "root": "str('mnt/datasets/CARS_196')"
 
         },
+        "cars49": {
+            "classes": {
+                "trainval": "range(0, 49)",
+                "eval": "range(49, 196)"
+            },
+            "source": "str('mnt/datasets/CARS_196')",
+            "root": "str('mnt/datasets/CARS_196')"
+
+        },
         "vgg": {
             "classes": {
                 "train": "range(0, 655)",
