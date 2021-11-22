@@ -30,15 +30,15 @@ parser.add_argument('--apex', default=False, action='store_true')
 parser.add_argument('--warmup_k', default=5, type=int)
 
 parser.add_argument('--dataset', default='cars')
-parser.add_argument('--seed', default=4, type=int)
+parser.add_argument('--seed', default=1, type=int)
 parser.add_argument('--embedding-size', default = 512, type=int, dest = 'sz_embedding')
-parser.add_argument('--config', default='config/cars.json')
+parser.add_argument('--config', default='config/cars_pfix.json')
 parser.add_argument('--mode', default='trainval', choices=['train', 'trainval', 'test',
                                                            'testontrain', 'testontrain_super'],
                     help='train with train data or train with trainval')
 parser.add_argument('--batch-size', default = 32, type=int, dest = 'sz_batch')
 parser.add_argument('--no_warmup', default=False, action='store_true')
-parser.add_argument('--loss-type', default='ProxyNCA_pfix_easy_fit', type=str)
+parser.add_argument('--loss-type', default='ProxyNCA_pfix_hard_fit', type=str)
 parser.add_argument('--workers', default = 2, type=int, dest = 'nb_workers')
 
 args = parser.parse_args()
@@ -215,7 +215,7 @@ if __name__ == '__main__':
     num_gradcum = config['num_gradcum']
 
     excluded_indices = np.load(os.path.join('hard_samples_ind',
-                                            '{}_ProxyNCA_pfix_easy_fit.npy'.format(args.dataset)))
+                                            '{}_ProxyNCA_pfix_hard_fit.npy'.format(args.dataset)))
 
     batch_sampler = dataset.utils.BalancedBatchExcludeSampler(labels=torch.Tensor(tr_dataset.ys),
                                                               n_classes=num_class_per_batch,

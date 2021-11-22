@@ -334,7 +334,7 @@ class ProxyNCA_prob_orig(torch.nn.Module):
 
 class ProxyNCA_pfix(torch.nn.Module):
     '''
-        Original loss in ProxyNCA++
+        ProxyNCA++ with fixed proxies
     '''
     def __init__(self, nb_classes, sz_embed, scale, **kwargs):
         torch.nn.Module.__init__(self)
@@ -355,7 +355,6 @@ class ProxyNCA_pfix(torch.nn.Module):
 
         proxies = F.normalize(proxies, p=2, dim=-1)
         self.proxies.data = proxies.detach()
-
 
     @torch.no_grad()
     def debug(self, X, indices, T):
@@ -380,10 +379,10 @@ class ProxyNCA_pfix(torch.nn.Module):
     def assign_cls4proxy(self, cls_mean):
         cls2proxy = torch.einsum('bi,mi->bm', cls_mean, self.proxies) # class mean to proxy affinity
         row_ind, col_ind = linear_sum_assignment((1-cls2proxy.detach().cpu()).numpy()) # row_ind: which class, col_ind: which proxy
-        cls_indx = row_ind.argsort()
+        cls_indx = row_ind.argsort() # class from 1, 2 ... C
         sorted_class = row_ind[cls_indx]
-        sorted_proxies = col_ind[cls_indx]
-        self.proxies.data = self.proxies[sorted_proxies]
+        sorted_proxies = col_ind[cls_indx] # proxy indices correponding to class from 1, 2 ... C
+        self.proxies.data = self.proxies[sorted_proxies] # sort proxies according to proxy indices
         logging.info('Number of updated proxies: {}'.format(np.sum(sorted_proxies != np.asarray(range(len(self.proxies))))))
 
     def forward(self, X, indices, T):

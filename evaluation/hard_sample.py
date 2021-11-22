@@ -14,14 +14,13 @@ if __name__ == '__main__':
 
     sim_list = [process_recorder[str(epoch)]['similarity'] for epoch in range(len(process_recorder.keys()))]
     sim_list = np.stack(sim_list).T # (N, T)
-    # sim_list += 1 # shift distribution to (0, 2)
 
     for j in range(loss_list.shape[0]):
         plt.plot(range(sim_list.shape[1]), sim_list[j, :], linestyle='-', color='k', linewidth=0.5)
     plt.show()
 
-    # # TODO: how to define a sample is hard to fit (1) rate of increasing (similarity) is slow (2) final similarity is low
-    # # TODO: delete those top x% hard samples and observe the performance change
+    # # how to define a sample is hard to fit: look at the training efforts needed in order to reach a similarity threshold (0.5)
+    # # delete those top x% hard samples and observe the performance change
     num_epochs_needed = [np.argmax(sim_list[i] > 0.5) for i in range(len(sim_list))]
     hard2fit = np.argsort(num_epochs_needed) # indices sort training efforts by ascending order
     hard2fit = np.delete(hard2fit, np.where(np.asarray(num_epochs_needed)[hard2fit] == 39)[0])

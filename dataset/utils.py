@@ -241,7 +241,8 @@ class BalancedBatchExcludeSampler(BatchSampler):
         for l in self.labels_set:
             compare = self.label_to_indices[l][:, None] == self.exclude_ind # (N, N_exclude)
             isexclude = compare.sum(-1) # (N,)
-            self.label_to_indices[l] = np.delete(self.label_to_indices[l], isexclude == True)
+            self.label_to_indices[l] = np.delete(self.label_to_indices[l], isexclude == True) # delete the indice where it is included in the excluded_list
+        return
 
     def __iter__(self):
         self.count = 0

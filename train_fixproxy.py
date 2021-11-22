@@ -39,22 +39,23 @@ parser.add_argument('--mode', default='trainval', choices=['train', 'trainval', 
                     help='train with train data or train with trainval')
 parser.add_argument('--batch-size', default = 32, type=int, dest = 'sz_batch')
 parser.add_argument('--no_warmup', default=False, action='store_true')
-parser.add_argument('--loss-type', default='ProxyNCA_pfix_test', type=str)
+parser.add_argument('--loss-type', default='ProxyNCA_pfix_easy_fit', type=str)
 parser.add_argument('--workers', default = 4, type=int, dest = 'nb_workers')
 
 args = parser.parse_args()
 
 def proxy_assignment(model, dl_tr_noshuffle, criterion):
+
     X, T, *_ = utils.predict_batchwise(model, dl_tr_noshuffle)
     cls_means = torch.tensor([])
     for cls in range(dl_tr_noshuffle.dataset.nb_classes()):
         indices = T == cls
         X_cls = X[indices, :]  # class-specific embedding
-        X_cls = F.normalize(X_cls, dim=-1, p=2)
-        clsmean = X_cls.mean(0)
+        X_cls = F.normalize(X_cls, dim=-1, p=2) # (N_cls, sz_embed)
+        clsmean = X_cls.mean(0) # (sz_embed,)
         cls_means = torch.cat([cls_means, clsmean.unsqueeze(0)], dim=0)
 
-    cls_means = F.normalize(cls_means, dim=-1, p=2).to(criterion.proxies.device)
+    cls_means = F.normalize(cls_means, dim=-1, p=2).to(criterion.proxies.device) # (C, sz_embed)
     logging.info('Proxy re-assigned!')
     criterion.assign_cls4proxy(cls_means) # assign proxy to closest class
     criterion = criterion.cuda()
@@ -221,14 +222,21 @@ if __name__ == '__main__':
 
     num_class_per_batch = config['num_class_per_batch']
     num_gradcum = config['num_gradcum']
-    is_random_sampler = config['is_random_sampler']
-    if is_random_sampler:
-        batch_sampler = dataset.utils.RandomBatchSampler(tr_dataset.ys, args.sz_batch, True, num_class_per_batch, num_gradcum)
-    else:
+    # is_random_sampler = config['is_random_sampler']
+    # if is_random_sampler:
+    #     batch_sampler = dataset.utils.RandomBatchSampler(tr_dataset.ys, args.sz_batch, True, num_class_per_batch, num_gradcum)
+    # else:
+    #
+    #     batch_sampler = dataset.utils.BalancedBatchSampler(torch.Tensor(tr_dataset.ys), num_class_per_batch,
+    #                                                        int(args.sz_batch / num_class_per_batch))
 
-        batch_sampler = dataset.utils.BalancedBatchSampler(torch.Tensor(tr_dataset.ys), num_class_per_batch,
-                                                           int(args.sz_batch / num_class_per_batch))
+    excluded_indices = np.load(os.path.join('hard_samples_ind',
+                                            '{}_ProxyNCA_pfix_easy_fit.npy'.format(args.dataset)))
 
+    batch_sampler = dataset.utils.BalancedBatchExcludeSampler(labels=torch.Tensor(tr_dataset.ys),
+                                                              n_classes=num_class_per_batch,
+                                                              n_samples=int(args.sz_batch / num_class_per_batch),
+                                                              exclude_ind=excluded_indices )
 
     dl_tr = torch.utils.data.DataLoader(
         tr_dataset,
@@ -245,11 +253,11 @@ if __name__ == '__main__':
                     classes=dataset_config['dataset'][args.dataset]['classes']['trainval'],
                     transform=dataset.utils.make_transform(
                         **dataset_config[transform_key],
-                        is_train=False
+                        is_train=False # no transformation
                     )
                 ),
             num_workers = args.nb_workers,
-            shuffle=False,
+            shuffle=False, # no shuffle, retain its ordering
             batch_size=64,
     )
 
@@ -540,6 +548,7 @@ if __name__ == '__main__':
         # else:
         #     utils.evaluate(model, dl_ev, args.eval_nmi, args.recall)
 
+        # Proxy reassigned after every epoch
         criterion = proxy_assignment(model, dl_tr_noshuffle, criterion)
 
         if e % 10 == 0 or e == args.nb_epochs-1:
