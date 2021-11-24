@@ -30,7 +30,7 @@ parser.add_argument('--apex', default=False, action='store_true')
 parser.add_argument('--warmup_k', default=5, type=int)
 
 parser.add_argument('--dataset', default='cars')
-parser.add_argument('--seed', default=2, type=int)
+parser.add_argument('--seed', default=5, type=int)
 parser.add_argument('--embedding-size', default = 512, type=int, dest = 'sz_embedding')
 parser.add_argument('--config', default='config/cars.json')
 parser.add_argument('--mode', default='trainval', choices=['train', 'trainval', 'test',

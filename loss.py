@@ -372,8 +372,11 @@ class ProxyNCA_pfix(torch.nn.Module):
             T=T, nb_classes=len(P), smoothing_const=0
         )
 
+        prob = F.softmax(-D, -1) # (N, C)
+        values, _ = torch.topk(prob, k=2, dim=-1)# top1 - top2
+        margin = values[:, 0] - values[:, 1]
         loss = torch.sum(- T * F.log_softmax(-D, -1), -1)
-        return loss
+        return loss, margin
 
     @torch.no_grad()
     def assign_cls4proxy(self, cls_mean):

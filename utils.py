@@ -92,7 +92,7 @@ def predict_batchwise_loss(model, dataloader, criterion):
         for (x, y, indices) in tqdm(dataloader, desc="Batch-wise prediction"):
             x, y = x.to(list(model.parameters())[0].device), y.to(list(model.parameters())[0].device)
             m = model(x)
-            loss = criterion.debug(m, indices, y)
+            loss, _ = criterion.debug(m, indices, y)
             base_loss = torch.cat((base_loss, loss.detach().cpu()), dim=0)
             embeddings = torch.cat((embeddings, m.detach().cpu()), dim=0)
             labels = torch.cat((labels, y.detach().cpu()), dim=0)
@@ -380,6 +380,16 @@ def inner_product_sim(X: torch.Tensor,
     IP_gt = IP[torch.arange(X_copy.shape[0]), T_copy.long()]  # get similarities to gt-class's proxies
 
     return IP_gt
+
+import scipy
+def get_rho(X):
+    # X = F.normalize(X, p=2, dim=-1)
+    u, s, v = torch.linalg.svd(X)  # compute singular value, lower value implies lower data variance
+    s = s[1:].detach().cpu().numpy()  # remove first singular value cause it is over-dominant
+    s_norm = s / s.sum() # TODO: use the definition in "Revisiting Training Strategies and Generalization Performance in Deep Metric"
+    uniform = np.ones(len(s)) / (len(s))
+    kl = scipy.stats.entropy(uniform, s_norm)
+    return kl
 
 
 

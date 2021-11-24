@@ -15,6 +15,7 @@ resource.setrlimit(resource.RLIMIT_NOFILE, (rlimit[1], rlimit[1]))
 _type = {
     'cars': Cars,
     'cars49': Cars,
+    'cars147': Cars,
     'cars_h5': Cars_hdf5,
     'cub': CUBirds,
     'cub_h5': CUBirds_hdf5,

@@ -21,7 +21,9 @@ import evaluation
 
 os.environ['CUDA_VISIBLE_DEVICES'] = "0,1"
 
-def prepare_data(data_name='cub', root='dvi_data_cub200/', save=False):
+def prepare_data(data_name='cub',
+                 config_name='',
+                 root='dvi_data_cub200/', save=False):
     '''
         Prepare dataloader
         :param data_name: dataset used
@@ -30,7 +32,7 @@ def prepare_data(data_name='cub', root='dvi_data_cub200/', save=False):
     '''
     dataset_config = utils.load_config('dataset/config.json')
 
-    config = utils.load_config('config/{}.json'.format(data_name))
+    config = utils.load_config('config/{}.json'.format(config_name))
     transform_key = 'transform_parameters'
     if 'transform_key' in config.keys():
         transform_key = config['transform_key']
@@ -175,14 +177,16 @@ def get_wrong_indices(X, T):
     wrong_ind = np.where(np.asarray(correct) == 0)[0]
     wrong_labels = T[wrong_ind]
     unique_labels, wrong_freq = torch.unique(wrong_labels, return_counts=True)
-    top10_wrong_classes = unique_labels[torch.argsort(wrong_freq, descending=True)[:15]].numpy()
+    # top10_wrong_classes = unique_labels[torch.argsort(wrong_freq, descending=True)[:15]].numpy()
+    top10_wrong_classes = unique_labels[torch.argsort(wrong_freq, descending=True)].numpy()
     return wrong_ind, top10_wrong_classes
 
 
 if __name__ == '__main__':
 
-    dataset_name = 'cub'
-    loss_type = 'ProxyAnchor_pfix'
+    dataset_name = 'cars49'
+    loss_type = 'ProxyNCA_pfix'
+    config_name = 'cars49_pfix'
     # loss_type = 'ProxyAnchor_pfix_controlvariance'
     sz_embedding = 512
     seed = 0
@@ -199,7 +203,8 @@ if __name__ == '__main__':
     os.makedirs(plot_dir, exist_ok=True)
 
     # load data
-    dl_tr, dl_ev = prepare_data(data_name=dataset_name, root=folder, save=False)
+    dl_tr, dl_ev = prepare_data(data_name=dataset_name, config_name=config_name,
+                                root=folder, save=False)
 
     # load model
     feat = Feat_resnet50_max_n()
@@ -212,7 +217,10 @@ if __name__ == '__main__':
 
     # load loss
     # TODO: should echange criterion accordingly
-    criterion = ProxyNCA_prob_orig(nb_classes=dl_tr.dataset.nb_classes(),
+    # criterion = ProxyNCA_prob_orig(nb_classes=dl_tr.dataset.nb_classes(),
+    #                               sz_embed=sz_embedding,
+    #                                scale=3 )
+    criterion = ProxyNCA_pfix(nb_classes=dl_tr.dataset.nb_classes(),
                                   sz_embed=sz_embedding,
                                    scale=3 )
     # criterion = Proxy_Anchor(nb_classes=dl_tr.dataset.nb_classes(),
