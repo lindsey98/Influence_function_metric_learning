@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import os
 
 if __name__ == '__main__':
-    log_filename = 'cars147_cars147_pfix_trainval_512_0_lossProxyNCA_pfix'
+    log_filename = 'cub_cub_pfix_trainval_512_0_lossProxyNCA_pfix_test'
     with open("{0}/{1}_recorder.json".format('log', log_filename), 'rt') as handle:
         process_recorder = json.load(handle)
 
@@ -37,6 +37,6 @@ if __name__ == '__main__':
     plt.show()
 
     np.save(os.path.join('hard_samples_ind',
-                         'cars147_ProxyNCA_pfix_easy_fit.npy'), top_easy2fit)
+                         'cub_ProxyNCA_pfix_easy_fit.npy'), top_easy2fit)
     np.save(os.path.join('hard_samples_ind',
-                         'cars147_ProxyNCA_pfix_hard_fit.npy'), top_hard2fit)
+                         'cub_ProxyNCA_pfix_hard_fit.npy'), top_hard2fit)
