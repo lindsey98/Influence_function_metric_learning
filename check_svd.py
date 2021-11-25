@@ -227,9 +227,14 @@ if __name__ == '__main__':
         # plt.hist(inter_feat_corr.flatten().numpy().tolist(), bins=50)
         # plt.show()
 
+        '''Get RFF feature dependence'''
+        rff_feat_cov = utils.get_RFF_cov(X_train)
+        print('Frobenius norm on RFF feature cov', rff_feat_cov)
+
         '''Embedding space density (Avg Intra/ Avg Inter)'''
-        intra_inter_ratio, reduced_dist_mat = utils.get_intra_inter_dist(X_train, T_train, dl_tr_noshuffle.dataset.nb_classes())
-        print('Average intra/inter ratio:', intra_inter_ratio)
-        plt.hist(reduced_dist_mat.tolist(), bins=50)
-        plt.title('Distribution of inter-class distance')
-        plt.show()
+        # intra_inter_ratio, reduced_dist_mat = utils.get_intra_inter_dist(X_train, T_train, dl_tr_noshuffle.dataset.nb_classes())
+        # print('Average intra/inter ratio:', intra_inter_ratio)
+        # plt.hist(reduced_dist_mat.tolist(), bins=50)
+        # plt.title('Distribution of inter-class distance')
+        # plt.show()
+

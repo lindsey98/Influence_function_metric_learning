@@ -420,3 +420,59 @@ def get_intra_inter_dist(X, T, nb_classes):
         return avg_intra/avg_inter, reduced_dist_mat
 
 
+
+def random_fourier_features_gpu(x, w=None, b=None, num_f=None, sum=True, sigma=None, seed=None):
+    '''
+        RFF with functions randomly drawn from \sqrt(2)cos(wx+\phi), w ~ N(0,1), \phi ~ Unif(0, 2pi)
+    '''
+    if num_f is None:
+        num_f = 1
+    n = x.size(0)
+    r = x.size(1)
+    x = x.view(n, r, 1)
+    c = x.size(2)
+    if sigma is None or sigma == 0:
+        sigma = 1
+    if w is None:
+        w = 1 / sigma * (torch.randn(size=(num_f, c)))
+        b = 2 * np.pi * torch.rand(size=(r, num_f))
+        b = b.repeat((n, 1, 1))
+
+    Z = torch.sqrt(torch.tensor(2.0 / num_f))
+
+    mid = torch.matmul(x, w.t())
+
+    mid = mid + b
+    mid -= mid.min(dim=1, keepdim=True)[0]
+    mid /= mid.max(dim=1, keepdim=True)[0]
+    mid *= np.pi / 2.0
+
+    if sum:
+        Z = Z * (torch.cos(mid) + torch.sin(mid))
+    else:
+        Z = Z * torch.cat((torch.cos(mid), torch.sin(mid)), dim=-1)
+
+    return Z # return the function values evaluated at x
+
+def cov(x):
+    '''
+        Empirical covariance matrix of x
+    '''
+    n = x.shape[0]
+    cov = torch.matmul(x.t(), x) / n # (sz_embed, sz_embed)
+    e = torch.mean(x, dim=0).view(-1, 1)
+    res = cov - torch.matmul(e, e.t())
+
+    return res
+
+def get_RFF_cov(X, num_functions=5):
+    cfeaturecs = random_fourier_features_gpu(X, num_f=num_functions, sum=True)
+    loss = torch.FloatTensor([0])
+    for i in range(cfeaturecs.size()[-1]):
+        cfeaturec = cfeaturecs[:, :, i] # take one function
+        cov1 = cov(cfeaturec) # (sz_embed, sz_embed)
+        cov_matrix = cov1 * cov1
+        loss += torch.sum(cov_matrix) - torch.trace(cov_matrix) # the Frobenius norm is on different features, deduct diagonal
+    return loss
+
+
