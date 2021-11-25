@@ -391,5 +391,31 @@ def get_rho(X):
     kl = scipy.stats.entropy(uniform, s_norm)
     return kl
 
+from scipy.spatial import distance
+def get_intra_inter_dist(X, T, nb_classes):
+        X = F.normalize(X, p=2, dim=-1)
+        X = X.detach().cpu().numpy()
+        dist_mat = np.zeros((nb_classes, nb_classes))
+
+        # Get class-specific embedding
+        X_arrange_byT = []
+        for cls in range(nb_classes):
+            indices = T == cls
+            X_cls = X[indices, :]
+            X_arrange_byT.append(X_cls)
+
+        # O(C^2) to calculate inter, intra distance
+        for i in range(nb_classes):
+            for j in range(i, nb_classes):
+                pairwise_dists = distance.cdist(X_arrange_byT[i], X_arrange_byT[j], 'cosine')
+                avg_pairwise_dist = np.sum(pairwise_dists) / (np.prod(pairwise_dists.shape) - len(pairwise_dists.diagonal())) # take mean (ignore diagonal)
+                dist_mat[i, j] = dist_mat[j, i] = avg_pairwise_dist
+
+        avg_intra = dist_mat.diagonal().mean()
+
+        reduced_dist_mat = np.triu(dist_mat, 1) # mask diagonal
+        avg_inter = reduced_dist_mat.mean()
+
+        return avg_intra/avg_inter, reduced_dist_mat
 
 

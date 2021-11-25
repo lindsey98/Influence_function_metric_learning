@@ -408,6 +408,87 @@ class ProxyNCA_pfix(torch.nn.Module):
         loss = loss.mean()
         return loss
 
+# class ProxyNCA_pfix_decorrelate(torch.nn.Module):
+#
+#     def __init__(self, nb_classes, sz_embed, scale, **kwargs):
+#         torch.nn.Module.__init__(self)
+#         self.proxies = torch.nn.Parameter(torch.randn(nb_classes, sz_embed)) # not training
+#         self.proxies.requires_grad = False
+#         self._proxy_init(nb_classes, sz_embed)
+#         self.scale = scale
+#
+#     def _proxy_init(self, nb_classes, sz_embed):
+#         proxies = torch.randn((nb_classes, sz_embed), requires_grad=True)
+#         _optimizer = torch.optim.Adam(params={proxies}, lr=0.1)
+#         for _ in range(100):
+#             mean, var = utils.inter_proxy_dist(proxies, cosine=True)
+#             _loss = mean + var
+#             _optimizer.zero_grad()
+#             _loss.backward()
+#             _optimizer.step()
+#
+#         proxies = F.normalize(proxies, p=2, dim=-1)
+#         self.proxies.data = proxies.detach()
+#
+#     @torch.no_grad()
+#     def debug(self, X, indices, T):
+#         P = self.scale * F.normalize(self.proxies, p=2, dim=-1)
+#         X = self.scale * F.normalize(X, p=2, dim=-1)
+#
+#         D = pairwise_distance(
+#             torch.cat(
+#                 [X, P]
+#             ),
+#             squared=True
+#         )[0][:X.size()[0], X.size()[0]:]
+#
+#         T = binarize_and_smooth_labels(
+#             T=T, nb_classes=len(P), smoothing_const=0
+#         )
+#
+#         prob = F.softmax(-D, -1) # (N, C)
+#         values, _ = torch.topk(prob, k=2, dim=-1)# top1 - top2
+#         margin = values[:, 0] - values[:, 1]
+#         loss = torch.sum(- T * F.log_softmax(-D, -1), -1)
+#         return loss, margin
+#
+#     @torch.no_grad()
+#     def assign_cls4proxy(self, cls_mean):
+#         cls2proxy = torch.einsum('bi,mi->bm', cls_mean, self.proxies) # class mean to proxy affinity
+#         row_ind, col_ind = linear_sum_assignment((1-cls2proxy.detach().cpu()).numpy()) # row_ind: which class, col_ind: which proxy
+#         cls_indx = row_ind.argsort() # class from 1, 2 ... C
+#         sorted_class = row_ind[cls_indx]
+#         sorted_proxies = col_ind[cls_indx] # proxy indices correponding to class from 1, 2 ... C
+#         self.proxies.data = self.proxies[sorted_proxies] # sort proxies according to proxy indices
+#         logging.info('Number of updated proxies: {}'.format(np.sum(sorted_proxies != np.asarray(range(len(self.proxies))))))
+#
+#     def forward(self, X, indices, T):
+#         P = self.proxies
+#         P = self.scale * F.normalize(P, p=2, dim=-1)
+#         X = self.scale * F.normalize(X, p=2, dim=-1)
+#
+#         D = pairwise_distance(
+#             torch.cat(
+#                 [X, P]
+#             ),
+#             squared=True
+#         )[0][:X.size()[0], X.size()[0]:]
+#
+#         T = binarize_and_smooth_labels(
+#             T=T, nb_classes=len(P), smoothing_const=0
+#         )
+#
+#         loss = torch.sum(- T * F.log_softmax(-D, -1), -1)
+#         loss = loss.mean()
+#
+#         # feature correlation
+#         feat_corr = torch.corrcoef(X.T) # (sz_embed, sz_embed)
+#         non_diag = torch.ones_like(feat_corr).to(feat_corr.device) - torch.eye(len(feat_corr)).to(feat_corr.device)
+#         reduced_corr_mat = feat_corr * non_diag # mask diagonal
+#         F_norm = torch.norm(reduced_corr_mat)
+#         loss += 0.001*F_norm # penalize large correlation between features
+#         return loss
+
 class ProxyAnchor_pfix(torch.nn.Module):
     '''
         Fixed anchor
