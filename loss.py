@@ -6,6 +6,7 @@ import sklearn.preprocessing
 import logging
 from scipy.optimize import linear_sum_assignment
 import utils
+from tqdm import tqdm
 
 def masked_softmax(A, dim, t=1.0):
     '''
@@ -346,7 +347,7 @@ class ProxyNCA_pfix(torch.nn.Module):
     def _proxy_init(self, nb_classes, sz_embed):
         proxies = torch.randn((nb_classes, sz_embed), requires_grad=True)
         _optimizer = torch.optim.Adam(params={proxies}, lr=0.1)
-        for _ in range(100):
+        for _ in tqdm(range(100), desc="Initializing the proxies"):
             mean, var = utils.inter_proxy_dist(proxies, cosine=True)
             _loss = mean + var
             _optimizer.zero_grad()
