@@ -413,7 +413,8 @@ def get_intra_inter_dist(X, T, nb_classes):
 
         avg_intra = dist_mat.diagonal().mean()
 
-        reduced_dist_mat = np.triu(dist_mat, 1) # mask diagonal
+        non_diag = np.where(~np.eye(dist_mat.shape[0],dtype=bool))
+        reduced_dist_mat = dist_mat[non_diag[0], non_diag[1]] # mask diagonal
         avg_inter = reduced_dist_mat.mean()
 
         return avg_intra/avg_inter, reduced_dist_mat

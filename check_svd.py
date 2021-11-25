@@ -95,8 +95,8 @@ def normalized_margin(model, criterion, loader):
 
 if __name__ == '__main__':
     sz_embedding = 512
-    dataset_name = 'cars147'
-    loss_type = 'ProxyNCA_pfix'
+    dataset_name = 'cars'
+    loss_type = 'ProxyNCA_pfix_test'
 
     for seed in range(0, 1):
         print(seed)
@@ -214,22 +214,22 @@ if __name__ == '__main__':
         # print("Rho (smaller rho has more directions of significant variance):", rho)
         #
         '''Get feature dependence'''
-        feat_corr = torch.corrcoef(X_train.detach().cpu().T)
-        non_diag = torch.ones_like(feat_corr).to(feat_corr.device) - torch.eye(len(feat_corr)).to(feat_corr.device)
-        reduced_corr_mat = feat_corr * non_diag # mask diagonal
-        print('Frobenius norm', torch.norm(reduced_corr_mat).item())
-        print('Average between feature correlation', reduced_corr_mat.mean().item())
-        triu_indices = torch.triu_indices(len(feat_corr), len(feat_corr), 1)
-        inter_feat_corr = reduced_corr_mat[triu_indices[0, :], triu_indices[1, :]]
-        print('Maximum inter-feature correlation:', inter_feat_corr.flatten().max())
-        print('Minimum inter-feature correlation:', inter_feat_corr.flatten().min())
-
-        plt.hist(inter_feat_corr.flatten().numpy().tolist(), bins=50)
-        plt.show()
+        # feat_corr = torch.corrcoef(X_train.detach().cpu().T)
+        # non_diag = torch.ones_like(feat_corr).to(feat_corr.device) - torch.eye(len(feat_corr)).to(feat_corr.device)
+        # reduced_corr_mat = feat_corr * non_diag # mask diagonal
+        # print('Frobenius norm', torch.norm(reduced_corr_mat).item())
+        # print('Average between feature correlation', reduced_corr_mat.mean().item())
+        # triu_indices = torch.triu_indices(len(feat_corr), len(feat_corr), 1)
+        # inter_feat_corr = reduced_corr_mat[triu_indices[0, :], triu_indices[1, :]]
+        # print('Maximum inter-feature correlation:', inter_feat_corr.flatten().max())
+        # print('Minimum inter-feature correlation:', inter_feat_corr.flatten().min())
+        #
+        # plt.hist(inter_feat_corr.flatten().numpy().tolist(), bins=50)
+        # plt.show()
 
         '''Embedding space density (Avg Intra/ Avg Inter)'''
-        # intra_inter_ratio, reduced_dist_mat = utils.get_intra_inter_dist(X_train, T_train, dl_tr_noshuffle.dataset.nb_classes())
-        # print('Average intra/inter ratio:', intra_inter_ratio)
-        # plt.hist(reduced_dist_mat.tolist(), bins=50)
-        # plt.title('Distribution of inter-class distance')
-        # plt.show()
+        intra_inter_ratio, reduced_dist_mat = utils.get_intra_inter_dist(X_train, T_train, dl_tr_noshuffle.dataset.nb_classes())
+        print('Average intra/inter ratio:', intra_inter_ratio)
+        plt.hist(reduced_dist_mat.tolist(), bins=50)
+        plt.title('Distribution of inter-class distance')
+        plt.show()
