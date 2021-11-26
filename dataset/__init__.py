@@ -18,6 +18,8 @@ _type = {
     'cars147': Cars,
     'cars_h5': Cars_hdf5,
     'cub': CUBirds,
+    'cub50': CUBirds,
+    'cub150': CUBirds,
     'cub_h5': CUBirds_hdf5,
     'cub_class' : CUBirds_class,
     'sop': SOProducts,

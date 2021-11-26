@@ -321,7 +321,7 @@ def inter_proxy_dist(proxies, cosine=True, neighbor_only=False):
     if cosine:
         upper_triu = torch.triu(IP, diagonal=1)
     else:
-        upper_triu = torch.triu(D, diagonal=1)
+        upper_triu = torch.triu(-D, diagonal=1)
     if not neighbor_only:
         reduced_mean = upper_triu.mean()
         reduced_std = torch.std(upper_triu)

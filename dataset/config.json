@@ -11,6 +11,26 @@
             "root":"str('mnt/datasets/CUB_200_2011')"
 
         },
+        "cub50": {
+            "classes": {
+                "train": "range(0, 50)",
+                "val": "range(50,100)",
+                "trainval":"range(0,50)",
+                "eval": "range(50, 200)"
+            },
+            "source": "str('mnt/datasets/CUB_200_2011')",
+            "root":"str('mnt/datasets/CUB_200_2011')"
+        },
+        "cub150": {
+            "classes": {
+                "train": "range(0, 50)",
+                "val": "range(50,100)",
+                "trainval":"range(0,150)",
+                "eval": "range(150, 200)"
+            },
+            "source": "str('mnt/datasets/CUB_200_2011')",
+            "root":"str('mnt/datasets/CUB_200_2011')"
+        },
         "cub_h5": {
             "classes": {
                 "train": "range(0, 50)",

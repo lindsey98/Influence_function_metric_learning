@@ -2,29 +2,28 @@
     "name": "str('example')",
     "gpu_id": "int(0)",
     "criterion": {
-        "type": "loss.ProxyNCA_prob_mixup",
+        "type": "loss.ProxyNCA_pfix",
         "args": {
-            "scale": "3",
-            "mixup_method": "str('inter_proxy')",
-            "sampling_method": "1",
-            "shifts": "4",
-            "pairs_per_cls": "4"
+            "scale": "3"
         }
     },
     "lr_scheduler": {
-        "type": "torch.optim.lr_scheduler.ReduceLROnPlateau",
+            "type": "torch.optim.lr_scheduler.ReduceLROnPlateau",
         "args": {
             "mode": "str('max')",
             "patience": "4*1"
         }
     },
     "lr_scheduler2": {
-        "type": "torch.optim.lr_scheduler.MultiStepLR"
-        
+        "type": "torch.optim.lr_scheduler.MultiStepLR",
+        "args": {
+            "milestones": "[10, 20]",
+            "gamma": "0.1"
+        }
     },
    
-    "nb_epochs": "40",
-    "sz_batch": "32",
+    "nb_epochs": "40*1",
+    "sz_batch": "32*1",
     "sz_embedding": "512",
     "num_class_per_batch": "8",
     "num_gradcum": "1",
@@ -41,10 +40,6 @@
             },
             "backbone": {
                 "weight_decay": "0"
-            },
-            "proxynca": {
-                "weight_decay": "0",
-                "lr": "4e2"
             },
             "base": {
                 "lr": "4e-3",
