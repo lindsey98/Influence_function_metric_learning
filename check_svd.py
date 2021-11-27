@@ -95,8 +95,8 @@ def normalized_margin(model, criterion, loader):
 
 if __name__ == '__main__':
     sz_embedding = 512
-    dataset_name = 'cub'
-    loss_type = 'ProxyNCA_pfix_test'
+    dataset_name = 'cars49'
+    loss_type = 'ProxyNCA_pfix'
 
     for seed in range(0, 1):
         print(seed)
@@ -195,31 +195,45 @@ if __name__ == '__main__':
         # print(avg_inter_proxy_ip.item())
         # print(var_inter_proxy_ip.item())
 
+        '''Get curvature'''
+        # curvatures = torch.tensor([])
+        # for ct, (inputs, targets, indices) in tqdm(enumerate(dl_tr_noshuffle)):
+        #     inputs = inputs.cuda()
+        #     targets = targets.cuda()
+        #     cur_reg, _ = curvature(model, criterion, inputs, targets, h=3.)
+        #     curvatures = torch.cat((curvatures, cur_reg.detach().cpu()))
+        #
+        # plt.hist(curvatures.detach().cpu().numpy().tolist(), bins=50)
+        # plt.show()
+        # print('Average curvature around training points: {}'.format(torch.mean(curvatures).item()))
+
         '''Get normalized margin'''
         margin_dist = normalized_margin(model, criterion, dl_tr_noshuffle)
-        print('Average top1-top2 margin:', margin_dist.mean().item())
-
-        '''Get rho'''
-        rho = utils.get_rho(X_train)
-        print("Rho (smaller rho has more directions of significant variance):", rho)
-
-        '''Get feature dependence'''
-        feat_corr = torch.corrcoef(X_train.detach().cpu().T)
-        non_diag = torch.ones_like(feat_corr).to(feat_corr.device) - torch.eye(len(feat_corr)).to(feat_corr.device)
-        reduced_corr_mat = feat_corr * non_diag # mask diagonal
-        print('Frobenius norm', torch.norm(reduced_corr_mat).item())
-        print('Average between feature correlation', reduced_corr_mat.mean().item())
-        triu_indices = torch.triu_indices(len(feat_corr), len(feat_corr), 1)
-        inter_feat_corr = reduced_corr_mat[triu_indices[0, :], triu_indices[1, :]]
-        print('Maximum inter-feature correlation:', inter_feat_corr.flatten().max())
-        print('Minimum inter-feature correlation:', inter_feat_corr.flatten().min())
-
-        plt.hist(inter_feat_corr.flatten().numpy().tolist(), bins=50)
+        # print('Average top1-top2 margin:', margin_dist.mean().item())
+        plt.hist(margin_dist.detach().cpu().numpy().tolist(), bins=50)
         plt.show()
 
+        '''Get rho'''
+        # rho = utils.get_rho(X_train)
+        # print("Rho (smaller rho has more directions of significant variance):", rho)
+        #
+        '''Get feature dependence'''
+        # feat_corr = torch.corrcoef(X_train.detach().cpu().T)
+        # non_diag = torch.ones_like(feat_corr).to(feat_corr.device) - torch.eye(len(feat_corr)).to(feat_corr.device)
+        # reduced_corr_mat = feat_corr * non_diag # mask diagonal
+        # print('Frobenius norm', torch.norm(reduced_corr_mat).item())
+        # print('Average between feature correlation', reduced_corr_mat.mean().item())
+        # triu_indices = torch.triu_indices(len(feat_corr), len(feat_corr), 1)
+        # inter_feat_corr = reduced_corr_mat[triu_indices[0, :], triu_indices[1, :]]
+        # print('Maximum inter-feature correlation:', inter_feat_corr.flatten().max())
+        # print('Minimum inter-feature correlation:', inter_feat_corr.flatten().min())
+        #
+        # plt.hist(inter_feat_corr.flatten().numpy().tolist(), bins=50)
+        # plt.show()
+
         '''Get RFF feature dependence'''
-        rff_feat_cov = utils.get_RFF_cov(X_train)
-        print('Frobenius norm on RFF feature cov', rff_feat_cov)
+        # rff_feat_cov = utils.get_RFF_cov(X_train)
+        # print('Frobenius norm on RFF feature cov', rff_feat_cov)
 
         '''Embedding space density (Avg Intra/ Avg Inter)'''
         # intra_inter_ratio, reduced_dist_mat = utils.get_intra_inter_dist(X_train, T_train, dl_tr_noshuffle.dataset.nb_classes())
