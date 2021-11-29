@@ -170,30 +170,10 @@ if __name__ == '__main__':
                                        sz_embed=sz_embedding,
                                        scale=3)
         criterion.proxies.data = torch.load(proxy_dir)['proxies']
-        # evaluation.neighborhood.neighboring_emb_finding(model, dl_tr=dl_tr_noshuffle, dl_ev=dl_ev)
         # calculate embeddings with model and get targets
         X_train, T_train, *_ = utils.predict_batchwise(model, dl_tr_noshuffle)
         # X_test, T_test, *_ = utils.predict_batchwise(model, dl_ev)
         # print('done collecting prediction')
-        # for length_scale in np.linspace(0.5, 1, 10):
-        #     for weight in np.linspace(0.1, 0.5, 10):
-        #         print(length_scale, weight)
-        #         evaluation.neighborhood.evaluate_neighborhood(model, X_train, X_test, T_test, weight=weight, length_scale=length_scale)
-        # print('Training')
-        # print(utils.evaluate(model, dl_tr_noshuffle))
-        # print('Testing')
-        # print(utils.evaluate(model, dl_ev))
-        #
-        # proxies = torch.load(proxy_dir)['proxies']
-        # avg_inter_proxy_ip, var_inter_proxy_ip = utils.inter_proxy_dist(proxies, cosine=True, neighbor_only=False)
-        # print('Proxy-Proxy')
-        # print(avg_inter_proxy_ip.item())
-        # print(var_inter_proxy_ip.item())
-        #
-        # avg_inter_proxy_ip, var_inter_proxy_ip = utils.inter_proxy_dist(proxies, cosine=True, neighbor_only=True)
-        # print('Proxy-Neighbor')
-        # print(avg_inter_proxy_ip.item())
-        # print(var_inter_proxy_ip.item())
 
         '''Get curvature'''
         # curvatures = torch.tensor([])
@@ -208,10 +188,10 @@ if __name__ == '__main__':
         # print('Average curvature around training points: {}'.format(torch.mean(curvatures).item()))
 
         '''Get normalized margin'''
-        margin_dist = normalized_margin(model, criterion, dl_tr_noshuffle)
+        # margin_dist = normalized_margin(model, criterion, dl_tr_noshuffle)
         # print('Average top1-top2 margin:', margin_dist.mean().item())
-        plt.hist(margin_dist.detach().cpu().numpy().tolist(), bins=50)
-        plt.show()
+        # plt.hist(margin_dist.detach().cpu().numpy().tolist(), bins=50)
+        # plt.show()
 
         '''Get rho'''
         # rho = utils.get_rho(X_train)

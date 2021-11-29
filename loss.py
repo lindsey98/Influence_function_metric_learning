@@ -311,7 +311,7 @@ class ProxyNCA_prob_orig(torch.nn.Module):
         )
 
         loss = torch.sum(- T * F.log_softmax(-D, -1), -1)
-        return loss
+        return loss, None
 
     def forward(self, X, indices, T):
         P = self.proxies

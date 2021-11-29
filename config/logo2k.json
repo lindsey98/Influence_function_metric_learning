@@ -16,13 +16,9 @@
     },
     "lr_scheduler2": {
         "type": "torch.optim.lr_scheduler.MultiStepLR"
-
+        
     },
-
-
-    "ts_sim":"0.5",
-    "ts_ratio": "[0.4, 1.0]",
-
+   
     "nb_epochs": "40*1",
     "sz_batch": "32*1",
     "sz_embedding": "512",
@@ -43,7 +39,7 @@
                 "weight_decay": "0"
             },
             "proxynca": {
-                "weight_decay": "0",
+                "weight_decay": "0", 
                 "lr": "4e2"
             },
             "base": {

@@ -18,12 +18,17 @@ matplotlib.use('TkAgg')
 from matplotlib.offsetbox import TextArea, DrawingArea, OffsetImage, \
     AnnotationBbox
 import evaluation
+from torchvision.io.image import read_image
+from torchvision.transforms.functional import normalize, resize, to_pil_image
+
 
 os.environ['CUDA_VISIBLE_DEVICES'] = "0,1"
 
 def prepare_data(data_name='cub',
                  config_name='',
-                 root='dvi_data_cub200/', save=False):
+                 root='dvi_data_cub200/',
+                 batch_size=64,
+                 save=False):
     '''
         Prepare dataloader
         :param data_name: dataset used
@@ -51,7 +56,7 @@ def prepare_data(data_name='cub',
         ),
         num_workers=0,
         shuffle=False,
-        batch_size=64,
+        batch_size=batch_size,
     )
 
     dl_ev = torch.utils.data.DataLoader(
@@ -65,7 +70,7 @@ def prepare_data(data_name='cub',
                 is_train=False
             )
         ),
-        batch_size=128,
+        batch_size=batch_size,
         shuffle=False,
         num_workers=0,
 
@@ -178,20 +183,22 @@ def get_wrong_indices(X, T):
     wrong_ind = np.where(np.asarray(correct) == 0)[0]
     wrong_labels = T[wrong_ind]
     unique_labels, wrong_freq = torch.unique(wrong_labels, return_counts=True)
-    top10_wrong_classes = unique_labels[torch.argsort(wrong_freq, descending=True)[:15]].numpy()
-    return wrong_ind, top10_wrong_classes
+    # top15_wrong_classes = unique_labels[torch.argsort(wrong_freq, descending=True)[:15]].numpy()
+    top15_wrong_classes = unique_labels[torch.argsort(wrong_freq, descending=True)].numpy() # FIXME: return all test
+
+    return wrong_ind, top15_wrong_classes
 
 
 if __name__ == '__main__':
 
-    dataset_name = 'cars'
-    loss_type = 'ProxyNCA_prob_orig'
-    config_name = 'cars'
+    dataset_name = 'cub'
+    loss_type = 'ProxyNCA_pfix'
+    config_name = 'cub'
     sz_embedding = 512
-    seed = 3
+    seed = 4
 
-    presaved = False
-    pretrained = False
+    presaved = True
+    pretrained = True
     interactive = True
     highlight = True
 
@@ -247,7 +254,7 @@ if __name__ == '__main__':
         indices = range(len(low_dim_emb)) # all training
         label_sub = label[indices].numpy()
         low_dim_emb = low_dim_emb[indices, :]
-        images = [dl_tr.dataset.__getitem__(ind)[0].permute(1, 2, 0).numpy() for ind in indices]
+        images = [to_pil_image(read_image(dl_tr.dataset.im_paths[ind])) for ind in indices]
 
         # Testing
         # indices_test = range(len(low_dim_emb_test))
@@ -267,7 +274,7 @@ if __name__ == '__main__':
         top10_wrong_class_ind = np.where(np.isin(np.asarray(test_label), top10_wrong_classes))[0]
         top10_label_sub_test = test_label[top10_wrong_class_ind].numpy()
         top10_low_dim_emb_test = low_dim_emb_test[top10_wrong_class_ind, :]
-        images_test = [dl_ev.dataset.__getitem__(ind)[0].permute(1, 2, 0).numpy() for ind in top10_wrong_class_ind]
+        images_test = [to_pil_image(read_image(dl_ev.dataset.im_paths[ind])) for ind in top10_wrong_class_ind]
 
         # belong to top15 wrong classes and actually are wrong
         intersect_wrong_class_ind = np.asarray(list(set(wrong_ind).intersection(set(top10_wrong_class_ind))))
@@ -291,7 +298,7 @@ if __name__ == '__main__':
         line4ev_wrong = ax.scatter(x_test_wrong, y_test_wrong, c='orange', s=5)
 
         if interactive:
-            imagebox = OffsetImage(dl_tr.dataset.__getitem__(0)[0].permute(1, 2, 0).numpy(), zoom=0.2)
+            imagebox = OffsetImage(to_pil_image(read_image(dl_tr.dataset.im_paths[indices[0]])), zoom=.5)
             xybox = (150., 150.)
             ab = AnnotationBbox(imagebox, (0, 0),
                                 xybox=xybox,
@@ -301,7 +308,7 @@ if __name__ == '__main__':
             ax.add_artist(ab)
             ab.set_visible(False)
 
-            imagebox2 = OffsetImage(dl_ev.dataset.__getitem__(0)[0].permute(1, 2, 0).numpy(), zoom=0.2)
+            imagebox2 = OffsetImage(to_pil_image(read_image(dl_ev.dataset.im_paths[indices[0]])), zoom=.5)
             ab2 = AnnotationBbox(imagebox2, (0, 0),
                                 xybox=xybox,
                                 xycoords='data',

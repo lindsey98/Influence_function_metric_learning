@@ -17,6 +17,7 @@ import networks
 from evaluation.map import *
 from similarity import pairwise_distance
 from scipy.optimize import linear_sum_assignment
+from scipy.spatial import distance
 # __repr__ may contain `\n`, json replaces it by `\\n` + indent
 json_dumps = lambda **kwargs: json.dumps(
     **kwargs
@@ -391,34 +392,37 @@ def get_rho(X):
     kl = scipy.stats.entropy(uniform, s_norm)
     return kl
 
-from scipy.spatial import distance
-def get_intra_inter_dist(X, T, nb_classes):
-        X = F.normalize(X, p=2, dim=-1)
-        X = X.detach().cpu().numpy()
-        dist_mat = np.zeros((nb_classes, nb_classes))
+def get_intra_inter_dist(X, T):
+    '''
+        Get intra class distance/inter class distance
+    '''
+    X = F.normalize(X, p=2, dim=-1).detach().cpu().numpy() # L2-normalized embeddings
+    unique_classes = torch.unique(T).sort()[0].detach().cpu().numpy() # get unique classes for all T
+    dist_mat = np.zeros((len(unique_classes), len(unique_classes))) # distance matrix
 
-        # Get class-specific embedding
-        X_arrange_byT = []
-        for cls in range(nb_classes):
-            indices = T == cls
-            X_cls = X[indices, :]
-            X_arrange_byT.append(X_cls)
+    # Get class-specific embedding
+    X_arrange_byT = []
+    for cls in range(len(unique_classes)):
+        indices = T == unique_classes[cls] # indices that belong to this class
+        X_cls = X[indices, :]
+        X_arrange_byT.append(X_cls)
 
-        # O(C^2) to calculate inter, intra distance
-        for i in range(nb_classes):
-            for j in range(i, nb_classes):
-                pairwise_dists = distance.cdist(X_arrange_byT[i], X_arrange_byT[j], 'cosine')
-                avg_pairwise_dist = np.sum(pairwise_dists) / (np.prod(pairwise_dists.shape) - len(pairwise_dists.diagonal())) # take mean (ignore diagonal)
-                dist_mat[i, j] = dist_mat[j, i] = avg_pairwise_dist
+    # O(C^2) to calculate inter, intra distance
+    for i in range(len(unique_classes)):
+        for j in range(i, len(unique_classes)):
+            pairwise_dists = distance.cdist(X_arrange_byT[i], X_arrange_byT[j], 'cosine')
+            avg_pairwise_dist = np.sum(pairwise_dists) / (np.prod(pairwise_dists.shape) - len(pairwise_dists.diagonal())) # take mean (ignore diagonal)
+            dist_mat[i, j] = dist_mat[j, i] = avg_pairwise_dist
 
-        avg_intra = dist_mat.diagonal().mean()
-
-        non_diag = np.where(~np.eye(dist_mat.shape[0],dtype=bool))
-        reduced_dist_mat = dist_mat[non_diag[0], non_diag[1]] # mask diagonal
-        avg_inter = reduced_dist_mat.mean()
-
-        return avg_intra/avg_inter, reduced_dist_mat
-
+    # average intra-class distance
+    avg_intra = dist_mat.diagonal().mean()
+    # average inter-class distance
+    non_diag = np.where(~np.eye(dist_mat.shape[0],dtype=bool))
+    reduced_dist_mat = dist_mat[non_diag[0], non_diag[1]] # mask diagonal
+    avg_inter = reduced_dist_mat.mean()
+    # intra/inter ratio
+    ratio = avg_intra / avg_inter
+    return ratio, reduced_dist_mat, unique_classes, dist_mat
 
 
 def random_fourier_features_gpu(x, w=None, b=None, num_f=None, sum=True, sigma=None, seed=None):
