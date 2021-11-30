@@ -21,7 +21,6 @@ import evaluation
 from torchvision.io.image import read_image
 from torchvision.transforms.functional import normalize, resize, to_pil_image
 
-
 os.environ['CUDA_VISIBLE_DEVICES'] = "0,1"
 
 def prepare_data(data_name='cub',
@@ -191,18 +190,18 @@ def get_wrong_indices(X, T):
 
 if __name__ == '__main__':
 
-    dataset_name = 'cub'
+    dataset_name = 'logo2k'
     loss_type = 'ProxyNCA_pfix'
-    config_name = 'cub'
+    config_name = 'logo2k'
     sz_embedding = 512
-    seed = 4
+    seed = 3
 
-    presaved = True
-    pretrained = True
+    presaved = False
+    pretrained = False
     interactive = True
     highlight = True
 
-    folder = 'models/dvi_data_{}_{}_loss{}/'.format(dataset_name, seed, loss_type)
+    folder = 'dvi_data_{}_{}_loss{}/'.format(dataset_name, seed, loss_type)
     model_dir = '{}/ResNet_{}_Model'.format(folder, sz_embedding)
     plot_dir = '{}/resnet_{}_umap_plots'.format(folder, sz_embedding)
 
