@@ -178,7 +178,7 @@ class ProxyNCA_pfix(torch.nn.Module):
         self._proxy_init(nb_classes, sz_embed)
         self.scale = scale
 
-    def _proxy_init(self, nb_classes, sz_embed):
+    def _proxy_init(self, nb_classes, sz_embed): # TODO: random initialization or duplicate initialization
         proxies = torch.randn((nb_classes, sz_embed), requires_grad=True)
         _optimizer = torch.optim.Adam(params={proxies}, lr=0.1)
         for _ in tqdm(range(100), desc="Initializing the proxies"):
@@ -242,8 +242,6 @@ class ProxyNCA_pfix(torch.nn.Module):
         loss = torch.sum(- T * F.log_softmax(-D, -1), -1)
         loss = loss.mean()
         return loss
-
-
 
 class ProxyAnchor_pfix(torch.nn.Module):
     '''

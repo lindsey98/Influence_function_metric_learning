@@ -21,7 +21,7 @@ import evaluation
 from torchvision.io.image import read_image
 from torchvision.transforms.functional import normalize, resize, to_pil_image
 
-os.environ['CUDA_VISIBLE_DEVICES'] = "0,1"
+os.environ['CUDA_VISIBLE_DEVICES'] = "1,0"
 
 def prepare_data(data_name='cub',
                  config_name='',
@@ -158,7 +158,7 @@ def pumap_training(model, model_dir, e,
                 pass
         # Train on all samples and all proxies
         embedder.fit_transform(np.concatenate((embedding.detach().cpu().numpy(),
-                                               stacked_proxies.cpu().numpy(),
+                                               # stacked_proxies.cpu().numpy(),
                                                testing_embedding.cpu().numpy()), axis=0))
         embedder.encoder.save('{}/Epoch_{}/parametric_model/encoder'.format(model_dir, e + 1))
     else:
@@ -181,6 +181,7 @@ def get_wrong_indices(X, T):
     correct = [1 if t in y[:k] else 0 for t, y in zip(T, Y)]
     wrong_ind = np.where(np.asarray(correct) == 0)[0]
     wrong_labels = T[wrong_ind]
+
     unique_labels, wrong_freq = torch.unique(wrong_labels, return_counts=True)
     # top15_wrong_classes = unique_labels[torch.argsort(wrong_freq, descending=True)[:15]].numpy()
     top15_wrong_classes = unique_labels[torch.argsort(wrong_freq, descending=True)].numpy() # FIXME: return all test
@@ -190,18 +191,18 @@ def get_wrong_indices(X, T):
 
 if __name__ == '__main__':
 
-    dataset_name = 'logo2k'
+    dataset_name = 'cars'
     loss_type = 'ProxyNCA_pfix'
-    config_name = 'logo2k'
+    config_name = 'cars'
     sz_embedding = 512
-    seed = 3
+    seed = 4
 
     presaved = False
     pretrained = False
     interactive = True
     highlight = True
 
-    folder = 'dvi_data_{}_{}_loss{}/'.format(dataset_name, seed, loss_type)
+    folder = 'models/dvi_data_{}_{}_loss{}/'.format(dataset_name, seed, loss_type)
     model_dir = '{}/ResNet_{}_Model'.format(folder, sz_embedding)
     plot_dir = '{}/resnet_{}_umap_plots'.format(folder, sz_embedding)
 
@@ -210,8 +211,7 @@ if __name__ == '__main__':
     os.makedirs(plot_dir, exist_ok=True)
 
     # load data
-    dl_tr, dl_ev = prepare_data(data_name=dataset_name, config_name=config_name,
-                                root=folder, save=False)
+    dl_tr, dl_ev = prepare_data(data_name=dataset_name, config_name=config_name, root=folder, save=False)
 
     # load model
     feat = Feat_resnet50_max_n()
@@ -222,23 +222,9 @@ if __name__ == '__main__':
     model = nn.DataParallel(model)
     model.cuda()
 
-    # load loss
-    # TODO: should echange criterion accordingly
-    criterion = ProxyNCA_prob_orig(nb_classes=dl_tr.dataset.nb_classes(),
-                                  sz_embed=sz_embedding,
-                                   scale=3 )
-    # criterion = ProxyNCA_pfix(nb_classes=dl_tr.dataset.nb_classes(),
-    #                               sz_embed=sz_embedding,
-    #                                scale=3 )
-    # criterion = Proxy_Anchor(nb_classes=dl_tr.dataset.nb_classes(),
-    #                               sz_embed=sz_embedding)
-    # criterion = ProxyAnchor_pfix(nb_classes=dl_tr.dataset.nb_classes(),
-    #                               sz_embed=sz_embedding, )
-
     for e in [39]:
         model.load_state_dict(torch.load('{}/Epoch_{}/{}_{}_trainval_512_{}.pth'.format(model_dir, e + 1, dataset_name, dataset_name, seed)))
         proxies = torch.load('{}/Epoch_{}/proxy.pth'.format(model_dir, e + 1), map_location='cpu')['proxies'].detach()
-        criterion.proxies.data = proxies
 
         embedder, low_dim_proxy, (low_dim_emb, label, _), (low_dim_emb_test, test_label, _) = pumap_training(model=model,
                                                                                        model_dir=model_dir,
@@ -255,44 +241,34 @@ if __name__ == '__main__':
         low_dim_emb = low_dim_emb[indices, :]
         images = [to_pil_image(read_image(dl_tr.dataset.im_paths[ind])) for ind in indices]
 
-        # Testing
-        # indices_test = range(len(low_dim_emb_test))
-        # label_sub_test = test_label[indices_test].numpy()
-        # low_dim_emb_test = low_dim_emb_test[indices_test, :]
-
         # Wrong testing
         testing_embedding = torch.load('{}/Epoch_{}/testing_embeddings.pth'.format(model_dir, e + 1)) # high dimensional embedding
         testing_label = torch.load('{}/Epoch_{}/testing_labels.pth'.format(model_dir, e + 1))
-        wrong_ind, top10_wrong_classes = get_wrong_indices(testing_embedding, testing_label)
-        print(top10_wrong_classes)
-        # label_sub_test_wrong = test_label[wrong_ind].numpy()
-        # low_dim_emb_test_wrong = low_dim_emb_test[wrong_ind, :]
-        # images_test_wrong = [dl_ev.dataset.__getitem__(ind)[0].permute(1, 2, 0).numpy() for ind in wrong_ind]
+        wrong_ind, topk_wrong_classes = get_wrong_indices(testing_embedding, testing_label)
+        print(topk_wrong_classes)
 
         # belong to top15 wrong classes
-        top10_wrong_class_ind = np.where(np.isin(np.asarray(test_label), top10_wrong_classes))[0]
-        top10_label_sub_test = test_label[top10_wrong_class_ind].numpy()
-        top10_low_dim_emb_test = low_dim_emb_test[top10_wrong_class_ind, :]
-        images_test = [to_pil_image(read_image(dl_ev.dataset.im_paths[ind])) for ind in top10_wrong_class_ind]
+        topk_wrong_class_ind = np.where(np.isin(np.asarray(test_label), topk_wrong_classes))[0]
+        topk_label_sub_test = test_label[topk_wrong_class_ind].numpy()
+        topk_low_dim_emb_test = low_dim_emb_test[topk_wrong_class_ind, :]
+        images_test = [to_pil_image(read_image(dl_ev.dataset.im_paths[ind])) for ind in topk_wrong_class_ind]
 
         # belong to top15 wrong classes and actually are wrong
-        intersect_wrong_class_ind = np.asarray(list(set(wrong_ind).intersection(set(top10_wrong_class_ind))))
+        intersect_wrong_class_ind = np.asarray(list(set(wrong_ind).intersection(set(topk_wrong_class_ind))))
         label_sub_test_wrong = test_label[intersect_wrong_class_ind].numpy()
         low_dim_emb_test_wrong = low_dim_emb_test[intersect_wrong_class_ind, :]
-
 
         # # Visualize
         fig, ax = plt.subplots()
         # For embedding points
         x, y = low_dim_emb[:, 0], low_dim_emb[:, 1]
-        x_test, y_test = top10_low_dim_emb_test[:, 0], top10_low_dim_emb_test[:, 1]
+        x_test, y_test = topk_low_dim_emb_test[:, 0], topk_low_dim_emb_test[:, 1]
         x_test_wrong, y_test_wrong = low_dim_emb_test_wrong[:, 0], low_dim_emb_test_wrong[:, 1]
         px, py = low_dim_proxy[:, 0], low_dim_proxy[:, 1]
         ax.set_xlim(min(min(x), min(px), min(x_test), min(x_test_wrong)), max(max(x), max(px), max(x_test), max(x_test_wrong)))
         ax.set_ylim(min(min(y), min(py), min(y_test), min(y_test_wrong)), max(max(y), max(py), max(y_test), max(y_test_wrong)))
 
         line4tr = ax.scatter(x, y, c='gray',  s=5)
-        # line4proxy = ax.scatter(px, py, c='blue', marker=(5, 1), edgecolors='black')
         line4ev = ax.scatter(x_test, y_test, c='pink', s=5)
         line4ev_wrong = ax.scatter(x_test_wrong, y_test_wrong, c='orange', s=5)
 
@@ -396,8 +372,8 @@ if __name__ == '__main__':
                     # set the image corresponding to that point
                     imagebox2.set_data(images_test[ind])
                     if highlight:
-                        c = top10_label_sub_test[ind]
-                        data = top10_low_dim_emb_test[top10_label_sub_test == c, :]
+                        c = topk_label_sub_test[ind]
+                        data = topk_low_dim_emb_test[topk_label_sub_test == c, :]
                         plot2[0].set_visible(True)
                         sample_plots2[0].set_data(data.transpose())
 
@@ -406,8 +382,8 @@ if __name__ == '__main__':
 
                     ac.xybox = (xybox_ac[0] * -ws, xybox_ac[1] * -hs)
                     ac.xy = (x_test[ind], y_test[ind])
-                    text = "Testing data indices={} \n Label={}".format(top10_wrong_class_ind[ind],
-                                                                        top10_label_sub_test[ind])
+                    text = "Testing data indices={} \n Label={}".format(topk_wrong_class_ind[ind],
+                                                                        topk_label_sub_test[ind])
                     ac.set_visible(True)
                     ac.set_text(text)
 

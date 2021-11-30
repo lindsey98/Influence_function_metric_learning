@@ -49,7 +49,7 @@ def assign_by_euclidian_at_k_indices(X, T, k):
 
     distances = distances.numpy()
     # get nearest points
-    indices   = np.argsort(distances, axis = 1)[:, 1 : k + 1]
+    indices = np.argsort(distances, axis = 1)[:, 1 : k + 1]
 
     return indices, np.array([[T[i] for i in ii] for ii in indices])
 

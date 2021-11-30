@@ -45,15 +45,9 @@ if __name__ == '__main__':
     model = nn.DataParallel(model)
     model.cuda()
 
-    # TODO: should echange criterion accordingly
-    criterion = ProxyNCA_prob_orig(nb_classes=dl_tr.dataset.nb_classes(),
-                                   sz_embed=sz_embedding,
-                                   scale=3 )
-
     model.load_state_dict(
         torch.load('{}/Epoch_{}/{}_{}_trainval_512_{}.pth'.format(model_dir, 40, dataset_name, dataset_name, seed)))
     proxies = torch.load('{}/Epoch_{}/proxy.pth'.format(model_dir, 40), map_location='cpu')['proxies'].detach()
-    criterion.proxies.data = proxies
 
     # load pre-saved
     train_embedding = torch.load(
@@ -124,7 +118,6 @@ if __name__ == '__main__':
         plt.title(dl_tr.dataset.__getitem__(sig_contributing_train_indices[i])[1])
     plt.show()
 
-
     '''Use CAM methods to retrieve the contributing pixels'''
     model_full = Full_Model(emb_size=sz_embedding, num_classes=dl_tr.dataset.nb_classes())
     pretrained_feat = torch.load('{}/Epoch_{}/{}_{}_trainval_512_{}.pth'.format(model_dir, 40, dataset_name, dataset_name, seed))
@@ -137,11 +130,11 @@ if __name__ == '__main__':
     cam_extractor = SmoothGradCAMpp(model_full)
     dl_tr, dl_ev = prepare_data(data_name=dataset_name, config_name=config_name,
                                 root=folder, batch_size=1, save=False)
+
     for ct, (x, y, indices) in tqdm(enumerate(dl_tr)):
         if y.item() in topk_closest_traincls:
             os.makedirs('CAM', exist_ok=True)
             os.makedirs('CAM/{}_{}/testcls{}_traincls{}_trainCAM'.format(dataset_name, loss_type, selected_test_class, y.item()), exist_ok=True)
-            # os.makedirs('CAM/{}_{}/testcls{}_traincls{}_trainSaliency'.format(dataset_name, loss_type, selected_test_class, y.item()), exist_ok=True)
 
             x, y = x.cuda(), y.cuda()
             out = model_full(x)
@@ -156,25 +149,11 @@ if __name__ == '__main__':
             plt.imshow(result); plt.axis('off'); plt.tight_layout()
             plt.savefig(os.path.join('CAM/{}_{}/testcls{}_traincls{}_trainCAM'.format(dataset_name, loss_type, selected_test_class, y.item()),
                                      os.path.basename(dl_tr.dataset.im_paths[indices[0]])))
-            # Saliency map
-            # smooth_grad = SmoothGrad(
-            #         pretrained_model=model_full,
-            #         cuda=True,
-            #         n_samples=1,
-            #         magnitude=True)
-            # smooth_saliency = smooth_grad(x, index=y.item())
-            # saliency_map = as_gray_image(smooth_saliency)
-            # plt.imshow(x[0].permute(1,2,0).detach().cpu(), alpha=0.7); plt.imshow(np.transpose(saliency_map, (1,0)), alpha=0.7); plt.axis('off'); plt.tight_layout()
-            # plt.savefig(os.path.join(
-            #     'CAM/{}_{}/testcls{}_traincls{}_trainSaliency'.format(dataset_name, loss_type, selected_test_class,
-            #                                                      y.item()),
-            #     os.path.basename(dl_tr.dataset.im_paths[indices[0]])))
 
     for ct, (x, y, indices) in tqdm(enumerate(dl_ev)):
         if y.item() in [selected_test_class]:
             os.makedirs('CAM', exist_ok=True)
             os.makedirs('CAM/{}_{}/testcls{}_traincls{}_testCAM'.format(dataset_name, loss_type, y.item(), topk_closest_traincls[0]), exist_ok=True)
-            # os.makedirs('CAM/{}_{}/testcls{}_traincls{}_testSaliency'.format(dataset_name, loss_type, y.item(), topk_closest_traincls[0]), exist_ok=True)
 
             x, y = x.cuda(), y.cuda()
             out = model_full(x)
@@ -187,19 +166,6 @@ if __name__ == '__main__':
             plt.imshow(result); plt.axis('off'); plt.tight_layout()
             plt.savefig(os.path.join('CAM/{}_{}/testcls{}_traincls{}_testCAM'.format(dataset_name, loss_type, y.item(), topk_closest_traincls[0]),
                                      os.path.basename(dl_ev.dataset.im_paths[indices[0]])))
-
-            # Saliency map
-            # smooth_grad = SmoothGrad(
-            #         pretrained_model=model_full,
-            #         cuda=True,
-            #         n_samples=1,
-            #         magnitude=True)
-            # smooth_saliency = smooth_grad(x, index=topk_closest_traincls[0].item())
-            # saliency_map = as_gray_image(smooth_saliency)
-            # plt.imshow(x[0].permute(1,2,0).detach().cpu(), alpha=0.7); plt.imshow(np.transpose(saliency_map, (1,0)), alpha=0.7); plt.axis('off'); plt.tight_layout()
-            # plt.savefig(os.path.join(
-            #     'CAM/{}_{}/testcls{}_traincls{}_testSaliency'.format(dataset_name, loss_type, y.item(), topk_closest_traincls[0]),
-            #     os.path.basename(dl_tr.dataset.im_paths[indices[0]])))
 
 
 
