@@ -18,12 +18,16 @@ matplotlib.use('TkAgg')
 from matplotlib.offsetbox import TextArea, DrawingArea, OffsetImage, \
     AnnotationBbox
 import evaluation
+from torchvision.io.image import read_image
+from torchvision.transforms.functional import normalize, resize, to_pil_image
 
 os.environ['CUDA_VISIBLE_DEVICES'] = "0,1"
 
 def prepare_data(data_name='cub',
                  config_name='',
-                 root='dvi_data_cub200/', save=False):
+                 root='dvi_data_cub200/',
+                 batch_size=64,
+                 save=False):
     '''
         Prepare dataloader
         :param data_name: dataset used
@@ -51,7 +55,7 @@ def prepare_data(data_name='cub',
         ),
         num_workers=0,
         shuffle=False,
-        batch_size=64,
+        batch_size=batch_size,
     )
 
     dl_ev = torch.utils.data.DataLoader(
@@ -65,7 +69,7 @@ def prepare_data(data_name='cub',
                 is_train=False
             )
         ),
-        batch_size=128,
+        batch_size=batch_size,
         shuffle=False,
         num_workers=0,
 
@@ -129,7 +133,7 @@ def pumap_training(model, model_dir, e,
         testing_label = torch.load('{}/Epoch_{}/testing_labels.pth'.format(model_dir, e + 1))
         testing_indices = torch.load('{}/Epoch_{}/testing_indices.pth'.format(model_dir, e + 1))
 
-    # need to normalize, other producing wierd results
+    # need to normalize, otherwise producing wierd results
     embedding = F.normalize(embedding, dim=-1)
     stacked_proxies =  F.normalize(stacked_proxies, dim=-1)
     testing_embedding = F.normalize(testing_embedding, dim=-1)
@@ -141,7 +145,8 @@ def pumap_training(model, model_dir, e,
     encoder = encoder_model()
     embedder = ParametricUMAP(encoder=encoder,
                               dims=(512,),
-                              verbose=False, batch_size=64)
+                              verbose=False,
+                              batch_size=64)
 
     if not pretrained:
         if e > 0:
@@ -177,23 +182,25 @@ def get_wrong_indices(X, T):
     wrong_ind = np.where(np.asarray(correct) == 0)[0]
     wrong_labels = T[wrong_ind]
     unique_labels, wrong_freq = torch.unique(wrong_labels, return_counts=True)
-    # top10_wrong_classes = unique_labels[torch.argsort(wrong_freq, descending=True)[:15]].numpy()
-    top10_wrong_classes = unique_labels[torch.argsort(wrong_freq, descending=True)].numpy()
-    return wrong_ind, top10_wrong_classes
+    # top15_wrong_classes = unique_labels[torch.argsort(wrong_freq, descending=True)[:15]].numpy()
+    top15_wrong_classes = unique_labels[torch.argsort(wrong_freq, descending=True)].numpy() # FIXME: return all test
+
+    return wrong_ind, top15_wrong_classes
 
 
 if __name__ == '__main__':
 
-    dataset_name = 'cars49'
+    dataset_name = 'logo2k'
     loss_type = 'ProxyNCA_pfix'
-    config_name = 'cars49_pfix'
-    # loss_type = 'ProxyAnchor_pfix_controlvariance'
+    config_name = 'logo2k'
     sz_embedding = 512
-    seed = 0
-    presaved = True
-    pretrained = True
+    seed = 3
+
+    presaved = False
+    pretrained = False
     interactive = True
     highlight = True
+
     folder = 'dvi_data_{}_{}_loss{}/'.format(dataset_name, seed, loss_type)
     model_dir = '{}/ResNet_{}_Model'.format(folder, sz_embedding)
     plot_dir = '{}/resnet_{}_umap_plots'.format(folder, sz_embedding)
@@ -217,12 +224,12 @@ if __name__ == '__main__':
 
     # load loss
     # TODO: should echange criterion accordingly
-    # criterion = ProxyNCA_prob_orig(nb_classes=dl_tr.dataset.nb_classes(),
-    #                               sz_embed=sz_embedding,
-    #                                scale=3 )
-    criterion = ProxyNCA_pfix(nb_classes=dl_tr.dataset.nb_classes(),
+    criterion = ProxyNCA_prob_orig(nb_classes=dl_tr.dataset.nb_classes(),
                                   sz_embed=sz_embedding,
                                    scale=3 )
+    # criterion = ProxyNCA_pfix(nb_classes=dl_tr.dataset.nb_classes(),
+    #                               sz_embed=sz_embedding,
+    #                                scale=3 )
     # criterion = Proxy_Anchor(nb_classes=dl_tr.dataset.nb_classes(),
     #                               sz_embed=sz_embedding)
     # criterion = ProxyAnchor_pfix(nb_classes=dl_tr.dataset.nb_classes(),
@@ -243,10 +250,10 @@ if __name__ == '__main__':
                                                                                        pretrained=pretrained)
         '''Visualize'''
         # Training
-        indices = range(len(low_dim_emb))
+        indices = range(len(low_dim_emb)) # all training
         label_sub = label[indices].numpy()
         low_dim_emb = low_dim_emb[indices, :]
-        images = [dl_tr.dataset.__getitem__(ind)[0].permute(1, 2, 0).numpy() for ind in indices]
+        images = [to_pil_image(read_image(dl_tr.dataset.im_paths[ind])) for ind in indices]
 
         # Testing
         # indices_test = range(len(low_dim_emb_test))
@@ -254,18 +261,21 @@ if __name__ == '__main__':
         # low_dim_emb_test = low_dim_emb_test[indices_test, :]
 
         # Wrong testing
-        testing_embedding = torch.load('{}/Epoch_{}/testing_embeddings.pth'.format(model_dir, e + 1))
+        testing_embedding = torch.load('{}/Epoch_{}/testing_embeddings.pth'.format(model_dir, e + 1)) # high dimensional embedding
         testing_label = torch.load('{}/Epoch_{}/testing_labels.pth'.format(model_dir, e + 1))
         wrong_ind, top10_wrong_classes = get_wrong_indices(testing_embedding, testing_label)
         print(top10_wrong_classes)
         # label_sub_test_wrong = test_label[wrong_ind].numpy()
         # low_dim_emb_test_wrong = low_dim_emb_test[wrong_ind, :]
         # images_test_wrong = [dl_ev.dataset.__getitem__(ind)[0].permute(1, 2, 0).numpy() for ind in wrong_ind]
+
+        # belong to top15 wrong classes
         top10_wrong_class_ind = np.where(np.isin(np.asarray(test_label), top10_wrong_classes))[0]
         top10_label_sub_test = test_label[top10_wrong_class_ind].numpy()
         top10_low_dim_emb_test = low_dim_emb_test[top10_wrong_class_ind, :]
-        images_test = [dl_ev.dataset.__getitem__(ind)[0].permute(1, 2, 0).numpy() for ind in top10_wrong_class_ind]
+        images_test = [to_pil_image(read_image(dl_ev.dataset.im_paths[ind])) for ind in top10_wrong_class_ind]
 
+        # belong to top15 wrong classes and actually are wrong
         intersect_wrong_class_ind = np.asarray(list(set(wrong_ind).intersection(set(top10_wrong_class_ind))))
         label_sub_test_wrong = test_label[intersect_wrong_class_ind].numpy()
         low_dim_emb_test_wrong = low_dim_emb_test[intersect_wrong_class_ind, :]
@@ -278,18 +288,17 @@ if __name__ == '__main__':
         x_test, y_test = top10_low_dim_emb_test[:, 0], top10_low_dim_emb_test[:, 1]
         x_test_wrong, y_test_wrong = low_dim_emb_test_wrong[:, 0], low_dim_emb_test_wrong[:, 1]
         px, py = low_dim_proxy[:, 0], low_dim_proxy[:, 1]
-        ax.set_xlim(min(min(x), min(px), min(x_test)), max(max(x), max(px), max(x_test)))
-        ax.set_ylim(min(min(y), min(py), min(y_test)), max(max(y), max(py), max(y_test)))
+        ax.set_xlim(min(min(x), min(px), min(x_test), min(x_test_wrong)), max(max(x), max(px), max(x_test), max(x_test_wrong)))
+        ax.set_ylim(min(min(y), min(py), min(y_test), min(y_test_wrong)), max(max(y), max(py), max(y_test), max(y_test_wrong)))
 
         line4tr = ax.scatter(x, y, c='gray',  s=5)
         # line4proxy = ax.scatter(px, py, c='blue', marker=(5, 1), edgecolors='black')
         line4ev = ax.scatter(x_test, y_test, c='pink', s=5)
         line4ev_wrong = ax.scatter(x_test_wrong, y_test_wrong, c='orange', s=5)
 
-
         if interactive:
-            imagebox = OffsetImage(dl_tr.dataset.__getitem__(0)[0].permute(1, 2, 0).numpy(), zoom=0.2)
-            xybox = (50., 50.)
+            imagebox = OffsetImage(to_pil_image(read_image(dl_tr.dataset.im_paths[indices[0]])), zoom=.5)
+            xybox = (150., 150.)
             ab = AnnotationBbox(imagebox, (0, 0),
                                 xybox=xybox,
                                 xycoords='data',
@@ -298,7 +307,7 @@ if __name__ == '__main__':
             ax.add_artist(ab)
             ab.set_visible(False)
 
-            imagebox2 = OffsetImage(dl_ev.dataset.__getitem__(0)[0].permute(1, 2, 0).numpy(), zoom=0.2)
+            imagebox2 = OffsetImage(to_pil_image(read_image(dl_ev.dataset.im_paths[indices[0]])), zoom=.5)
             ab2 = AnnotationBbox(imagebox2, (0, 0),
                                 xybox=xybox,
                                 xycoords='data',

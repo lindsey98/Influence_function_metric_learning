@@ -2,7 +2,7 @@
     "name": "str('example')",
     "gpu_id": "int(0)",
     "criterion": {
-        "type": "loss.ProxyNCA_prob_orig",
+        "type": "loss.ProxyNCA_pfix",
         "args": {
             "scale": "3"
         }
@@ -15,8 +15,11 @@
         }
     },
     "lr_scheduler2": {
-        "type": "torch.optim.lr_scheduler.MultiStepLR"
-        
+        "type": "torch.optim.lr_scheduler.MultiStepLR",
+        "args": {
+            "milestones": "[10, 20]",
+            "gamma": "0.1"
+        }
     },
    
     "nb_epochs": "40*1",
@@ -37,10 +40,6 @@
             },
             "backbone": {
                 "weight_decay": "0"
-            },
-            "proxynca": {
-                "weight_decay": "0", 
-                "lr": "4e2"
             },
             "base": {
                 "lr": "4e-3",
