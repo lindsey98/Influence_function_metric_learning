@@ -17,7 +17,7 @@
     "lr_scheduler2": {
         "type": "torch.optim.lr_scheduler.MultiStepLR",
         "args": {
-            "milestones": "[20]",
+            "milestones": "[]",
             "gamma": "0.1"
         }
     },
@@ -43,7 +43,7 @@
                 "weight_decay": "0"
             },
             "base": {
-                "lr": "2.4e-2",
+                "lr": "4e-3",
                 "eps": "1.0"
             }
         }

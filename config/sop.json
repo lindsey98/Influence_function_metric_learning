@@ -20,9 +20,9 @@
     },
    
     "nb_epochs": "40",
-    "sz_batch": "32",
+    "sz_batch": "32*3",
     "sz_embedding": "512",
-    "num_class_per_batch": "8",
+    "num_class_per_batch": "32",
     "num_gradcum": "1",
     "is_random_sampler":"False",
     "transform_key": "str('transform_parameters')",
