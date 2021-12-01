@@ -29,7 +29,7 @@ parser.add_argument('--apex', default=False, action='store_true')
 parser.add_argument('--warmup_k', default=5, type=int)
 
 parser.add_argument('--dataset', default='inshop')
-parser.add_argument('--seed', default=1, type=int)
+parser.add_argument('--seed', default=4, type=int)
 parser.add_argument('--eval_nmi', default=True, action='store_true')
 parser.add_argument('--embedding-size', default = 512, type=int, dest = 'sz_embedding')
 parser.add_argument('--config', default='config/inshop.json')
