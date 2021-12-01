@@ -20,7 +20,7 @@ from matplotlib.offsetbox import TextArea, DrawingArea, OffsetImage, \
 import evaluation
 from torchvision.io.image import read_image
 from torchvision.transforms.functional import normalize, resize, to_pil_image
-
+import scipy
 os.environ['CUDA_VISIBLE_DEVICES'] = "1,0"
 
 def prepare_data(data_name='cub',
@@ -183,7 +183,7 @@ def get_wrong_indices(X, T):
     wrong_labels = T[wrong_ind]
 
     unique_labels, wrong_freq = torch.unique(wrong_labels, return_counts=True)
-    # top15_wrong_classes = unique_labels[torch.argsort(wrong_freq, descending=True)[:15]].numpy()
+    # top15_wrong_classes = unique_labels[torch.argsort(wrong_freq, descending=True)[:100]].numpy()
     top15_wrong_classes = unique_labels[torch.argsort(wrong_freq, descending=True)].numpy() # FIXME: return all test
 
     return wrong_ind, top15_wrong_classes
@@ -191,18 +191,18 @@ def get_wrong_indices(X, T):
 
 if __name__ == '__main__':
 
-    dataset_name = 'cars'
-    loss_type = 'ProxyNCA_pfix'
-    config_name = 'cars'
+    dataset_name = 'inshop'
+    loss_type = 'ProxyNCA_prob_orig'
+    config_name = 'inshop'
     sz_embedding = 512
-    seed = 4
+    seed = 0
 
     presaved = False
     pretrained = False
     interactive = True
     highlight = True
 
-    folder = 'models/dvi_data_{}_{}_loss{}/'.format(dataset_name, seed, loss_type)
+    folder = 'dvi_data_{}_{}_loss{}/'.format(dataset_name, seed, loss_type)
     model_dir = '{}/ResNet_{}_Model'.format(folder, sz_embedding)
     plot_dir = '{}/resnet_{}_umap_plots'.format(folder, sz_embedding)
 
@@ -212,6 +212,11 @@ if __name__ == '__main__':
 
     # load data
     dl_tr, dl_ev = prepare_data(data_name=dataset_name, config_name=config_name, root=folder, save=False)
+    # FOR cars dataset
+    if dataset_name == 'cars':
+        annos_fn = 'mnt/datasets/CARS_196/cars_annos.mat'
+        cars = scipy.io.loadmat(annos_fn)
+        classnames = cars['class_names'][0]
 
     # load model
     feat = Feat_resnet50_max_n()
@@ -268,12 +273,12 @@ if __name__ == '__main__':
         ax.set_xlim(min(min(x), min(px), min(x_test), min(x_test_wrong)), max(max(x), max(px), max(x_test), max(x_test_wrong)))
         ax.set_ylim(min(min(y), min(py), min(y_test), min(y_test_wrong)), max(max(y), max(py), max(y_test), max(y_test_wrong)))
 
-        line4tr = ax.scatter(x, y, c='gray',  s=5)
+        # line4tr = ax.scatter(x, y, c='gray',  s=5)
         line4ev = ax.scatter(x_test, y_test, c='pink', s=5)
         line4ev_wrong = ax.scatter(x_test_wrong, y_test_wrong, c='orange', s=5)
 
         if interactive:
-            imagebox = OffsetImage(to_pil_image(read_image(dl_tr.dataset.im_paths[indices[0]])), zoom=.5)
+            imagebox = OffsetImage(to_pil_image(read_image(dl_tr.dataset.im_paths[indices[0]])), zoom=.3)
             xybox = (150., 150.)
             ab = AnnotationBbox(imagebox, (0, 0),
                                 xybox=xybox,
@@ -283,7 +288,7 @@ if __name__ == '__main__':
             ax.add_artist(ab)
             ab.set_visible(False)
 
-            imagebox2 = OffsetImage(to_pil_image(read_image(dl_ev.dataset.im_paths[indices[0]])), zoom=.5)
+            imagebox2 = OffsetImage(to_pil_image(read_image(dl_ev.dataset.im_paths[indices[0]])), zoom=.3)
             ab2 = AnnotationBbox(imagebox2, (0, 0),
                                 xybox=xybox,
                                 xycoords='data',
@@ -311,49 +316,47 @@ if __name__ == '__main__':
                 sample_plots2.append(plot2[0])
                 plot2[0].set_visible(False)
 
-                sample_dot = []
-                dot = ax.plot([], [], '.', ms=5, color='blue', markeredgecolor='black', zorder=6)
-                sample_dot.append(dot[0])
-                dot[0].set_visible(False)
+                # sample_dot = []
+                # dot = ax.plot([], [], '.', ms=5, color='blue', markeredgecolor='black', zorder=6)
+                # sample_dot.append(dot[0])
+                # dot[0].set_visible(False)
 
             def hover(event):
                 # Training
-                if line4tr.contains(event)[0]:
-                    # find out the index within the array from the event
-                    ind = line4tr.contains(event)[1]["ind"][0]
-                    # get the figure size
-                    w, h = fig.get_size_inches() * fig.dpi
-                    ws = (event.x > w / 2.) * -1 + (event.x <= w / 2.)
-                    hs = (event.y > h / 2.) * -1 + (event.y <= h / 2.)
-                    # if event occurs in the top or right quadrant of the figure,
-                    # change the annotation box position relative to mouse.
-                    ab.xybox = (xybox[0] * ws, xybox[1] * hs)
-                    ab.set_visible(True)
-                    # place it at the position of the hovered scatter point
-                    ab.xy = (x[ind], y[ind])
-                    # set the image corresponding to that point
-                    imagebox.set_data(images[ind])
-                    if highlight:
-                        c = label_sub[ind]
-                        data = low_dim_emb[label_sub == c, :]
-                        plot[0].set_visible(True)
-                        sample_plots[0].set_data(data.transpose())
-
-                        dot[0].set_visible(True)
-                        sample_dot[0].set_data((x[ind], y[ind]))
-
-                    ac.xybox = (xybox_ac[0] * -ws, xybox_ac[1] * -hs)
-                    ac.xy = (x[ind], y[ind])
-                    text = "Training data indices={} \n Label={}".format(indices[ind], label_sub[ind])
-                    ac.set_visible(True)
-                    ac.set_text(text)
-                else:
-                    # if the mouse is not over a scatter point
-                    ab.set_visible(False)
-                    ac.set_visible(False)
-                    plot[0].set_visible(False)
-                    sample_dot[0].set_visible(False)
-                fig.canvas.draw_idle()
+                # if line4tr.contains(event)[0]:
+                #     # find out the index within the array from the event
+                #     ind = line4tr.contains(event)[1]["ind"][0]
+                #     # get the figure size
+                #     w, h = fig.get_size_inches() * fig.dpi
+                #     ws = (event.x > w / 2.) * -1 + (event.x <= w / 2.)
+                #     hs = (event.y > h / 2.) * -1 + (event.y <= h / 2.)
+                #     # if event occurs in the top or right quadrant of the figure,
+                #     # change the annotation box position relative to mouse.
+                #     ab.xybox = (xybox[0] * ws, xybox[1] * hs)
+                #     ab.set_visible(True)
+                #     # place it at the position of the hovered scatter point
+                #     ab.xy = (x[ind], y[ind])
+                #     # set the image corresponding to that point
+                #     imagebox.set_data(images[ind])
+                #     if highlight:
+                #         c = label_sub[ind]
+                #         data = low_dim_emb[label_sub == c, :]
+                #         plot[0].set_visible(True)
+                #         sample_plots[0].set_data(data.transpose())
+                #
+                #     ac.xybox = (xybox_ac[0] * -ws, xybox_ac[1] * -hs)
+                #     ac.xy = (x[ind], y[ind])
+                #     text = "Training data indices={} \n Label={} \n Class name = {} \n".format(indices[ind],
+                #                                                                             label_sub[ind],
+                #                                                                             classnames[label_sub[ind]][0])
+                #     ac.set_visible(True)
+                #     ac.set_text(text)
+                # else:
+                #     # if the mouse is not over a scatter point
+                #     ab.set_visible(False)
+                #     ac.set_visible(False)
+                #     plot[0].set_visible(False)
+                # fig.canvas.draw_idle()
 
                 # Testing
                 if line4ev.contains(event)[0]:
@@ -377,13 +380,13 @@ if __name__ == '__main__':
                         plot2[0].set_visible(True)
                         sample_plots2[0].set_data(data.transpose())
 
-                        dot[0].set_visible(True)
-                        sample_dot[0].set_data((x[ind], y[ind]))
-
                     ac.xybox = (xybox_ac[0] * -ws, xybox_ac[1] * -hs)
                     ac.xy = (x_test[ind], y_test[ind])
-                    text = "Testing data indices={} \n Label={}".format(topk_wrong_class_ind[ind],
-                                                                        topk_label_sub_test[ind])
+                    # text = "Testing data indices={} \n Label={} \n Class name = {} \n".format(topk_wrong_class_ind[ind],
+                    #                                                                           topk_label_sub_test[ind],
+                    #                                                                           classnames[topk_label_sub_test[ind]][0])
+                    text = "Testing data indices={} \n Label={} \n".format(topk_wrong_class_ind[ind],
+                                                                           topk_label_sub_test[ind])
                     ac.set_visible(True)
                     ac.set_text(text)
 
@@ -392,7 +395,6 @@ if __name__ == '__main__':
                     ab2.set_visible(False)
                     ac.set_visible(False)
                     plot2[0].set_visible(False)
-                    sample_dot[0].set_visible(False)
                 fig.canvas.draw_idle()
 
 

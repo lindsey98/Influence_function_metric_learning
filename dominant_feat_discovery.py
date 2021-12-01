@@ -17,18 +17,20 @@ from torchcam.utils import overlay_mask
 from torchvision.io.image import read_image
 from evaluation.saliency_map import SmoothGrad, as_gray_image
 from PIL import Image
+import scipy
 
 os.environ['CUDA_VISIBLE_DEVICES'] = "0"
 
 if __name__ == '__main__':
 
-    dataset_name = 'cars'
-    loss_type = 'ProxyNCA_pfix'
+    dataset_name = 'sop'
+    loss_type = 'ProxyNCA_pfix_EM'
     config_name = 'cars'
     sz_embedding = 512
-    seed = 4
+    seed = 1
 
-    folder = 'models/dvi_data_{}_{}_loss{}/'.format(dataset_name, seed, loss_type)
+
+    folder = 'dvi_data_{}_{}_loss{}/'.format(dataset_name, seed, loss_type)
     model_dir = '{}/ResNet_{}_Model'.format(folder, sz_embedding)
     plot_dir = '{}/resnet_{}_umap_plots'.format(folder, sz_embedding)
 
@@ -65,7 +67,9 @@ if __name__ == '__main__':
     selected_test_class = top15_wrong_classes[0]
     print('Investigating testing class: ', selected_test_class)
     selected_test_embed = testing_embedding[testing_label == selected_test_class] # (N_ev, sz_embed)
-    # get closest train classes tothe selected test class
+    print(selected_test_embed.shape)
+
+    # get closest train classes to the selected test class
     test2trainD = torch.zeros(dl_tr.dataset.nb_classes())
     for cls in range(dl_tr.dataset.nb_classes()):
         indices = train_label == cls
@@ -101,22 +105,21 @@ if __name__ == '__main__':
     # plt.imshow(dl_tr.dataset.__getitem__(indices[0])[0].permute(1, 2, 0)[:, :, [2,1,0]])
     # plt.show()
 
-
     '''Use PCA to get 1st PC, project training samples onto the 1st PC and identify which samples are singificantly contributing'''
-    pca = PCA(n_components=1)
-    projected_test_emb = pca.fit_transform(selected_test_embed.detach().cpu().numpy()) # (N_test, 1)
-    projected_train_emb = pca.transform(train_embedding.detach().cpu().numpy()) # (N_train, 1)
-    sig_contributing_train_indices = np.argsort(projected_train_emb[:, 0])[::-1]
-
-    w = 10; h = 10; columns = 3; rows = 3
-    fig = plt.figure(figsize=(8, 8))
-    for i in range(1, columns * rows + 1):
-        img = np.random.randint(10, size=(h, w))
-        fig.add_subplot(rows, columns, i)
-        img = read_image(dl_tr.dataset.im_paths[sig_contributing_train_indices[i]])
-        plt.imshow(to_pil_image(img))
-        plt.title(dl_tr.dataset.__getitem__(sig_contributing_train_indices[i])[1])
-    plt.show()
+    # pca = PCA(n_components=1)
+    # projected_test_emb = pca.fit_transform(selected_test_embed.detach().cpu().numpy()) # (N_test, 1)
+    # projected_train_emb = pca.transform(train_embedding.detach().cpu().numpy()) # (N_train, 1)
+    # sig_contributing_train_indices = np.argsort(projected_train_emb[:, 0])[::-1]
+    #
+    # w = 10; h = 10; columns = 3; rows = 3
+    # fig = plt.figure(figsize=(8, 8))
+    # for i in range(1, columns * rows + 1):
+    #     img = np.random.randint(10, size=(h, w))
+    #     fig.add_subplot(rows, columns, i)
+    #     img = read_image(dl_tr.dataset.im_paths[sig_contributing_train_indices[i]])
+    #     plt.imshow(to_pil_image(img))
+    #     plt.title(dl_tr.dataset.__getitem__(sig_contributing_train_indices[i])[1])
+    # plt.show()
 
     '''Use CAM methods to retrieve the contributing pixels'''
     model_full = Full_Model(emb_size=sz_embedding, num_classes=dl_tr.dataset.nb_classes())
@@ -140,8 +143,6 @@ if __name__ == '__main__':
             out = model_full(x)
             # Retrieve the CAM by passing the class index and the model output
             activation_map = cam_extractor(y.item(), out)
-            # Visualize the raw CAM
-            # plt.imshow(activation_map[0].detach().cpu().numpy()); plt.axis('off'); plt.tight_layout(); plt.show()
             # Resize the CAM and overlay it
             img = read_image(dl_tr.dataset.im_paths[indices[0]])
             result = overlay_mask(to_pil_image(img), to_pil_image(activation_map[0].detach().cpu(), mode='F'), alpha=0.5)
@@ -151,10 +152,9 @@ if __name__ == '__main__':
                                      os.path.basename(dl_tr.dataset.im_paths[indices[0]])))
 
     for ct, (x, y, indices) in tqdm(enumerate(dl_ev)):
-        if y.item() in [selected_test_class]:
+        if y.item() in [selected_test_class] and indices.item() in wrong_ind:
             os.makedirs('CAM', exist_ok=True)
             os.makedirs('CAM/{}_{}/testcls{}_traincls{}_testCAM'.format(dataset_name, loss_type, y.item(), topk_closest_traincls[0]), exist_ok=True)
-
             x, y = x.cuda(), y.cuda()
             out = model_full(x)
             # Retrieve the CAM by passing the class index and the model output
