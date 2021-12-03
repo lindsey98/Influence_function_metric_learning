@@ -183,8 +183,8 @@ def get_wrong_indices(X, T):
     wrong_labels = T[wrong_ind]
 
     unique_labels, wrong_freq = torch.unique(wrong_labels, return_counts=True)
-    # top15_wrong_classes = unique_labels[torch.argsort(wrong_freq, descending=True)[:100]].numpy()
-    top15_wrong_classes = unique_labels[torch.argsort(wrong_freq, descending=True)].numpy() # FIXME: return all test
+    top15_wrong_classes = unique_labels[torch.argsort(wrong_freq, descending=True)[:15]].numpy()
+    # top15_wrong_classes = unique_labels[torch.argsort(wrong_freq, descending=True)].numpy() # FIXME: return all test
 
     return wrong_ind, top15_wrong_classes
 
