@@ -1,10 +1,8 @@
 #! /usr/bin/env python3
-
 import torch
 from torch.autograd import grad
 from tqdm import tqdm
 from torch.autograd import Variable
-
 
 def jacobian(z, t, model, criterion):
     """Calculates the gradient z. One grad_z should be computed for each
@@ -27,7 +25,6 @@ def jacobian(z, t, model, criterion):
     params = [p for p in model.module[-1].parameters() if p.requires_grad ] # last linear layer
     return list(grad(loss, params, create_graph=True))
 
-
 def grad_alltrain(model, criterion, dl_tr):
     grad_all = []
     for ct, (x, t, _) in tqdm(enumerate(dl_tr)):
@@ -35,42 +32,6 @@ def grad_alltrain(model, criterion, dl_tr):
         grad_this = [g.detach().cpu() for g in grad_this]
         grad_all.append(grad_this) # (N_tr, |\theta|)
     return grad_all
-
-
-def inverse_hessian_product(model, criterion, v, dl_tr, scale=10, damping=0.0):
-    """
-    s_test can be precomputed for each test point of interest, and then
-    multiplied with grad_z to get the desired value for each training point.
-    Here, stochastic estimation is used to calculate s_test. s_test is the
-    Inverse Hessian Vector Product.
-    Arguments:
-        model: torch NN, model used to evaluate the dataset
-        criterion: loss function
-        v: test gradients
-        dl_tr: torch Dataloader, can load the training dataset
-        gpu: int, GPU id to use if >=0 and -1 means use CPU
-        damp: float, dampening factor
-        scale: float, scaling factor
-    Returns:
-        h_estimate: list of torch tensors, s_test"""
-    # h_estimate
-    cur_estimate = v.copy()
-    ct = 0
-    for _, (x, t, _) in tqdm(enumerate(dl_tr)): # I change to loop over all training samples
-        x, t = x.cuda(), t.cuda()
-        model.zero_grad()
-        criterion.zero_grad(); criterion.proxies.requires_grad = False
-        m = model(x)
-        loss = criterion(m, None, t)
-        params = [p for p in model.module[-1].parameters() if p.requires_grad]
-        hv = hessian_vector_product(loss, params, cur_estimate)
-        # Inverse Hessian product Update: v + (I - Hessian_at_x) * cur_estimate
-        cur_estimate = [_v + (1 - damping) * _h_e - _hv / scale for _v, _h_e, _hv in zip(v, cur_estimate, hv)]
-        ct += 1
-
-    inverse_hvp = [b / scale for b in cur_estimate] # rescale it
-    inverse_hvp = [a / ct for a in inverse_hvp] # take average
-    return inverse_hvp
 
 def calc_confusion(feat_cls1, feat_cls2, sqrt=False):
     n1, n2 = feat_cls1.size()[0], feat_cls2.size()[0]
@@ -113,6 +74,42 @@ def grad_confusion(model, dl_ev, cls1, cls2):
     params = [p for p in model.module[-1].parameters() if p.requires_grad]
     return list(grad(confusion, params))
 
+
+def inverse_hessian_product(model, criterion, v, dl_tr,
+                            scale=500, damping=0.01):
+    """
+    s_test can be precomputed for each test point of interest, and then
+    multiplied with grad_z to get the desired value for each training point.
+    Here, stochastic estimation is used to calculate s_test. s_test is the
+    Inverse Hessian Vector Product.
+    Arguments:
+        model: torch NN, model used to evaluate the dataset
+        criterion: loss function
+        v: test gradients
+        dl_tr: torch Dataloader, can load the training dataset
+        gpu: int, GPU id to use if >=0 and -1 means use CPU
+        damp: float, dampening factor
+        scale: float, scaling factor
+    Returns:
+        h_estimate: list of torch tensors, s_test"""
+    # h_estimate
+    cur_estimate = v.copy()
+    ct = 0
+    for _, (x, t, _) in tqdm(enumerate(dl_tr)): # I change it to be looping over all training samples
+        x, t = x.cuda(), t.cuda()
+        model.zero_grad()
+        criterion.zero_grad(); criterion.proxies.requires_grad = False
+        m = model(x)
+        loss = criterion(m, None, t)
+        params = [p for p in model.module[-1].parameters() if p.requires_grad]
+        hv = hessian_vector_product(loss, params, cur_estimate)
+        # Inverse Hessian product Update: v + (I - Hessian_at_x) * cur_estimate
+        cur_estimate = [_v + (1 - damping) * _h_e - _hv / scale for _v, _h_e, _hv in zip(v, cur_estimate, hv)]
+        ct += 1
+
+    inverse_hvp = [b.detach().cpu()/scale for b in cur_estimate] # rescale it
+    return inverse_hvp
+
 def hessian_vector_product(y, x, v):
     """Multiply the Hessians of y and x by v.
     Uses a backprop-like approach to compute the product between the Hessian
@@ -139,14 +136,12 @@ def hessian_vector_product(y, x, v):
         elemwise_products += torch.sum(grad_elem * v_elem.detach()) # v is considered as constant
     # Second backprop
     return_grads = grad(elemwise_products, x)
-
     return return_grads
 
 
 def calc_influential_func(inverse_hvp, grad_alltrain):
     influence_values = []
-    n_train = len(grad_alltrain)
     for grad1train in grad_alltrain:
-        influence_thistrain = [torch.dot(x.T, y) * (1/n_train) for x, y in zip(inverse_hvp, grad1train)]
+        influence_thistrain = [-(x.detach().cpu()*y).sum().item() for x, y in zip(inverse_hvp, grad1train)]
         influence_values.append(influence_thistrain)
     return influence_values

@@ -105,6 +105,23 @@ def get_confusion_test(top15_wrong_classes, dl_ev, testing_embedding, testing_la
 
     return confusion_matrix
 
+def viz_influential(top_bottomk, dl_tr, influence_values, training_ind_by_influence):
+    for i in range(top_bottomk):
+        plt.subplot(2, top_bottomk, i+1)
+        img = read_image(dl_tr.dataset.im_paths[training_ind_by_influence[i]])
+        plt.imshow(to_pil_image(img))
+        plt.title('Influence function = {:.4f}, Class = {}'.format(influence_values[training_ind_by_influence[i]],
+                                                                   os.path.basename(os.path.dirname(dl_tr.dataset.im_paths[training_ind_by_influence[i]]))))
+
+    for i in range(top_bottomk):
+        plt.subplot(2, top_bottomk, i+1+top_bottomk)
+        img = read_image(dl_tr.dataset.im_paths[training_ind_by_influence[-(i+1)]])
+        plt.imshow(to_pil_image(img))
+        plt.title('Influence function = {:.4f}, Class = {}'.format(influence_values[training_ind_by_influence[-(i+1)]],
+                                                           os.path.basename(os.path.dirname(dl_tr.dataset.im_paths[training_ind_by_influence[-(i+1)]]))))
+
+    plt.show()
+
 
 if __name__ == '__main__':
 
@@ -170,13 +187,24 @@ if __name__ == '__main__':
     #     v = grad_confusion(model, dl_ev, pair[0], pair[1])
     #     torch.save(v, "{}_{}_confusion_grad_test_{}_{}.pth".format(dataset_name, loss_type, pair[0], pair[1]))
 
-    '''Compute influence functions'''
+    '''Cache inverse Hessian Vector Product'''
     with open("{}_{}_grad4train.pkl".format(dataset_name, loss_type), "rb") as fp:  # Pickling
         grad4train = pickle.load(fp)
-    for pair in confusion_class_pairs:
-        v = torch.load("{}_{}_confusion_grad_test_{}_{}.pth".format(dataset_name, loss_type, pair[0], pair[1]))
-        inverse_hvp = inverse_hessian_product(model, criterion, v, dl_tr)
-        calc_influential_func(inverse_hvp, grad4train)
+
+    for it, pair in enumerate(confusion_class_pairs):
+        if it == 0:
+            v = torch.load("{}_{}_confusion_grad_test_{}_{}.pth".format(dataset_name, loss_type, pair[0], pair[1]))
+            inverse_hvp = inverse_hessian_product(model, criterion, v, dl_tr) # i.e. r=1 only estimate it once, original paper estimates it for 10 times and take the average
+            torch.save(inverse_hvp, "{}_{}_inverse_hvp_{}_{}.pth".format(dataset_name, loss_type, pair[0], pair[1]))
+
+    for it, pair in enumerate(confusion_class_pairs):
+        if it == 0:
+            inverse_hvp = torch.load("{}_{}_inverse_hvp_{}_{}.pth".format(dataset_name, loss_type, pair[0], pair[1]))
+            influence_values = calc_influential_func(inverse_hvp, grad4train)
+            influence_values = np.stack(influence_values)[:, 0]
+            training_ind_by_influence = influence_values.argsort()[::-1]
+            viz_influential(5, dl_tr, influence_values, training_ind_by_influence) # positive is helpful, negative is harmful
+
 
     '''get train classes that are closest to these 15 test classes'''
     # 1st wrong class
