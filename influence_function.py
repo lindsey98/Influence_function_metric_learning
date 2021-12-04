@@ -26,7 +26,7 @@ def jacobian(z, t, model, criterion):
     params = [p for p in model.module[-1].parameters() if p.requires_grad ] # last linear layer weights
     return list(grad(loss, params, create_graph=True))
 
-def grad_alltrain(model, criterion, dl_tr):
+def grad_alltrain(model, criterion, dl_tr, start=None, batch=None):
     '''
         Get gradient for all training set
         Arguments:
@@ -38,11 +38,14 @@ def grad_alltrain(model, criterion, dl_tr):
     '''
     grad_all = []
     for ct, (x, t, _) in tqdm(enumerate(dl_tr)):
+        if start is not None:
+            if ct < start: continue
         grad_this = jacobian(x, t, model, criterion)
         grad_this = [g.detach().cpu() for g in grad_this]
         grad_all.append(grad_this)
+        if batch is not None:
+            if ct - start >= batch - 1: break # support processing a subset of training only
     return grad_all
-
 
 def calc_intravar(feat):
     '''
@@ -213,7 +216,7 @@ def calc_influential_func(inverse_hvp, grad_alltrain):
     influence_values = []
     for grad1train in grad_alltrain:
         # influence = (-1) * grad(test)' H^-1 grad(train), dont forget the negative sign
-        influence_thistrain = [-torch.dot(x.flatten().detach().cpu(), y.flatten()).item() \
+        influence_thistrain = [(-1)*torch.dot(x.flatten().detach().cpu(), y.flatten()).item() \
                                for x, y in zip(inverse_hvp, grad1train)]
         influence_values.append(influence_thistrain)
     return influence_values

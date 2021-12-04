@@ -25,7 +25,7 @@ from influence_function import inverse_hessian_product, grad_confusion, grad_all
 import pickle
 from scipy.stats import t
 from utils import predict_batchwise
-os.environ['CUDA_VISIBLE_DEVICES'] = "0"
+os.environ['CUDA_VISIBLE_DEVICES'] = "1"
 
 def pca_viz():
     '''Use PCA to get 1st PC, project training samples onto the 1st PC and identify which samples are singificantly contributing'''
@@ -192,21 +192,37 @@ if __name__ == '__main__':
     testing_label = torch.load('{}/Epoch_{}/testing_labels.pth'.format(model_dir, 40))
 
     '''Get top 15 most wrong classes (TEST)'''
-    wrong_ind, top15_wrong_classes = get_wrong_indices(testing_embedding, testing_label)
+    # wrong_ind, top15_wrong_classes = get_wrong_indices(testing_embedding, testing_label)
 
     '''Find confusion test classes'''
-    confusion_matrix = get_confusion_test(top15_wrong_classes, dl_ev, testing_embedding, testing_label)
-    np.save("Influential_data/{}_{}_top15_wrongtest_confusion.npy".format(dataset_name, loss_type), confusion_matrix)
-    confusion_matrix = np.load("Influential_data/{}_{}_top15_wrongtest_confusion.npy".format(dataset_name, loss_type))
-    confusion_classes_ind = np.argsort(confusion_matrix, axis=-1)[:, 0] # get classes that are confused with top15 wrong testing classes
-    confusion_class_pairs = [(x, y) for x, y in zip(top15_wrong_classes,
-                                                    np.asarray(dl_ev.dataset.classes)[confusion_classes_ind])]
-    print(confusion_class_pairs)
+    # confusion_matrix = get_confusion_test(top15_wrong_classes, dl_ev, testing_embedding, testing_label)
+    # np.save("Influential_data/{}_{}_top15_wrongtest_confusion.npy".format(dataset_name, loss_type), confusion_matrix)
+    # confusion_matrix = np.load("Influential_data/{}_{}_top15_wrongtest_confusion.npy".format(dataset_name, loss_type))
+    # confusion_classes_ind = np.argsort(confusion_matrix, axis=-1)[:, 0] # get classes that are confused with top15 wrong testing classes
+    # confusion_class_pairs = [(x, y) for x, y in zip(top15_wrong_classes,
+    #                                                 np.asarray(dl_ev.dataset.classes)[confusion_classes_ind])]
+    # print(confusion_class_pairs)
 
     '''Cache loss gradient to parameters for all training'''
-    grad4train = grad_alltrain(model, criterion, dl_tr)
-    with open("Influential_data/{}_{}_grad4train.pkl".format(dataset_name, loss_type), "wb") as fp:  # Pickling
-        pickle.dump(grad4train, fp)
+    # grad4train_1stbatch = grad_alltrain(model, criterion, dl_tr, start=0, batch=20000)
+    # with open("Influential_data/{}_{}_grad4train_batch1.pkl".format(dataset_name, loss_type), "wb") as fp:  # Pickling
+    #     pickle.dump(grad4train_1stbatch, fp)
+    grad4train_2ndbatch = grad_alltrain(model, criterion, dl_tr, start=20000, batch=20000)
+    with open("Influential_data/{}_{}_grad4train_batch2.pkl".format(dataset_name, loss_type), "wb") as fp:  # Pickling
+        pickle.dump(grad4train_2ndbatch, fp)
+    # grad4train_3rdbatch = grad_alltrain(model, criterion, dl_tr, start=40000, batch=30000)
+    # with open("Influential_data/{}_{}_grad4train_batch3.pkl".format(dataset_name, loss_type), "wb") as fp:  # Pickling
+    #     pickle.dump(grad4train_3rdbatch, fp)
+    #
+    # with open("Influential_data/{}_{}_grad4train_batch1.pkl".format(dataset_name, loss_type), "rb") as fp:
+    #     grad4train_1stbatch = pickle.load(fp)
+    # with open("Influential_data/{}_{}_grad4train_batch2.pkl".format(dataset_name, loss_type), "rb") as fp:
+    #     grad4train_2ndbatch = pickle.load(fp)
+    # with open("Influential_data/{}_{}_grad4train_batch3.pkl".format(dataset_name, loss_type), "rb") as fp:
+    #     grad4train_3rdbatch = pickle.load(fp)
+    # grad4train = grad4train_1stbatch + grad4train_2ndbatch + grad4train_3rdbatch
+    # with open("Influential_data/{}_{}_grad4train.pkl".format(dataset_name, loss_type), "wb") as fp:  # Pickling
+    #     pickle.dump(grad4train, fp)
     exit()
 
     '''Cache all confusion gradient to parameters'''
