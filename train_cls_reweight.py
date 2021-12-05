@@ -2,9 +2,7 @@
 import logging
 import dataset
 import utils
-
 import os
-
 import torch
 import numpy as np
 import matplotlib
@@ -15,7 +13,7 @@ import json
 from tqdm import tqdm
 from torch.utils.data import Dataset, DataLoader
 
-os.environ["CUDA_VISIBLE_DEVICES"]="1,0"
+os.environ["CUDA_VISIBLE_DEVICES"]="1, 0"
 
 parser = argparse.ArgumentParser(description='Training ProxyNCA++')
 parser.add_argument('--epochs', default = 40, type=int, dest = 'nb_epochs')
@@ -29,20 +27,22 @@ parser.add_argument('--init_eval', default=False, action='store_true')
 parser.add_argument('--apex', default=False, action='store_true')
 parser.add_argument('--warmup_k', default=5, type=int)
 
-parser.add_argument('--dataset', default='cars')
-parser.add_argument('--seed', default=5, type=int)
+parser.add_argument('--dataset', default='cub')
+parser.add_argument('--seed', default=0, type=int)
 parser.add_argument('--embedding-size', default = 512, type=int, dest = 'sz_embedding')
-parser.add_argument('--config', default='config/cars.json')
+parser.add_argument('--config', default='config/cub_reweight.json')
 parser.add_argument('--mode', default='trainval', choices=['train', 'trainval', 'test',
                                                            'testontrain', 'testontrain_super'],
                     help='train with train data or train with trainval')
 parser.add_argument('--batch-size', default = 32, type=int, dest = 'sz_batch')
 parser.add_argument('--no_warmup', default=False, action='store_true')
-parser.add_argument('--loss-type', default='ProxyNCA_prob_orig_rhosample', type=str)
+parser.add_argument('--loss-type', default='ProxyNCA_prob_orig_confusion_172_178', type=str)
+parser.add_argument('--helpful', default=[36, 30], nargs='+', type=int)
+parser.add_argument('--harmful', default=[71], nargs='+', type=int)
+
 parser.add_argument('--workers', default = 2, type=int, dest = 'nb_workers')
 
 args = parser.parse_args()
-
 def save_best_checkpoint(model):
     torch.save(model.state_dict(), 'results/' + args.log_filename + '.pt')
 
@@ -53,6 +53,18 @@ def load_best_checkpoint(model):
         model.load_state_dict(torch.load('results/' + args.log_filename + '.pth'))
     model = model.cuda()
     return model
+
+def find_cls_weights(helpful, harmful, y):
+    weights = torch.ones_like(y)
+    weights.requires_grad = False
+    for i, cls in enumerate(y):
+        if cls.item() in helpful:
+            weights[i] = 2.
+        elif cls.item() in harmful:
+            weights[i] = 0.
+        else:
+            weights[i] = 1.
+    return weights
 
 if __name__ == '__main__':
 
@@ -213,17 +225,14 @@ if __name__ == '__main__':
 
     num_class_per_batch = config['num_class_per_batch']
     num_gradcum = config['num_gradcum']
+    is_random_sampler = config['is_random_sampler']
+    if is_random_sampler:
+        batch_sampler = dataset.utils.RandomBatchSampler(tr_dataset.ys, args.sz_batch, True, num_class_per_batch, num_gradcum)
+    else:
 
-    # excluded_indices = np.load(os.path.join('hard_samples_ind',
-    #                                         '{}_ProxyNCA_pfix_hard_fit.npy'.format(args.dataset)))
-    #
-    # batch_sampler = dataset.utils.BalancedBatchExcludeSampler(labels=torch.Tensor(tr_dataset.ys),
-    #                                                           n_classes=num_class_per_batch,
-    #                                                           n_samples=int(args.sz_batch / num_class_per_batch),
-    #                                                           exclude_ind=excluded_indices )
+        batch_sampler = dataset.utils.BalancedBatchSampler(torch.Tensor(tr_dataset.ys), num_class_per_batch,
+                                                           int(args.sz_batch / num_class_per_batch))
 
-    batch_sampler = dataset.utils.ClsCohSampler(torch.Tensor(tr_dataset.ys), num_class_per_batch,
-                                                int(args.sz_batch / num_class_per_batch))
     dl_tr = torch.utils.data.DataLoader(
         tr_dataset,
         batch_sampler = batch_sampler,
@@ -272,14 +281,10 @@ if __name__ == '__main__':
     feat.train()
     emb = torch.nn.Linear(in_sz, args.sz_embedding)
     model = torch.nn.Sequential(feat, emb)
-
     model = torch.nn.DataParallel(model)
     model = model.cuda()
 
-    dl_tr.batch_sampler.create_storage(dl_tr_noshuffle, model)
-
     '''Loss'''
-    # TODO
     criterion = config['criterion']['type'](
         nb_classes = dl_tr.dataset.nb_classes(),
         sz_embed = args.sz_embedding,
@@ -353,15 +358,6 @@ if __name__ == '__main__':
             utils.evaluate(model, dl_tr_noshuffle, args.eval_nmi, args.recall)
         exit() # exit the program
 
-    if args.mode == 'testontrain_super':
-        with torch.no_grad():
-            logging.info("**Evaluating with gt super 100 classes...(test mode, test on training set)**")
-            model = load_best_checkpoint(model)
-            with open("mnt/datasets/logo2ksuperclass0.01.json", 'rt') as handle:
-                labeldict = json.load(handle)
-            utils.evaluate_super(model, dl_tr_noshuffle, labeldict, args.eval_nmi, args.recall)
-        exit() # exit the program
-
     if args.mode == 'train':
         scheduler = config['lr_scheduler']['type'](
             opt, **config['lr_scheduler']['args']
@@ -371,7 +367,6 @@ if __name__ == '__main__':
             opt,
             milestones=args.lr_steps,
             gamma=0.1
-            #opt, **config['lr_scheduler2']['args']
         )
 
     logging.info("Training parameters: {}".format(vars(args)))
@@ -412,7 +407,6 @@ if __name__ == '__main__':
 
     logging.info('Number of training: {}'.format(len(dl_tr.dataset)))
     logging.info('Number of original training: {}'.format(len(dl_tr_noshuffle.dataset)))
-    # logging.info('Number of testing: {}'.format(len(dl_ev.dataset)))
 
     '''Warmup training'''
     if not args.no_warmup:
@@ -422,23 +416,15 @@ if __name__ == '__main__':
             for ct, (x, y, _) in tqdm(enumerate(dl_tr)):
                 opt_warmup.zero_grad()
                 m = model(x.cuda())
-                loss = criterion(m, None, y.cuda())
+                weights = find_cls_weights(args.helpful, args.harmful, y).cuda(); weights = weights.detach()
+                loss = criterion(m, None, y.cuda(), weights)
                 loss.backward()
                 torch.nn.utils.clip_grad_value_(model.parameters(), 10)
                 opt_warmup.step()
             logging.info('warm up ends in %d epochs' % (args.warmup_k-e))
 
-
     '''training loop'''
     for e in range(0, args.nb_epochs):
-
-        # # loss recorder similarity recorder
-        # if e == 0:
-        #     process_recorder = {}
-        #     with open("{0}/{1}_recorder.json".format('log', args.log_filename), 'wt') as handle:
-        #         json.dump(process_recorder, handle)
-        # with open("{0}/{1}_recorder.json".format('log', args.log_filename), 'rt') as handle:
-        #     process_recorder = json.load(handle)
 
         if args.mode == 'train':
             curr_lr = opt.param_groups[0]['lr']
@@ -455,7 +441,8 @@ if __name__ == '__main__':
             it += 1
             x, y = x.cuda(), y.cuda()
             m = model(x)
-            loss = criterion(m, indices, y)
+            weights = find_cls_weights(args.helpful, args.harmful, y).cuda(); weights = weights.detach()
+            loss = criterion(m, indices, y, weights)
             opt.zero_grad()
             loss.backward() # backprop
             torch.nn.utils.clip_grad_value_(model.parameters(), 10) # clip gradient?
@@ -478,17 +465,6 @@ if __name__ == '__main__':
 
         model.losses = losses
         model.current_epoch = e
-        dl_tr.batch_sampler.create_storage(dl_tr_noshuffle, model)
-
-        # save proxy-similarity and class labels
-        # train_embs, train_cls, _, base_loss = utils.predict_batchwise_loss(model, dl_tr_noshuffle, criterion)
-        # cached_sim = utils.inner_product_sim(X=train_embs, P=criterion.proxies, T=train_cls)
-        # process_recorder[e] = {'epoch': e,
-        #                        'losses': base_loss.detach().cpu().numpy().tolist(),
-        #                        'classes': train_cls.long().detach().cpu().numpy().tolist(),
-        #                        'similarity': cached_sim.detach().cpu().numpy().tolist()}
-        # with open("{0}/{1}_recorder.json".format('log', args.log_filename), 'wt') as handle:
-        #     json.dump(process_recorder, handle)
 
         if e == best_epoch:
             break
@@ -540,7 +516,8 @@ if __name__ == '__main__':
             logging.info('Best val MAP@R: %s', str(best_val_mapr))
 
         if e % 10 == 0 or e == args.nb_epochs-1:
-            save_dir = 'dvi_data_{}_loss{}/ResNet_{}_Model'.format(args.dataset, args.loss_type, str(args.sz_embedding))
+            save_dir = 'dvi_data_{}_{}_loss{}/ResNet_{}_Model'.format(args.dataset, args.seed,
+                                                                      args.loss_type, str(args.sz_embedding))
             os.makedirs('{}'.format(save_dir), exist_ok=True)
             os.makedirs('{}/Epoch_{}'.format(save_dir, e+1), exist_ok=True)
             with open('{}/Epoch_{}/index.json'.format(save_dir, e + 1), 'wt') as handle:

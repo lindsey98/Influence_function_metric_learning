@@ -1,4 +1,5 @@
 #! /usr/bin/env python3
+# Code is modified from https://github.com/kohpangwei/influence-release and https://github.com/nimarb/pytorch_influence_functions
 import torch
 from torch.autograd import grad
 from tqdm import tqdm
@@ -23,7 +24,7 @@ def jacobian(z, t, model, criterion):
     m = model(z) # get (sz_embed,) feature embedding
     loss = criterion(m, None, t)
     # Compute sum of gradients from model parameters to loss
-    params = [p for p in model.module[-1].parameters() if p.requires_grad ] # last linear layer weights
+    params = model.module[-1].weight # last linear layer weights
     return list(grad(loss, params, create_graph=True))
 
 def grad_alltrain(model, criterion, dl_tr, start=None, batch=None):
@@ -108,7 +109,7 @@ def grad_confusion(model, dl_ev, cls1, cls2):
             pass
 
     confusion = calc_confusion(feat_cls1, feat_cls2, sqrt=False) # d(t^2)/d(theta)
-    params = [p for p in model.module[-1].parameters() if p.requires_grad] # last linear layer
+    params = model.module[-1].weight # last linear layer
     grad_confusion2params = list(grad(confusion, params))
     return grad_confusion2params
 
@@ -128,8 +129,6 @@ def grad_intravar(model, dl_ev, cls):
     model.eval(); model.zero_grad()
     for ct, (x, t, _) in tqdm(enumerate(dl_ev)): # need to recalculate the feature embeddings since we need the gradient
         if t.item() == cls: # belong to class
-            if len(feat_cls) >= 50: # FIXME: feeding in all instances will be out of memory
-                break
             x = x.cuda()
             m = model(x)
             feat_cls = torch.cat((feat_cls, m), dim=0)
@@ -137,7 +136,7 @@ def grad_intravar(model, dl_ev, cls):
             pass
 
     intra_var = calc_intravar(feat_cls) # d(var)/d(theta)
-    params = [p for p in model.module[-1].parameters() if p.requires_grad] # last linear layer
+    params = model.module[-1].weight # last linear layer
     grad_intravar2params = list(grad(intra_var, params))
     return grad_intravar2params
 
@@ -166,7 +165,7 @@ def inverse_hessian_product(model, criterion, v, dl_tr,
         criterion.zero_grad(); criterion.proxies.requires_grad = False
         m = model(x)
         loss = criterion(m, None, t)
-        params = [p for p in model.module[-1].parameters() if p.requires_grad]
+        params = [model.module[-1].weight]
         hv = hessian_vector_product(loss, params, cur_estimate) # get hvp
         # Inverse Hessian product Update: v + (I - Hessian_at_x) * cur_estimate
         cur_estimate = [_v + (1 - damping) * _h_e - _hv / scale for _v, _h_e, _hv in zip(v, cur_estimate, hv)]

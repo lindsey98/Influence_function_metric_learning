@@ -21,7 +21,7 @@ import evaluation
 from torchvision.io.image import read_image
 from torchvision.transforms.functional import normalize, resize, to_pil_image
 import scipy
-os.environ['CUDA_VISIBLE_DEVICES'] = "1,0"
+os.environ['CUDA_VISIBLE_DEVICES'] = "0"
 
 def prepare_data(data_name='cub',
                  config_name='',
@@ -174,7 +174,7 @@ def pumap_training(model, model_dir, e,
            (low_dim_emb, label, indices),\
            (low_dim_emb_test, testing_label, testing_indices)
 
-def get_wrong_indices(X, T):
+def get_wrong_indices(X, T, topk=None):
     k = 1
     Y = evaluation.assign_by_euclidian_at_k(X, T, k)
     Y = torch.from_numpy(Y)
@@ -183,26 +183,28 @@ def get_wrong_indices(X, T):
     wrong_labels = T[wrong_ind]
 
     unique_labels, wrong_freq = torch.unique(wrong_labels, return_counts=True)
-    top15_wrong_classes = unique_labels[torch.argsort(wrong_freq, descending=True)[:15]].numpy()
-    # top15_wrong_classes = unique_labels[torch.argsort(wrong_freq, descending=True)].numpy() # FIXME: return all test
+    if topk is None:
+        top15_wrong_classes = unique_labels[torch.argsort(wrong_freq, descending=True)].numpy() # FIXME: return all test
+    else:
+        top15_wrong_classes = unique_labels[torch.argsort(wrong_freq, descending=True)[:topk]].numpy()
 
     return wrong_ind, top15_wrong_classes
 
 
 if __name__ == '__main__':
 
-    dataset_name = 'inshop'
+    dataset_name = 'cub'
     loss_type = 'ProxyNCA_prob_orig'
-    config_name = 'inshop'
+    config_name = 'cub'
     sz_embedding = 512
     seed = 0
 
-    presaved = False
-    pretrained = False
+    presaved = True
+    pretrained = True
     interactive = True
     highlight = True
 
-    folder = 'dvi_data_{}_{}_loss{}/'.format(dataset_name, seed, loss_type)
+    folder = 'models/dvi_data_{}_{}_loss{}/'.format(dataset_name, seed, loss_type)
     model_dir = '{}/ResNet_{}_Model'.format(folder, sz_embedding)
     plot_dir = '{}/resnet_{}_umap_plots'.format(folder, sz_embedding)
 
@@ -249,8 +251,9 @@ if __name__ == '__main__':
         # Wrong testing
         testing_embedding = torch.load('{}/Epoch_{}/testing_embeddings.pth'.format(model_dir, e + 1)) # high dimensional embedding
         testing_label = torch.load('{}/Epoch_{}/testing_labels.pth'.format(model_dir, e + 1))
-        wrong_ind, topk_wrong_classes = get_wrong_indices(testing_embedding, testing_label)
-        print(topk_wrong_classes)
+        # wrong_ind, topk_wrong_classes = get_wrong_indices(testing_embedding, testing_label)
+        # print(topk_wrong_classes)
+        topk_wrong_classes = [136, 141, 102, 134, 135]
 
         # belong to top15 wrong classes
         topk_wrong_class_ind = np.where(np.isin(np.asarray(test_label), topk_wrong_classes))[0]
@@ -259,23 +262,23 @@ if __name__ == '__main__':
         images_test = [to_pil_image(read_image(dl_ev.dataset.im_paths[ind])) for ind in topk_wrong_class_ind]
 
         # belong to top15 wrong classes and actually are wrong
-        intersect_wrong_class_ind = np.asarray(list(set(wrong_ind).intersection(set(topk_wrong_class_ind))))
-        label_sub_test_wrong = test_label[intersect_wrong_class_ind].numpy()
-        low_dim_emb_test_wrong = low_dim_emb_test[intersect_wrong_class_ind, :]
+        # intersect_wrong_class_ind = np.asarray(list(set(wrong_ind).intersection(set(topk_wrong_class_ind))))
+        # label_sub_test_wrong = test_label[intersect_wrong_class_ind].numpy()
+        # low_dim_emb_test_wrong = low_dim_emb_test[intersect_wrong_class_ind, :]
 
         # # Visualize
         fig, ax = plt.subplots()
         # For embedding points
         x, y = low_dim_emb[:, 0], low_dim_emb[:, 1]
         x_test, y_test = topk_low_dim_emb_test[:, 0], topk_low_dim_emb_test[:, 1]
-        x_test_wrong, y_test_wrong = low_dim_emb_test_wrong[:, 0], low_dim_emb_test_wrong[:, 1]
+        # x_test_wrong, y_test_wrong = low_dim_emb_test_wrong[:, 0], low_dim_emb_test_wrong[:, 1]
         px, py = low_dim_proxy[:, 0], low_dim_proxy[:, 1]
-        ax.set_xlim(min(min(x), min(px), min(x_test), min(x_test_wrong)), max(max(x), max(px), max(x_test), max(x_test_wrong)))
-        ax.set_ylim(min(min(y), min(py), min(y_test), min(y_test_wrong)), max(max(y), max(py), max(y_test), max(y_test_wrong)))
+        # ax.set_xlim(min(min(x), min(px), min(x_test), min(x_test_wrong)), max(max(x), max(px), max(x_test), max(x_test_wrong)))
+        # ax.set_ylim(min(min(y), min(py), min(y_test), min(y_test_wrong)), max(max(y), max(py), max(y_test), max(y_test_wrong)))
 
         # line4tr = ax.scatter(x, y, c='gray',  s=5)
         line4ev = ax.scatter(x_test, y_test, c='pink', s=5)
-        line4ev_wrong = ax.scatter(x_test_wrong, y_test_wrong, c='orange', s=5)
+        # line4ev_wrong = ax.scatter(x_test_wrong, y_test_wrong, c='orange', s=5)
 
         if interactive:
             imagebox = OffsetImage(to_pil_image(read_image(dl_tr.dataset.im_paths[indices[0]])), zoom=.3)
