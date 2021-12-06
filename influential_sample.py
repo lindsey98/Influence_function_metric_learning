@@ -96,7 +96,7 @@ class Influential_Sample():
     def __init__(self, dataset_name, seed, loss_type,
                  measure, sz_embedding=512):
 
-        self.folder = 'models/dvi_data_{}_{}_loss{}/'.format(dataset_name, seed, loss_type)
+        self.folder = 'dvi_data_{}_{}_loss{}/'.format(dataset_name, seed, loss_type)
         self.model_dir = '{}/ResNet_{}_Model'.format(self.folder, sz_embedding)
         self.measure = measure
         assert self.measure in ['confusion', 'confusion_abb', 'intravar']
@@ -306,7 +306,7 @@ class Influential_Sample():
 if __name__ == '__main__':
 
     dataset_name = 'cub'
-    loss_type = 'ProxyNCA_pfix'
+    loss_type = 'ProxyNCA_pfix_confusion_117_129'
     config_name = 'cub'
     sz_embedding = 512
     seed = 4
@@ -339,25 +339,25 @@ if __name__ == '__main__':
     # IS.run()
 
     '''Step 4 (alternative): Get NN/Furtherest classes'''
-    # i = 111; j = 110
-    i = 135
-    feat_cls1 = IS.testing_embedding[IS.testing_label == i]
-    # feat_cls2 = IS.testing_embedding[IS.testing_label == j]
-    # feat_collect = torch.cat((feat_cls1, feat_cls2))
-    feat_collect = feat_cls1
-    IS.get_nearest_train_class(feat_collect)
-
-    '''Other: get t statistic for two specific classes'''
-    # i = 116; j = 118
+    # i = 117; j = 129
+    # i = 135
     # feat_cls1 = IS.testing_embedding[IS.testing_label == i]
     # feat_cls2 = IS.testing_embedding[IS.testing_label == j]
-    # confusion = calc_confusion(feat_cls1, feat_cls2, sqrt=True)  # get t instead of t^2
-    # print(confusion.item())
+    # feat_collect = torch.cat((feat_cls1, feat_cls2))
+    # feat_collect = feat_cls1
+    # IS.get_nearest_train_class(feat_collect)
+
+    '''Other: get t statistic for two specific classes'''
+    i = 117; j = 129
+    feat_cls1 = IS.testing_embedding[IS.testing_label == i]
+    feat_cls2 = IS.testing_embedding[IS.testing_label == j]
+    confusion = calc_confusion(feat_cls1, feat_cls2, sqrt=True)  # get t instead of t^2
+    print(confusion.item())
 
     '''Other: get intra-class variance for a specific class'''
     # i = 135
     # feat_cls = IS.testing_embedding[IS.testing_label == i]
-    # intra_var = calc_intravar(feat_cls)
+    # intra_var = calc_intravar( + 1feat_cls)
     # print(intra_var.item())
 
 

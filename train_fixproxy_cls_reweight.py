@@ -39,9 +39,9 @@ parser.add_argument('--mode', default='trainval', choices=['train', 'trainval', 
                     help='train with train data or train with trainval')
 parser.add_argument('--batch-size', default = 32, type=int, dest = 'sz_batch')
 parser.add_argument('--no_warmup', default=False, action='store_true')
-parser.add_argument('--loss-type', default='ProxyNCA_pfix_confusion_random', type=str)
-parser.add_argument('--helpful', default=[0, 1], nargs='+', type=int)
-parser.add_argument('--harmful', default=[2], nargs='+', type=int)
+parser.add_argument('--loss-type', default='ProxyNCA_pfix_confusion_143_140_NN', type=str)
+parser.add_argument('--helpful', default=[83, 65], nargs='+', type=int)
+parser.add_argument('--harmful', default=[10], nargs='+', type=int)
 parser.add_argument('--workers', default = 4, type=int, dest = 'nb_workers')
 
 args = parser.parse_args()

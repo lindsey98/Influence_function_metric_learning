@@ -227,18 +227,28 @@ class ProxyNCA_pfix(torch.nn.Module):
         self._proxy_init(nb_classes, sz_embed)
         self.scale = scale
 
-    def _proxy_init(self, nb_classes, sz_embed): # TODO: random initialization or duplicate initialization
-        proxies = torch.randn((nb_classes, sz_embed), requires_grad=True)
-        _optimizer = torch.optim.Adam(params={proxies}, lr=0.1)
-        for _ in tqdm(range(100), desc="Initializing the proxies"):
-            mean, var = utils.inter_proxy_dist(proxies, cosine=True)
-            _loss = mean + var
-            _optimizer.zero_grad()
-            _loss.backward()
-            _optimizer.step()
+    def _proxy_init(self, nb_classes, sz_embed, initialize_method='optim'):
+        if initialize_method == 'optim':
+            proxies = torch.randn((nb_classes, sz_embed), requires_grad=True)
+            _optimizer = torch.optim.Adam(params={proxies}, lr=0.1)
+            for _ in tqdm(range(100), desc="Initializing the proxies"):
+                mean, var = utils.inter_proxy_dist(proxies, cosine=True)
+                _loss = mean + var
+                _optimizer.zero_grad()
+                _loss.backward()
+                _optimizer.step()
 
-        proxies = F.normalize(proxies, p=2, dim=-1)
-        self.proxies.data = proxies.detach()
+            proxies = F.normalize(proxies, p=2, dim=-1)
+            self.proxies.data = proxies.detach()
+        elif initialize_method == 'random':
+            pass # do nothing
+        elif initialize_method == 'duplicate':
+            dup_cls = np.random.choice(nb_classes, int(nb_classes/5), replace=False)
+            for cls in dup_cls:
+                if cls == 0:
+                    self.proxies.data[cls] = self.proxies.data[cls+1]
+                else:
+                    self.proxies.data[cls] = self.proxies.data[cls-1]
 
     @torch.no_grad()
     def debug(self, X, indices, T):
