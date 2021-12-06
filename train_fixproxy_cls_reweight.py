@@ -2,7 +2,9 @@
 import logging
 import dataset
 import utils
+
 import os
+
 import torch
 import numpy as np
 import matplotlib
@@ -12,8 +14,9 @@ import argparse
 import json
 from tqdm import tqdm
 from torch.utils.data import Dataset, DataLoader
-
-os.environ["CUDA_VISIBLE_DEVICES"]="1, 0"
+from train import save_best_checkpoint, load_best_checkpoint
+import torch.nn.functional as F
+os.environ["CUDA_VISIBLE_DEVICES"]="1,0"
 
 parser = argparse.ArgumentParser(description='Training ProxyNCA++')
 parser.add_argument('--epochs', default = 40, type=int, dest = 'nb_epochs')
@@ -21,37 +24,44 @@ parser.add_argument('--log-filename', default = 'example')
 parser.add_argument('--lr_steps', default=[1000], nargs='+', type=int)
 parser.add_argument('--source_dir', default='', type=str)
 parser.add_argument('--root_dir', default='', type=str)
-parser.add_argument('--eval_nmi', default=False, action='store_true')
 parser.add_argument('--recall', default=[1, 2, 4, 8], nargs='+', type=int)
 parser.add_argument('--init_eval', default=False, action='store_true')
 parser.add_argument('--apex', default=False, action='store_true')
 parser.add_argument('--warmup_k', default=5, type=int)
 
 parser.add_argument('--dataset', default='cub')
-parser.add_argument('--seed', default=0, type=int)
+parser.add_argument('--seed', default=4, type=int)
+parser.add_argument('--eval_nmi', default=True, action='store_true')
 parser.add_argument('--embedding-size', default = 512, type=int, dest = 'sz_embedding')
-parser.add_argument('--config', default='config/cub_reweight.json')
+parser.add_argument('--config', default='config/cub_pfix_reweight.json')
 parser.add_argument('--mode', default='trainval', choices=['train', 'trainval', 'test',
                                                            'testontrain', 'testontrain_super'],
                     help='train with train data or train with trainval')
 parser.add_argument('--batch-size', default = 32, type=int, dest = 'sz_batch')
 parser.add_argument('--no_warmup', default=False, action='store_true')
-parser.add_argument('--loss-type', default='ProxyNCA_prob_orig_intravar_135_NN', type=str)
-parser.add_argument('--helpful', default=[18], nargs='+', type=int)
-parser.add_argument('--harmful', default=[14, 73], nargs='+', type=int)
-parser.add_argument('--workers', default = 2, type=int, dest = 'nb_workers')
+parser.add_argument('--loss-type', default='ProxyNCA_pfix_confusion_random', type=str)
+parser.add_argument('--helpful', default=[0, 1], nargs='+', type=int)
+parser.add_argument('--harmful', default=[2], nargs='+', type=int)
+parser.add_argument('--workers', default = 4, type=int, dest = 'nb_workers')
 
 args = parser.parse_args()
-def save_best_checkpoint(model):
-    torch.save(model.state_dict(), 'results/' + args.log_filename + '.pt')
 
-def load_best_checkpoint(model):
-    try:
-        model.load_state_dict(torch.load('results/' + args.log_filename + '.pt'))
-    except FileNotFoundError:
-        model.load_state_dict(torch.load('results/' + args.log_filename + '.pth'))
-    model = model.cuda()
-    return model
+def proxy_assignment(model, dl_tr_noshuffle, criterion):
+
+    X, T, *_ = utils.predict_batchwise(model, dl_tr_noshuffle)
+    cls_means = torch.tensor([])
+    for cls in range(dl_tr_noshuffle.dataset.nb_classes()):
+        indices = T == cls
+        X_cls = X[indices, :]  # class-specific embedding
+        X_cls = F.normalize(X_cls, dim=-1, p=2) # (N_cls, sz_embed)
+        clsmean = X_cls.mean(0) # (sz_embed,)
+        cls_means = torch.cat([cls_means, clsmean.unsqueeze(0)], dim=0)
+
+    cls_means = F.normalize(cls_means, dim=-1, p=2).to(criterion.proxies.device) # (C, sz_embed)
+    logging.info('Proxy re-assigned!')
+    criterion.assign_cls4proxy(cls_means) # assign proxy to closest class
+    criterion = criterion.cuda()
+    return criterion
 
 def find_cls_weights(helpful, harmful, y):
     weights = torch.ones_like(y)
@@ -68,6 +78,8 @@ def find_cls_weights(helpful, harmful, y):
 if __name__ == '__main__':
 
     # set random seed for all gpus
+    # random.seed(args.seed)
+    # np.random.seed(args.seed) # FIXME: to not set seed
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed_all(args.seed)
 
@@ -88,8 +100,7 @@ if __name__ == '__main__':
     if (args.mode =='trainval' or args.mode == 'test' or args.mode == 'testontrain'):
         if args.dataset == 'sop' or args.dataset == 'sop_h5':
             args.recall = [1, 10, 100, 1000]
-        elif 'cub' in args.dataset or 'cars' in args.dataset: # FIXME: logo2k didnt evaluate NMI cuz it's time-consuming
-            args.eval_nmi = True
+        args.eval_nmi = True
 
     args.nb_epochs = config['nb_epochs']
     args.sz_batch = config['sz_batch']
@@ -214,6 +225,7 @@ if __name__ == '__main__':
 
     elif args.mode == 'trainval' or args.mode == 'test' \
             or args.mode == 'testontrain' or args.mode == 'testontrain_super':
+        # print(dataset_config['dataset'][args.dataset]['root'])
         tr_dataset = dataset.load(
                 name = args.dataset,
                 root = dataset_config['dataset'][args.dataset]['root'],
@@ -239,6 +251,7 @@ if __name__ == '__main__':
     )
 
     # training dataloader without shuffling and without transformation
+    #FIXME
     dl_tr_noshuffle = torch.utils.data.DataLoader(
             dataset=dataset.load(
                     name=args.dataset,
@@ -247,13 +260,15 @@ if __name__ == '__main__':
                     classes=dataset_config['dataset'][args.dataset]['classes']['trainval'],
                     transform=dataset.utils.make_transform(
                         **dataset_config[transform_key],
-                        is_train=False
+                        is_train=False # no transformation
                     )
                 ),
             num_workers = args.nb_workers,
-            shuffle=False,
+            shuffle=False, # no shuffle, retain its ordering
             batch_size=64,
     )
+
+
 
     print("===")
     if args.mode == 'train':
@@ -288,7 +303,7 @@ if __name__ == '__main__':
         nb_classes = dl_tr.dataset.nb_classes(),
         sz_embed = args.sz_embedding,
         **config['criterion']['args']
-    ).cuda()
+    )
 
     opt_warmup = config['opt']['type'](
         [
@@ -303,14 +318,6 @@ if __name__ == '__main__':
                     )
                 },
                 **config['opt']['args']['embedding']
-
-            },
-
-            {
-                **{'params': criterion.proxies}
-                ,
-                **config['opt']['args']['proxynca']
-
             },
         ],
         **config['opt']['args']['base']
@@ -330,11 +337,6 @@ if __name__ == '__main__':
                     )
                 },
                 **config['opt']['args']['embedding']
-            },
-
-            {
-                **{'params': criterion.proxies},
-                **config['opt']['args']['proxynca']
             },
         ],
         **config['opt']['args']['base']
@@ -357,6 +359,15 @@ if __name__ == '__main__':
             utils.evaluate(model, dl_tr_noshuffle, args.eval_nmi, args.recall)
         exit() # exit the program
 
+    if args.mode == 'testontrain_super':
+        with torch.no_grad():
+            logging.info("**Evaluating with gt super 100 classes...(test mode, test on training set)**")
+            model = load_best_checkpoint(model)
+            with open("mnt/datasets/logo2ksuperclass0.01.json", 'rt') as handle:
+                labeldict = json.load(handle)
+            utils.evaluate_super(model, dl_tr_noshuffle, labeldict, args.eval_nmi, args.recall)
+        exit() # exit the program
+
     if args.mode == 'train':
         scheduler = config['lr_scheduler']['type'](
             opt, **config['lr_scheduler']['args']
@@ -364,8 +375,7 @@ if __name__ == '__main__':
     elif args.mode == 'trainval':
         scheduler = config['lr_scheduler2']['type'](
             opt,
-            milestones=args.lr_steps,
-            gamma=0.1
+            **config['lr_scheduler2']['args']
         )
 
     logging.info("Training parameters: {}".format(vars(args)))
@@ -375,7 +385,6 @@ if __name__ == '__main__':
     scores_tr = []
 
     t1 = time.time()
-
 
     if args.init_eval:
         logging.info("**Evaluating initial model...**")
@@ -406,9 +415,17 @@ if __name__ == '__main__':
 
     logging.info('Number of training: {}'.format(len(dl_tr.dataset)))
     logging.info('Number of original training: {}'.format(len(dl_tr_noshuffle.dataset)))
+    if 'inshop' not in args.dataset:
+        logging.info('Number of testing: {}'.format(len(dl_ev.dataset)))
+    else:
+        logging.info('Number of query set: {}'.format(len(dl_query.dataset)))
+        logging.info('Number of gallery set: {}'.format(len(dl_gallery.dataset)))
+
+    # initialization
+    criterion = proxy_assignment(model, dl_tr_noshuffle, criterion)
 
     '''Warmup training'''
-    if not args.no_warmup:
+    if not args.no_warmup: # TODO: now dont use warmup
         #warm up training for 5 epochs
         logging.info("**warm up for %d epochs.**" % args.warmup_k)
         for e in range(0, args.warmup_k):
@@ -421,6 +438,7 @@ if __name__ == '__main__':
                 torch.nn.utils.clip_grad_value_(model.parameters(), 10)
                 opt_warmup.step()
             logging.info('warm up ends in %d epochs' % (args.warmup_k-e))
+
 
     '''training loop'''
     for e in range(0, args.nb_epochs):
@@ -489,7 +507,7 @@ if __name__ == '__main__':
                 best_tnmi = torch.Tensor(tnmi).mean()
 
             if e == (args.nb_epochs - 1):
-                # saving last epoch
+                #saving last epoch
                 results['last_NMI'] = nmi
                 results['last_hmean'] = chmean
                 results['best_epoch'] = best_val_epoch
@@ -499,7 +517,8 @@ if __name__ == '__main__':
                 results['last_R8'] = recall[3]
                 results['last_mapr'] = map_R
 
-                # saving best epoch
+
+                #saving best epoch
                 results['best_NMI'] = best_val_nmi
                 results['best_hmean'] = best_val_hmean
                 results['best_R1'] = best_val_r1
@@ -508,11 +527,17 @@ if __name__ == '__main__':
                 results['best_R8'] = best_val_r8
                 results['best_mapr'] = best_val_mapr
 
+
             logging.info('Best val epoch: %s', str(best_val_epoch))
             logging.info('Best val hmean: %s', str(best_val_hmean))
             logging.info('Best val nmi: %s', str(best_val_nmi))
             logging.info('Best val r1: %s', str(best_val_r1))
             logging.info('Best val MAP@R: %s', str(best_val_mapr))
+
+            logging.info(str(lr_steps))
+
+        # Proxy reassigned after every epoch
+        criterion = proxy_assignment(model, dl_tr_noshuffle, criterion)
 
         if e == args.nb_epochs-1:
             save_dir = 'dvi_data_{}_{}_loss{}/ResNet_{}_Model'.format(args.dataset, args.seed,
@@ -541,7 +566,7 @@ if __name__ == '__main__':
                 best_test_nmi, (best_test_r1, best_test_r10, best_test_r20, best_test_r30, best_test_r40, best_test_r50), best_mapr = utils.evaluate_inshop(model, dl_query, dl_gallery)
             else:
                 best_test_nmi, (best_test_r1, best_test_r2, best_test_r4, best_test_r8), best_mapr = utils.evaluate(model, dl_ev, args.eval_nmi, args.recall)
-            #logging.info('Best test r8: %s', str(best_test_r8))
+
         if 'inshop' in args.dataset:
             results['NMI'] = best_test_nmi
             results['R1']  = best_test_r1
@@ -559,6 +584,7 @@ if __name__ == '__main__':
             results['R4'] = best_test_r4
             results['R8'] = best_test_r8
             results['MAP@R'] = best_test_mapr
+
 
     if args.mode == 'train':
         print('lr_steps', lr_steps)
