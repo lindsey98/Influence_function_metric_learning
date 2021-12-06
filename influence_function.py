@@ -219,3 +219,5 @@ def calc_influential_func(inverse_hvp, grad_alltrain):
                                for x, y in zip(inverse_hvp, grad1train)]
         influence_values.append(influence_thistrain)
     return influence_values
+
+
