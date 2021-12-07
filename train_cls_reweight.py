@@ -28,18 +28,18 @@ parser.add_argument('--apex', default=False, action='store_true')
 parser.add_argument('--warmup_k', default=5, type=int)
 
 parser.add_argument('--dataset', default='cub')
-parser.add_argument('--seed', default=0, type=int)
+parser.add_argument('--seed', default=4, type=int)
 parser.add_argument('--embedding-size', default = 512, type=int, dest = 'sz_embedding')
-parser.add_argument('--config', default='config/cub_reweight.json')
+parser.add_argument('--config', default='config/cub_anchor_reweight.json')
 parser.add_argument('--mode', default='trainval', choices=['train', 'trainval', 'test',
                                                            'testontrain', 'testontrain_super'],
                     help='train with train data or train with trainval')
 parser.add_argument('--batch-size', default = 32, type=int, dest = 'sz_batch')
 parser.add_argument('--no_warmup', default=False, action='store_true')
-parser.add_argument('--loss-type', default='ProxyNCA_prob_orig_intravar_135_NN', type=str)
-parser.add_argument('--helpful', default=[18], nargs='+', type=int)
-parser.add_argument('--harmful', default=[14, 73], nargs='+', type=int)
-parser.add_argument('--workers', default = 2, type=int, dest = 'nb_workers')
+parser.add_argument('--loss-type', default='ProxyAnchor_intravar_141_NN', type=str)
+parser.add_argument('--helpful', default=[53], nargs='+', type=int)
+parser.add_argument('--harmful', default=[70, 71], nargs='+', type=int)
+parser.add_argument('--workers', default=2, type=int, dest = 'nb_workers')
 
 args = parser.parse_args()
 def save_best_checkpoint(model):

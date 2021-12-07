@@ -421,12 +421,12 @@ if __name__ == '__main__':
     '''training loop'''
     for e in range(0, args.nb_epochs):
         # loss recorder similarity recorder
-        if e == 0:
-            process_recorder = {}
-            with open("{0}/{1}_recorder.json".format('log', args.log_filename), 'wt') as handle:
-                json.dump(process_recorder, handle)
-        with open("{0}/{1}_recorder.json".format('log', args.log_filename), 'rt') as handle:
-            process_recorder = json.load(handle)
+        # if e == 0:
+        #     process_recorder = {}
+        #     with open("{0}/{1}_recorder.json".format('log', args.log_filename), 'wt') as handle:
+        #         json.dump(process_recorder, handle)
+        # with open("{0}/{1}_recorder.json".format('log', args.log_filename), 'rt') as handle:
+        #     process_recorder = json.load(handle)
 
         if args.mode == 'train':
             curr_lr = opt.param_groups[0]['lr']
@@ -468,14 +468,14 @@ if __name__ == '__main__':
         model.current_epoch = e
 
         # save proxy-similarity and class labels
-        train_embs, train_cls, _, base_loss = utils.predict_batchwise_loss(model, dl_tr_noshuffle, criterion)
-        cached_sim = utils.inner_product_sim(X=train_embs, P=criterion.proxies, T=train_cls)
-        process_recorder[e] = {'epoch': e,
-                               'losses': base_loss.detach().cpu().numpy().tolist(),
-                               'classes': train_cls.long().detach().cpu().numpy().tolist(),
-                               'similarity': cached_sim.detach().cpu().numpy().tolist()}
-        with open("{0}/{1}_recorder.json".format('log', args.log_filename), 'wt') as handle:
-            json.dump(process_recorder, handle)
+        # train_embs, train_cls, _, base_loss = utils.predict_batchwise_loss(model, dl_tr_noshuffle, criterion)
+        # cached_sim = utils.inner_product_sim(X=train_embs, P=criterion.proxies, T=train_cls)
+        # process_recorder[e] = {'epoch': e,
+        #                        'losses': base_loss.detach().cpu().numpy().tolist(),
+        #                        'classes': train_cls.long().detach().cpu().numpy().tolist(),
+        #                        'similarity': cached_sim.detach().cpu().numpy().tolist()}
+        # with open("{0}/{1}_recorder.json".format('log', args.log_filename), 'wt') as handle:
+        #     json.dump(process_recorder, handle)
 
         if e == best_epoch:
             break
@@ -530,7 +530,7 @@ if __name__ == '__main__':
 
             logging.info(str(lr_steps))
 
-        if e % 10 == 0 or e == args.nb_epochs-1:
+        if e == args.nb_epochs-1:
             save_dir = 'dvi_data_{}_{}_loss{}/ResNet_{}_Model'.format(args.dataset, args.seed,
                                                                       args.loss_type, str(args.sz_embedding))
             os.makedirs('{}'.format(save_dir), exist_ok=True)
