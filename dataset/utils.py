@@ -88,6 +88,7 @@ def make_transform(sz_resize = 256, sz_crop = 227,
         )
     ])
 
+
 class BatchSampler(torch.utils.data.sampler.Sampler):
     def __init__(self, batch_size, drop_last, dataset, sel_class):
         if not isinstance(batch_size, _int_classes) or isinstance(batch_size, bool) or \

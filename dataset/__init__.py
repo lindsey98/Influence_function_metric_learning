@@ -14,24 +14,13 @@ resource.setrlimit(resource.RLIMIT_NOFILE, (rlimit[1], rlimit[1]))
 
 _type = {
     'cars': Cars,
-    'cars49': Cars,
-    'cars147': Cars,
-    'cars_h5': Cars_hdf5,
     'cub': CUBirds,
-    'cub50': CUBirds,
-    'cub150': CUBirds,
-    'cub_h5': CUBirds_hdf5,
+    'cub+143_145': CUBirds,
+    'cub+172_178': CUBirds,
+    'cub+144_142': CUBirds,
     'cub_class' : CUBirds_class,
     'sop': SOProducts,
-    'sop_h5': SOProducts_hdf5,
-    'sop_h5_mod': SOProducts_hdf5,
     'inshop': InShop,
-    'inshop_h5': InShop_hdf5,
-    'logo2k': Logo2k,
-    # 'logo2k_subset': Logo2k,
-    # 'logo2k_super100': Logo2k_super,
-    # 'logo2k_super500': Logo2k_super,
-    # 'vgg': VggFace,
 }
 
 

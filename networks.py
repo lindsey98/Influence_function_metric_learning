@@ -75,14 +75,15 @@ class Full_Model(nn.Module):
         self.feat = feat_model()
         self.emb = nn.Linear(2048, emb_size)
         self.model = nn.Sequential(self.feat, self.emb)
-        self.proj = nn.Linear(emb_size, num_classes)
+        # self.proj = nn.Linear(emb_size, num_classes)
 
     def forward(self, x):
         x = self.model(x)
-        norm = x.norm(p=2, dim=-1, keepdim=True)
-        x_normalized = x.div(norm)
-        logits = self.proj(x_normalized)
-        return logits
+        return x
+        # norm = x.norm(p=2, dim=-1, keepdim=True)
+        # x_normalized = x.div(norm)
+        # logits = self.proj(x_normalized)
+        # return logits
 
 
 # modify from

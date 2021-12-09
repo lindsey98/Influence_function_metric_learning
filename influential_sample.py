@@ -93,16 +93,17 @@ os.environ['CUDA_VISIBLE_DEVICES'] = "0"
 #     return
 
 class Influential_Sample():
-    def __init__(self, dataset_name, seed, loss_type,
+    def __init__(self, dataset_name, seed, loss_type, config_name,
                  measure, sz_embedding=512):
 
         self.folder = 'dvi_data_{}_{}_loss{}/'.format(dataset_name, seed, loss_type)
         self.model_dir = '{}/ResNet_{}_Model'.format(self.folder, sz_embedding)
         self.measure = measure
+        self.config_name = config_name
         assert self.measure in ['confusion', 'confusion_abb', 'intravar']
 
         # load data
-        self.dl_tr, self.dl_ev = prepare_data(data_name=dataset_name, config_name=config_name, root=self.folder, save=False, batch_size=1)
+        self.dl_tr, self.dl_ev = prepare_data(data_name=dataset_name, config_name=self.config_name, root=self.folder, save=False, batch_size=1)
         self.dataset_name = dataset_name
         self.seed = seed
         self.loss_type = loss_type
@@ -305,14 +306,14 @@ class Influential_Sample():
 
 if __name__ == '__main__':
 
-    dataset_name = 'cub'
-    loss_type = 'ProxyAnchor_intravar_134'
+    dataset_name = 'cub+178_172'
+    loss_type = 'ProxyNCA_prob_orig'
     config_name = 'cub'
     sz_embedding = 512
-    seed = 4
+    seed = 0
     measure = 'intravar'
 
-    IS = Influential_Sample(dataset_name, seed, loss_type, measure, sz_embedding)
+    IS = Influential_Sample(dataset_name, seed, loss_type, config_name, measure, sz_embedding)
     '''Step 1: Cache loss gradient to parameters for all training'''
     # IS.cache_grad_loss_train()
     # exit()
@@ -339,8 +340,8 @@ if __name__ == '__main__':
     # IS.run(4)
 
     '''Step 4 (alternative): Get NN/Furtherest classes'''
-    # i = 195; j = 192
-    # i = 135
+    # i = 115; j = 129
+    # i = 102
     # feat_cls1 = IS.testing_embedding[IS.testing_label == i]
     # feat_cls2 = IS.testing_embedding[IS.testing_label == j]
     # feat_collect = torch.cat((feat_cls1, feat_cls2))
@@ -348,17 +349,17 @@ if __name__ == '__main__':
     # IS.get_nearest_train_class(feat_collect)
 
     '''Other: get t statistic for two specific classes'''
-    # i = 195; j = 192
-    # feat_cls1 = IS.testing_embedding[IS.testing_label == i]
-    # feat_cls2 = IS.testing_embedding[IS.testing_label == j]
-    # confusion = calc_confusion(feat_cls1, feat_cls2, sqrt=True)  # get t instead of t^2
-    # print(confusion.item())
+    i = 172; j = 178
+    feat_cls1 = IS.testing_embedding[IS.testing_label == i]
+    feat_cls2 = IS.testing_embedding[IS.testing_label == j]
+    confusion = calc_confusion(feat_cls1, feat_cls2, sqrt=True)  # get t instead of t^2
+    print(confusion.item())
 
     '''Other: get intra-class variance for a specific class'''
-    i = 134
-    feat_cls = IS.testing_embedding[IS.testing_label == i]
-    intra_var = calc_intravar(feat_cls)
-    print(intra_var.item())
+    # i = 102
+    # feat_cls = IS.testing_embedding[IS.testing_label == i]
+    # intra_var = calc_intravar(feat_cls)
+    # print(intra_var.item())
 
 
 

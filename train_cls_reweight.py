@@ -36,9 +36,9 @@ parser.add_argument('--mode', default='trainval', choices=['train', 'trainval', 
                     help='train with train data or train with trainval')
 parser.add_argument('--batch-size', default = 32, type=int, dest = 'sz_batch')
 parser.add_argument('--no_warmup', default=False, action='store_true')
-parser.add_argument('--loss-type', default='ProxyAnchor_intravar_141_NN', type=str)
-parser.add_argument('--helpful', default=[53], nargs='+', type=int)
-parser.add_argument('--harmful', default=[70, 71], nargs='+', type=int)
+parser.add_argument('--loss-type', default='ProxyAnchor_intravar_135_NN', type=str)
+parser.add_argument('--helpful', default=[57], nargs='+', type=int)
+parser.add_argument('--harmful', default=[14, 20], nargs='+', type=int)
 parser.add_argument('--workers', default=2, type=int, dest = 'nb_workers')
 
 args = parser.parse_args()
@@ -228,7 +228,6 @@ if __name__ == '__main__':
     if is_random_sampler:
         batch_sampler = dataset.utils.RandomBatchSampler(tr_dataset.ys, args.sz_batch, True, num_class_per_batch, num_gradcum)
     else:
-
         batch_sampler = dataset.utils.BalancedBatchSampler(torch.Tensor(tr_dataset.ys), num_class_per_batch,
                                                            int(args.sz_batch / num_class_per_batch))
 

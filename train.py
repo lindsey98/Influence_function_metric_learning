@@ -28,11 +28,11 @@ parser.add_argument('--init_eval', default=False, action='store_true')
 parser.add_argument('--apex', default=False, action='store_true')
 parser.add_argument('--warmup_k', default=5, type=int)
 
-parser.add_argument('--dataset', default='inshop')
-parser.add_argument('--seed', default=4, type=int)
+parser.add_argument('--dataset', default='cub+144_142')
+parser.add_argument('--seed', default=0, type=int)
 parser.add_argument('--eval_nmi', default=True, action='store_true')
 parser.add_argument('--embedding-size', default = 512, type=int, dest = 'sz_embedding')
-parser.add_argument('--config', default='config/inshop.json')
+parser.add_argument('--config', default='config/cub.json')
 parser.add_argument('--mode', default='trainval', choices=['train', 'trainval',
                                                            'test', 'testontrain'],
                     help='train with train data or train with trainval')
@@ -420,13 +420,6 @@ if __name__ == '__main__':
 
     '''training loop'''
     for e in range(0, args.nb_epochs):
-        # loss recorder similarity recorder
-        # if e == 0:
-        #     process_recorder = {}
-        #     with open("{0}/{1}_recorder.json".format('log', args.log_filename), 'wt') as handle:
-        #         json.dump(process_recorder, handle)
-        # with open("{0}/{1}_recorder.json".format('log', args.log_filename), 'rt') as handle:
-        #     process_recorder = json.load(handle)
 
         if args.mode == 'train':
             curr_lr = opt.param_groups[0]['lr']
@@ -467,15 +460,6 @@ if __name__ == '__main__':
         model.losses = losses
         model.current_epoch = e
 
-        # save proxy-similarity and class labels
-        # train_embs, train_cls, _, base_loss = utils.predict_batchwise_loss(model, dl_tr_noshuffle, criterion)
-        # cached_sim = utils.inner_product_sim(X=train_embs, P=criterion.proxies, T=train_cls)
-        # process_recorder[e] = {'epoch': e,
-        #                        'losses': base_loss.detach().cpu().numpy().tolist(),
-        #                        'classes': train_cls.long().detach().cpu().numpy().tolist(),
-        #                        'similarity': cached_sim.detach().cpu().numpy().tolist()}
-        # with open("{0}/{1}_recorder.json".format('log', args.log_filename), 'wt') as handle:
-        #     json.dump(process_recorder, handle)
 
         if e == best_epoch:
             break

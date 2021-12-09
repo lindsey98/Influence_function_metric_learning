@@ -11,35 +11,35 @@
             "root":"str('mnt/datasets/CUB_200_2011')"
 
         },
-        "cub50": {
+        "cub+143_145": {
             "classes": {
                 "train": "range(0, 50)",
                 "val": "range(50,100)",
-                "trainval":"range(0,50)",
-                "eval": "range(50, 200)"
-            },
-            "source": "str('mnt/datasets/CUB_200_2011')",
-            "root":"str('mnt/datasets/CUB_200_2011')"
-        },
-        "cub150": {
-            "classes": {
-                "train": "range(0, 50)",
-                "val": "range(50,100)",
-                "trainval":"range(0,150)",
-                "eval": "range(150, 200)"
-            },
-            "source": "str('mnt/datasets/CUB_200_2011')",
-            "root":"str('mnt/datasets/CUB_200_2011')"
-        },
-        "cub_h5": {
-            "classes": {
-                "train": "range(0, 50)",
-                "val": "range(50,100)",
-                "trainval":"range(0,100)",
+                "trainval":"list(range(0,100)) + [143, 145]",
                 "eval": "range(100, 200)"
             },
-            "source": "str('./mnt/datasets/CUB_200_2011/cub.h5')",
-            "root":"str('./mnt/datasets/CUB_200_2011/cub.h5')"
+            "source": "str('mnt/datasets/CUB_200_2011')",
+            "root":"str('mnt/datasets/CUB_200_2011')"
+        },
+        "cub+172_178": {
+            "classes": {
+                "train": "range(0, 50)",
+                "val": "range(50,100)",
+                "trainval":"list(range(0,100)) + [172, 178]",
+                "eval": "range(100, 200)"
+            },
+            "source": "str('mnt/datasets/CUB_200_2011')",
+            "root":"str('mnt/datasets/CUB_200_2011')"
+        },
+        "cub+144_142": {
+            "classes": {
+                "train": "range(0, 50)",
+                "val": "range(50,100)",
+                "trainval":"list(range(0,100)) + [144, 142]",
+                "eval": "range(100, 200)"
+            },
+            "source": "str('mnt/datasets/CUB_200_2011')",
+            "root":"str('mnt/datasets/CUB_200_2011')"
         },
         "cars": {
             "classes": {
@@ -52,45 +52,6 @@
             "root": "str('mnt/datasets/CARS_196')"
 
         },
-        "cars49": {
-            "classes": {
-                "trainval": "range(0, 49)",
-                "eval": "range(49, 196)"
-            },
-            "source": "str('mnt/datasets/CARS_196')",
-            "root": "str('mnt/datasets/CARS_196')"
-
-        },
-        "cars147": {
-            "classes": {
-                "trainval": "range(0, 147)",
-                "eval": "range(147, 196)"
-            },
-            "source": "str('mnt/datasets/CARS_196')",
-            "root": "str('mnt/datasets/CARS_196')"
-
-        },
-        "vgg": {
-            "classes": {
-                "train": "range(0, 655)",
-                "val": "range(655, 1311)",
-                "trainval": "range(0, 1311)",
-                "eval": "range(1311, 2622)"
-            },
-            "source": "str('mnt/datasets/vgg_face_dataset')",
-            "root": "str('mnt/datasets/vgg_face_dataset')"
-
-        },
-        "cars_h5": {
-            "classes": {
-                "train": "range(0, 49)",
-                "val": "range(49,98)",
-                "trainval": "range(0, 98)",
-                "eval": "range(98, 196)"
-            },
-            "source": "str('./mnt/datasets/CARS_196/cars.h5')",
-            "root": "str('./mnt/datasets/CARS_196/cars.h5')"
-        },
         "sop": {
             "source": "str('./mnt/datasets/sop')",
             "root": "str('./mnt/datasets/sop')",
@@ -101,16 +62,6 @@
                 "eval": "range(11318, 22634)"
             }
         },
-        "sop_h5": {
-            "classes": {
-                "train": "range(0, 5659)",
-                "val": "range(5659,11318)",
-                "trainval": "range(0, 11318)",
-                "eval": "range(11318, 22634)"
-            },
-            "source": "str('/mnt/datasets/sop/sop.h5')",
-            "root": "str('/mnt/datasets//sop/sop.h5')"
-        },
         "inshop": {
             "source": "str('./mnt/datasets/inshop')",
             "root": "str('./mnt/datasets/inshop')",
@@ -120,61 +71,6 @@
                 "trainval": "range(0, 3997)",
                 "eval": "range(0, 3985)"
             }
-        },
-        "inshop_h5": {
-            "source": "str('/mnt/datasets/inshop/inshop.h5')",
-            "root": "str('/mnt/datasets/inshop/inshop.h5')",
-            "classes": {
-                "train": "range(0, 1998)",
-                "val": "range(1998, 3997)",
-                "trainval": "range(0, 3997)",
-                "eval": "range(0, 3985)"
-               
-            }
-        },
-        "logo2k": {
-            "classes": {
-                "train": "range(0, 50)",
-                "val": "range(50, 100)",
-                "trainval": "range(0, 100)",
-                "eval": "range(100, 200)"
-            },
-            "source": "str('mnt/datasets/Logo2k')",
-            "root":"str('mnt/datasets/Logo2k')"
-
-        },
-        "logo2k_subset": {
-            "classes": {
-                "train": "range(0, 100)",
-                "val": "range(100, 200)",
-                "trainval": "range(0, 100)",
-                "eval": "range(100, 200)"
-            },
-            "source": "str('mnt/datasets/logo2k_subset')",
-            "root":"str('mnt/datasets/logo2k_subset')"
-
-        },
-        "logo2k_super100": {
-            "classes": {
-                "train": "range(0, 107)",
-                "val": "range(107, 1276)",
-                "trainval": "range(0, 107)",
-                "eval": "range(107, 1276)"
-            },
-            "source": "str('mnt/datasets/logo2ksuperclass0.01')",
-            "root":"str('mnt/datasets/logo2ksuperclass0.01')"
-
-        },
-        "logo2k_super500": {
-            "classes": {
-                "train": "range(0, 586)",
-                "val": "range(586, 1755)",
-                "trainval": "range(0, 586)",
-                "eval": "range(586, 1755)"
-            },
-            "source": "str('mnt/datasets/logo2ksuperclass0.002')",
-            "root":"str('mnt/datasets/logo2ksuperclass0.002')"
-
         }
     },
      "transform_parameters": {
