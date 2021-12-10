@@ -14,6 +14,11 @@ resource.setrlimit(resource.RLIMIT_NOFILE, (rlimit[1], rlimit[1]))
 
 _type = {
     'cars': Cars,
+    'cars+179_178': Cars,
+    'cars+103_102': Cars,
+    'cars+183_182': Cars,
+    'cars+111_179': Cars,
+    'cars+139_137': Cars,
     'cub': CUBirds,
     'cub+143_145': CUBirds,
     'cub+172_178': CUBirds,

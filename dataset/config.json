@@ -72,6 +72,56 @@
             "root": "str('mnt/datasets/CARS_196')"
 
         },
+        "cars+179_178": {
+            "classes": {
+                "train": "range(0, 49)",
+                "val": "range(49,98)",
+                "trainval": "list(range(0,98)) + [179, 178]",
+                "eval": "range(98, 196)"
+            },
+            "source": "str('mnt/datasets/CARS_196')",
+            "root": "str('mnt/datasets/CARS_196')"
+        },
+        "cars+103_102": {
+            "classes": {
+                "train": "range(0, 49)",
+                "val": "range(49,98)",
+                "trainval": "list(range(0,98)) + [103, 102]",
+                "eval": "range(98, 196)"
+            },
+            "source": "str('mnt/datasets/CARS_196')",
+            "root": "str('mnt/datasets/CARS_196')"
+        },
+        "cars+183_182": {
+            "classes": {
+                "train": "range(0, 49)",
+                "val": "range(49,98)",
+                "trainval": "list(range(0,98)) + [183, 182]",
+                "eval": "range(98, 196)"
+            },
+            "source": "str('mnt/datasets/CARS_196')",
+            "root": "str('mnt/datasets/CARS_196')"
+        },
+        "cars+111_179": {
+            "classes": {
+                "train": "range(0, 49)",
+                "val": "range(49,98)",
+                "trainval": "list(range(0,98)) + [111, 179]",
+                "eval": "range(98, 196)"
+            },
+            "source": "str('mnt/datasets/CARS_196')",
+            "root": "str('mnt/datasets/CARS_196')"
+        },
+        "cars+139_137": {
+            "classes": {
+                "train": "range(0, 49)",
+                "val": "range(49,98)",
+                "trainval": "list(range(0,98)) + [139, 137]",
+                "eval": "range(98, 196)"
+            },
+            "source": "str('mnt/datasets/CARS_196')",
+            "root": "str('mnt/datasets/CARS_196')"
+        },
         "sop": {
             "source": "str('./mnt/datasets/sop')",
             "root": "str('./mnt/datasets/sop')",

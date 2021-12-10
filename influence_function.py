@@ -91,6 +91,8 @@ def grad_confusion(model, dl_ev, cls1, cls2):
     feat_cls2 = torch.tensor([]).cuda()  # (N2, sz_embed)
     model.eval(); model.zero_grad()
     for ct, (x, t, _) in tqdm(enumerate(dl_ev)): # need to recalculate the feature embeddings since we need the gradient
+        if len(feat_cls1) >= 50 and len(feat_cls2) >= 50:
+            break
         if t.item() == cls1: # belong to class 1
             if len(feat_cls1) >= 50: # FIXME: feeding in all instances will be out of memory
                 continue
@@ -103,8 +105,6 @@ def grad_confusion(model, dl_ev, cls1, cls2):
             x = x.cuda()
             m = model(x)
             feat_cls2 = torch.cat((feat_cls2, m), dim=0)
-        if len(feat_cls1) >= 50 and len(feat_cls2) >= 50:
-            break
         else: # skip irrelevant test samples
             pass
 

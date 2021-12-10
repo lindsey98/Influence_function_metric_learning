@@ -25,72 +25,7 @@ from influence_function import inverse_hessian_product, grad_confusion, grad_all
 import pickle
 from scipy.stats import t
 from utils import predict_batchwise
-os.environ['CUDA_VISIBLE_DEVICES'] = "0"
-
-# def pca_viz():
-#     '''Use PCA to get 1st PC, project training samples onto the 1st PC and identify which samples are singificantly contributing'''
-#     # pca = PCA(n_components=1)
-#     # projected_test_emb = pca.fit_transform(selected_test_embed.detach().cpu().numpy()) # (N_test, 1)
-#     # projected_train_emb = pca.transform(train_embedding.detach().cpu().numpy()) # (N_train, 1)
-#     # sig_contributing_train_indices = np.argsort(projected_train_emb[:, 0])[::-1]
-#     #
-#     # w = 10; h = 10; columns = 3; rows = 3
-#     # fig = plt.figure(figsize=(8, 8))
-#     # for i in range(1, columns * rows + 1):
-#     #     img = np.random.randint(10, size=(h, w))
-#     #     fig.add_subplot(rows, columns, i)
-#     #     img = read_image(dl_tr.dataset.im_paths[sig_contributing_train_indices[i]])
-#     #     plt.imshow(to_pil_image(img))
-#     #     plt.title(dl_tr.dataset.__getitem__(sig_contributing_train_indices[i])[1])
-#     # plt.show()
-#     return
-# def CAM():
-#     '''Use CAM methods to retrieve the contributing pixels'''
-#     # model_full = Full_Model(emb_size=sz_embedding, num_classes=dl_tr.dataset.nb_classes())
-#     # pretrained_feat = torch.load('{}/Epoch_{}/{}_{}_trainval_512_{}.pth'.format(model_dir, 40, dataset_name, dataset_name, seed))
-#     # model_full.model.load_state_dict({k.replace('module.', ''):v for k,v in pretrained_feat.items()})
-#     # model_full.proj.weight.data = F.normalize(proxies, p=2, dim=-1) * 2 * 9 # T = 1/9
-#     # model_full.proj.bias.data = torch.ones(dl_tr.dataset.nb_classes()) * -2 * 9 # T = 1/9
-#     # model_full.eval()
-#     # model_full.cuda()
-#
-#     # cam_extractor = SmoothGradCAMpp(model_full)
-#     # dl_tr, dl_ev = prepare_data(data_name=dataset_name, config_name=config_name,
-#     #                             root=folder, batch_size=1, save=False)
-#     #
-#     # for ct, (x, y, indices) in tqdm(enumerate(dl_tr)):
-#     #     if y.item() in topk_closest_traincls:
-#     #         os.makedirs('CAM', exist_ok=True)
-#     #         os.makedirs('CAM/{}_{}/testcls{}_traincls{}_trainCAM'.format(dataset_name, loss_type, selected_test_class, y.item()), exist_ok=True)
-#     #
-#     #         x, y = x.cuda(), y.cuda()
-#     #         out = model_full(x)
-#     #         # Retrieve the CAM by passing the class index and the model output
-#     #         activation_map = cam_extractor(y.item(), out)
-#     #         # Resize the CAM and overlay it
-#     #         img = read_image(dl_tr.dataset.im_paths[indices[0]])
-#     #         result = overlay_mask(to_pil_image(img), to_pil_image(activation_map[0].detach().cpu(), mode='F'), alpha=0.5)
-#     #         # Display it
-#     #         plt.imshow(result); plt.axis('off'); plt.tight_layout()
-#     #         plt.savefig(os.path.join('CAM/{}_{}/testcls{}_traincls{}_trainCAM'.format(dataset_name, loss_type, selected_test_class, y.item()),
-#     #                                  os.path.basename(dl_tr.dataset.im_paths[indices[0]])))
-#     #
-#     # for ct, (x, y, indices) in tqdm(enumerate(dl_ev)):
-#     #     if y.item() in [selected_test_class] and indices.item() in wrong_ind:
-#     #         os.makedirs('CAM', exist_ok=True)
-#     #         os.makedirs('CAM/{}_{}/testcls{}_traincls{}_testCAM'.format(dataset_name, loss_type, y.item(), topk_closest_traincls[0]), exist_ok=True)
-#     #         x, y = x.cuda(), y.cuda()
-#     #         out = model_full(x)
-#     #         # Retrieve the CAM by passing the class index and the model output
-#     #         activation_map = cam_extractor(topk_closest_traincls[0].item(), out)
-#     #         # Resize the CAM and overlay it
-#     #         img = read_image(dl_ev.dataset.im_paths[indices[0]])
-#     #         result = overlay_mask(to_pil_image(img), to_pil_image(activation_map[0].detach().cpu(), mode='F'), alpha=0.5)
-#     #         # Display it
-#     #         plt.imshow(result); plt.axis('off'); plt.tight_layout()
-#     #         plt.savefig(os.path.join('CAM/{}_{}/testcls{}_traincls{}_testCAM'.format(dataset_name, loss_type, y.item(), topk_closest_traincls[0]),
-#     #                                  os.path.basename(dl_ev.dataset.im_paths[indices[0]])))
-#     return
+os.environ['CUDA_VISIBLE_DEVICES'] = "1"
 
 class Influential_Sample():
     def __init__(self, dataset_name, seed, loss_type, config_name,
@@ -223,6 +158,7 @@ class Influential_Sample():
             pickle.dump(grad, fp)
 
     def cache_grad_confusion_test(self, confusion_class_pairs):
+        torch.cuda.empty_cache()
         for pair in confusion_class_pairs:
             v = grad_confusion(self.model, self.dl_ev, pair[0], pair[1])
             torch.save(v, "Influential_data/{}_{}_confusion_grad_test_{}_{}.pth".format(self.dataset_name, self.loss_type, pair[0], pair[1]))
@@ -306,12 +242,12 @@ class Influential_Sample():
 
 if __name__ == '__main__':
 
-    dataset_name = 'cub+116_114'
+    dataset_name = 'cars+183_182'
     loss_type = 'ProxyNCA_prob_orig'
-    config_name = 'cub'
+    config_name = 'cars'
     sz_embedding = 512
-    seed = 0
-    measure = 'intravar'
+    seed = 3
+    measure = 'confusion'
 
     IS = Influential_Sample(dataset_name, seed, loss_type, config_name, measure, sz_embedding)
     '''Step 1: Cache loss gradient to parameters for all training'''
@@ -349,7 +285,7 @@ if __name__ == '__main__':
     # IS.get_nearest_train_class(feat_collect)
 
     '''Other: get t statistic for two specific classes'''
-    i = 116; j = 114
+    i = 183; j = 182
     feat_cls1 = IS.testing_embedding[IS.testing_label == i]
     feat_cls2 = IS.testing_embedding[IS.testing_label == j]
     confusion = calc_confusion(feat_cls1, feat_cls2, sqrt=True)  # get t instead of t^2

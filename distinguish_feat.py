@@ -110,7 +110,7 @@ class DistinguishFeat():
         self.model_dir = '{}/ResNet_{}_Model'.format(self.folder, sz_embedding)
 
         # load data
-        self.dl_tr, self.dl_ev = prepare_data(data_name=dataset_name, config_name=config_name, root=self.folder, save=False, batch_size=1)
+        self.dl_tr, self.dl_ev = prepare_data(data_name=dataset_name, config_name=config_name, root=self.folder, save=False, batch_size=1, test_resize=False)
         self.dataset_name = dataset_name
         self.seed = seed
         self.loss_type = loss_type
@@ -185,10 +185,10 @@ class DistinguishFeat():
         assert len(interested_cls) == 2
         cam_extractor = GradCAMCustomize(self.model, target_layer=self.model.module[0].base.layer1)
         for ct, (x, y, indices) in tqdm(enumerate(self.dl_ev)):
-            os.makedirs('./CAM', exist_ok=True)
-            os.makedirs('./CAM/Confusion_{}_{}'.format(interested_cls[0], interested_cls[1]), exist_ok=True)
+            os.makedirs('./CAM/{}'.format(self.dataset_name), exist_ok=True)
+            os.makedirs('./CAM/{}/Confusion_{}_{}'.format(self.dataset_name, interested_cls[0], interested_cls[1]), exist_ok=True)
             if y.item() in interested_cls:
-                os.makedirs('./CAM/Confusion_{}_{}/{}'.format(interested_cls[0], interested_cls[1], y.item()), exist_ok=True)
+                os.makedirs('./CAM/{}/Confusion_{}_{}/{}'.format(self.dataset_name, interested_cls[0], interested_cls[1], y.item()), exist_ok=True)
 
                 x, y = x.cuda(), y.cuda()
                 out = self.model(x) # (1, sz_embed)
@@ -201,20 +201,20 @@ class DistinguishFeat():
                 # Display it
                 plt.imshow(result); plt.axis('off'); plt.tight_layout()
                 # plt.show()
-                plt.savefig('./CAM/Confusion_{}_{}/{}/{}'.format(interested_cls[0], interested_cls[1],
+                plt.savefig('./CAM/{}/Confusion_{}_{}/{}/{}'.format(self.dataset_name,
+                                                                 interested_cls[0], interested_cls[1],
                                                                  y.item(),
-                                                                 os.path.basename(self.dl_ev.dataset.im_paths[indices[0]]))
-                            )
+                                                                 os.path.basename(self.dl_ev.dataset.im_paths[indices[0]])))
 
 
 if __name__ == '__main__':
-    dataset_name = 'cub+196_192'
+    dataset_name = 'cub+183_182'
     loss_type = 'ProxyNCA_prob_orig'
     config_name = 'cub'
     sz_embedding = 512
     seed = 0
 
     DF = DistinguishFeat(dataset_name, seed, loss_type, config_name, sz_embedding)
-    eigenvec = DF.get_distinguish_feat(196, 192)
-    DF.CAM([196, 192], eigenvec)
+    eigenvec = DF.get_distinguish_feat(143, 145)
+    DF.CAM([143, 145], eigenvec)
 #

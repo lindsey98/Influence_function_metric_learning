@@ -4,4 +4,4 @@ scipy
 tqdm
 faiss-cpu
 h5py
-
+torchcam

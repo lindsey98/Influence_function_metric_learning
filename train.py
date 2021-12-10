@@ -28,11 +28,11 @@ parser.add_argument('--init_eval', default=False, action='store_true')
 parser.add_argument('--apex', default=False, action='store_true')
 parser.add_argument('--warmup_k', default=5, type=int)
 
-parser.add_argument('--dataset', default='cub+116_114')
-parser.add_argument('--seed', default=0, type=int)
+parser.add_argument('--dataset', default='cars+139_137')
+parser.add_argument('--seed', default=3, type=int)
 parser.add_argument('--eval_nmi', default=True, action='store_true')
 parser.add_argument('--embedding-size', default = 512, type=int, dest = 'sz_embedding')
-parser.add_argument('--config', default='config/cub.json')
+parser.add_argument('--config', default='config/cars.json')
 parser.add_argument('--mode', default='trainval', choices=['train', 'trainval',
                                                            'test', 'testontrain'],
                     help='train with train data or train with trainval')

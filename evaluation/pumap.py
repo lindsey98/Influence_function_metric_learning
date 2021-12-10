@@ -29,6 +29,7 @@ def prepare_data(data_name='cub',
                  config_name='',
                  root='dvi_data_cub200/',
                  batch_size=64,
+                 test_resize=True,
                  save=False):
     '''
         Prepare dataloader
@@ -60,25 +61,44 @@ def prepare_data(data_name='cub',
         batch_size=batch_size,
     )
 
-    dl_ev = torch.utils.data.DataLoader(
-        dataset.load(
-            name=data_name,
-            root=dataset_config['dataset'][data_name]['root'],
-            source=dataset_config['dataset'][data_name]['source'],
-            classes=dataset_config['dataset'][data_name]['classes']['eval'],
-            transform=transforms.Compose([
-                    RGBAToRGB(),
-                    transforms.ToTensor(),
-                    transforms.Normalize(
-                        mean=[0.485, 0.456, 0.406],
-                        std=[0.229, 0.224, 0.225],
-                    )
-                ])
-        ),
-        batch_size=batch_size,
-        shuffle=False,
-        num_workers=0,
-    )
+    if not test_resize:
+        # use this dataloader if you want to visualize (without resizing and cropping)
+        dl_ev = torch.utils.data.DataLoader(
+            dataset.load(
+                name=data_name,
+                root=dataset_config['dataset'][data_name]['root'],
+                source=dataset_config['dataset'][data_name]['source'],
+                classes=dataset_config['dataset'][data_name]['classes']['eval'],
+                transform=transforms.Compose([
+                        RGBAToRGB(),
+                        transforms.ToTensor(),
+                        transforms.Normalize(
+                            mean=[0.485, 0.456, 0.406],
+                            std=[0.229, 0.224, 0.225],
+                        )
+                    ])
+            ),
+            batch_size=batch_size,
+            shuffle=False,
+            num_workers=0,
+        )
+
+    else:
+        dl_ev = torch.utils.data.DataLoader(
+            dataset.load(
+                name=data_name,
+                root=dataset_config['dataset'][data_name]['root'],
+                source=dataset_config['dataset'][data_name]['source'],
+                classes=dataset_config['dataset'][data_name]['classes']['eval'],
+                transform=dataset.utils.make_transform(
+                    **dataset_config[transform_key],
+                    is_train=False
+                )
+            ),
+            batch_size=batch_size,
+            shuffle=False,
+            num_workers=0,
+        )
 
     if save:
         training_x, training_y = torch.tensor([]), torch.tensor([])
