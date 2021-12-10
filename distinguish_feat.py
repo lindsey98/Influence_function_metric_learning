@@ -195,25 +195,26 @@ class DistinguishFeat():
                 # Retrieve the CAM by passing the class index and the model output
                 activation_map = cam_extractor(out, eigenvector)
                 # Resize the CAM and overlay it
-                img = read_image(self.dl_ev.dataset.im_paths[indices[0]])
-                result = overlay_mask(to_pil_image(img), to_pil_image(activation_map[0].detach().cpu(), mode='F'), alpha=0.5)
+                img = to_pil_image(read_image(self.dl_ev.dataset.im_paths[indices[0]]))
+                result = overlay_mask(img, to_pil_image(activation_map[0].detach().cpu(), mode='F'), alpha=0.5)
+
                 # Display it
                 plt.imshow(result); plt.axis('off'); plt.tight_layout()
-                plt.show()
-                # plt.savefig('./CAM/Confusion_{}_{}/{}/{}'.format(interested_cls[0], interested_cls[1],
-                #                                                  y.item(),
-                #                                                  os.path.basename(self.dl_ev.dataset.im_paths[indices[0]]))
-                #             )
+                # plt.show()
+                plt.savefig('./CAM/Confusion_{}_{}/{}/{}'.format(interested_cls[0], interested_cls[1],
+                                                                 y.item(),
+                                                                 os.path.basename(self.dl_ev.dataset.im_paths[indices[0]]))
+                            )
 
 
 if __name__ == '__main__':
-    dataset_name = 'cub+172_178'
+    dataset_name = 'cub+196_192'
     loss_type = 'ProxyNCA_prob_orig'
     config_name = 'cub'
     sz_embedding = 512
     seed = 0
 
     DF = DistinguishFeat(dataset_name, seed, loss_type, config_name, sz_embedding)
-    eigenvec = DF.get_distinguish_feat(172, 178)
-    DF.CAM([172, 178], eigenvec)
+    eigenvec = DF.get_distinguish_feat(196, 192)
+    DF.CAM([196, 192], eigenvec)
 #

@@ -41,6 +41,26 @@
             "source": "str('mnt/datasets/CUB_200_2011')",
             "root":"str('mnt/datasets/CUB_200_2011')"
         },
+        "cub+196_192": {
+            "classes": {
+                "train": "range(0, 50)",
+                "val": "range(50,100)",
+                "trainval":"list(range(0,100)) + [196, 192]",
+                "eval": "range(100, 200)"
+            },
+            "source": "str('mnt/datasets/CUB_200_2011')",
+            "root":"str('mnt/datasets/CUB_200_2011')"
+        },
+        "cub+116_114": {
+            "classes": {
+                "train": "range(0, 50)",
+                "val": "range(50,100)",
+                "trainval":"list(range(0,100)) + [116, 114]",
+                "eval": "range(100, 200)"
+            },
+            "source": "str('mnt/datasets/CUB_200_2011')",
+            "root":"str('mnt/datasets/CUB_200_2011')"
+        },
         "cars": {
             "classes": {
                 "train": "range(0, 49)",

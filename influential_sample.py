@@ -306,7 +306,7 @@ class Influential_Sample():
 
 if __name__ == '__main__':
 
-    dataset_name = 'cub+178_172'
+    dataset_name = 'cub+116_114'
     loss_type = 'ProxyNCA_prob_orig'
     config_name = 'cub'
     sz_embedding = 512
@@ -349,7 +349,7 @@ if __name__ == '__main__':
     # IS.get_nearest_train_class(feat_collect)
 
     '''Other: get t statistic for two specific classes'''
-    i = 172; j = 178
+    i = 116; j = 114
     feat_cls1 = IS.testing_embedding[IS.testing_label == i]
     feat_cls2 = IS.testing_embedding[IS.testing_label == j]
     confusion = calc_confusion(feat_cls1, feat_cls2, sqrt=True)  # get t instead of t^2

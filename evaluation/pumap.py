@@ -21,6 +21,8 @@ import evaluation
 from torchvision.io.image import read_image
 from torchvision.transforms.functional import normalize, resize, to_pil_image
 import scipy
+from torchvision import transforms
+from dataset.utils import RGBAToRGB
 os.environ['CUDA_VISIBLE_DEVICES'] = "0"
 
 def prepare_data(data_name='cub',
@@ -64,15 +66,18 @@ def prepare_data(data_name='cub',
             root=dataset_config['dataset'][data_name]['root'],
             source=dataset_config['dataset'][data_name]['source'],
             classes=dataset_config['dataset'][data_name]['classes']['eval'],
-            transform=dataset.utils.make_transform(
-                **dataset_config[transform_key],
-                is_train=False
-            )
+            transform=transforms.Compose([
+                    RGBAToRGB(),
+                    transforms.ToTensor(),
+                    transforms.Normalize(
+                        mean=[0.485, 0.456, 0.406],
+                        std=[0.229, 0.224, 0.225],
+                    )
+                ])
         ),
         batch_size=batch_size,
         shuffle=False,
         num_workers=0,
-
     )
 
     if save:

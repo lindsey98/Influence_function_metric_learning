@@ -18,6 +18,8 @@ _type = {
     'cub+143_145': CUBirds,
     'cub+172_178': CUBirds,
     'cub+144_142': CUBirds,
+    'cub+196_192': CUBirds,
+    'cub+116_114': CUBirds,
     'cub_class' : CUBirds_class,
     'sop': SOProducts,
     'inshop': InShop,
