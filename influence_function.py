@@ -48,6 +48,27 @@ def grad_alltrain(model, criterion, dl_tr, start=None, batch=None):
             if ct - start >= batch - 1: break # support processing a subset of training only
     return grad_all
 
+def grad_train_onecls(model, criterion, dl_tr, cls):
+    '''
+        Get gradient for one training class
+        Arguments:
+            model:
+            criterion: loss
+            dl_tr: train dataloader
+        Returns:
+            grad_all: list of shape (N_tr, |\theta|)
+    '''
+    grad_all = []
+    for ct, (x, t, _) in tqdm(enumerate(dl_tr)):
+        if t.item() == cls:
+            grad_this = jacobian(x, t, model, criterion)
+            grad_this = [g.detach().cpu() for g in grad_this]
+            if len(grad_all):
+                grad_all = [x+y for x, y in zip(grad_this, grad_all)]
+            else:
+                grad_all = grad_this
+    return grad_all
+
 def calc_intravar(feat):
     '''
         Get intra-class variance (unbiased estimate)
@@ -139,7 +160,6 @@ def grad_intravar(model, dl_ev, cls):
     params = model.module[-1].weight # last linear layer
     grad_intravar2params = list(grad(intra_var, params))
     return grad_intravar2params
-
 
 def inverse_hessian_product(model, criterion, v, dl_tr,
                             scale=500, damping=0.01):

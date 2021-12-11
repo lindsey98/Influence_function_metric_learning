@@ -21,7 +21,7 @@ from evaluation.saliency_map import SmoothGrad, as_gray_image
 from PIL import Image
 import scipy
 from torch.autograd import Variable
-from influence_function import inverse_hessian_product, grad_confusion, grad_alltrain, calc_confusion, calc_influential_func, calc_intravar, grad_intravar
+from influence_function import inverse_hessian_product, grad_confusion, grad_alltrain, grad_train_onecls, calc_confusion, calc_influential_func, calc_intravar, grad_intravar
 import pickle
 from scipy.stats import t
 from utils import predict_batchwise
@@ -31,7 +31,7 @@ class InfluentialSample():
     def __init__(self, dataset_name, seed, loss_type, config_name,
                  measure, test_resize=True, sz_embedding=512):
 
-        self.folder = 'dvi_data_{}_{}_loss{}/'.format(dataset_name, seed, loss_type)
+        self.folder = 'models/dvi_data_{}_{}_loss{}/'.format(dataset_name, seed, loss_type)
         self.model_dir = '{}/ResNet_{}_Model'.format(self.folder, sz_embedding)
         self.measure = measure
         self.config_name = config_name
@@ -153,10 +153,11 @@ class InfluentialSample():
         torch.save(testing_embedding, '{}/Epoch_{}/testing_embeddings.pth'.format(self.model_dir, 40))
         torch.save(testing_label, '{}/Epoch_{}/testing_labels.pth'.format(self.model_dir, 40))
 
-    def cache_grad_loss_train(self, start=None, batch=None, suffix=''): # FIXMe: get gradient in batch
-        grad = grad_alltrain(self.model, self.criterion, self.dl_tr, start, batch)
-        with open("Influential_data/{}_{}_grad4train{}.pkl".format(self.dataset_name, self.loss_type, suffix), "wb") as fp:  # Pickling
-            pickle.dump(grad, fp)
+    def cache_grad_loss_train(self): # FIXMe: get gradient in batch
+        for cls in self.dl_tr.dataset.classes:
+            grad = grad_train_onecls(self.model, self.criterion, self.dl_tr, cls)
+            with open("Influential_data/{}_{}_grad4traincls_{}.pkl".format(self.dataset_name, self.loss_type, cls), "wb") as fp:  # Pickling
+                pickle.dump(grad, fp)
 
     def cache_grad_confusion_test(self, confusion_class_pairs):
         torch.cuda.empty_cache()
@@ -169,15 +170,15 @@ class InfluentialSample():
             v = grad_intravar(self.model, self.dl_ev, cls)
             torch.save(v, "Influential_data/{}_{}_intravar_grad_test_{}.pth".format(self.dataset_name, self.loss_type, cls))
 
-    def cache_ihvp(self, cls):
-        if self.measure == 'confusion':
-            v = torch.load("Influential_data/{}_{}_confusion_grad_test_{}_{}.pth".format(self.dataset_name, self.loss_type, cls[0], cls[1]))
-            inverse_hvp = inverse_hessian_product(self.model, self.criterion, v, self.dl_tr)
-            torch.save(inverse_hvp, "Influential_data/{}_{}_inverse_hvp_{}_{}.pth".format(self.dataset_name, self.loss_type, cls[0], cls[1]))
-        else:
-            v = torch.load("Influential_data/{}_{}_intravar_grad_test_{}.pth".format(self.dataset_name, self.loss_type, cls))
-            inverse_hvp = inverse_hessian_product(self.model, self.criterion, v, self.dl_tr)
-            torch.save(inverse_hvp, "Influential_data/{}_{}_inverse_hvp_{}.pth".format(self.dataset_name, self.loss_type, cls))
+    # def cache_ihvp(self, cls):
+    #     if self.measure == 'confusion':
+    #         v = torch.load("Influential_data/{}_{}_confusion_grad_test_{}_{}.pth".format(self.dataset_name, self.loss_type, cls[0], cls[1]))
+    #         inverse_hvp = inverse_hessian_product(self.model, self.criterion, v, self.dl_tr)
+    #         torch.save(inverse_hvp, "Influential_data/{}_{}_inverse_hvp_{}_{}.pth".format(self.dataset_name, self.loss_type, cls[0], cls[1]))
+    #     else:
+    #         v = torch.load("Influential_data/{}_{}_intravar_grad_test_{}.pth".format(self.dataset_name, self.loss_type, cls))
+    #         inverse_hvp = inverse_hessian_product(self.model, self.criterion, v, self.dl_tr)
+    #         torch.save(inverse_hvp, "Influential_data/{}_{}_inverse_hvp_{}.pth".format(self.dataset_name, self.loss_type, cls))
 
     def run(self, pair_idx):
         if self.measure == 'confusion':
@@ -245,17 +246,17 @@ class InfluentialSample():
 
 if __name__ == '__main__':
 
-    dataset_name = 'inshop+7403_5589'
+    dataset_name = 'cub'
     loss_type = 'ProxyNCA_prob_orig'
-    config_name = 'inshop'
+    config_name = 'cub'
     sz_embedding = 512
-    seed = 4
+    seed = 0
     measure = 'confusion'
 
-    IS = InfluentialSample(dataset_name, seed, loss_type, config_name, measure, sz_embedding)
+    IS = InfluentialSample(dataset_name, seed, loss_type, config_name, measure, True, sz_embedding)
     '''Step 1: Cache loss gradient to parameters for all training'''
-    # IS.cache_grad_loss_train()
-    # exit()
+    IS.cache_grad_loss_train()
+    exit()
 
     '''Step 2: Cache all confusion gradient to parameters'''
     # confusion_class_pairs = IS.get_confusion_class_pairs()
@@ -288,11 +289,11 @@ if __name__ == '__main__':
     # IS.get_nearest_train_class(feat_collect)
 
     '''Other: get t statistic for two specific classes'''
-    i = 7403; j = 5589
-    feat_cls1 = IS.testing_embedding[IS.testing_label == i]
-    feat_cls2 = IS.testing_embedding[IS.testing_label == j]
-    confusion = calc_confusion(feat_cls1, feat_cls2, sqrt=True)  # get t instead of t^2
-    print(confusion.item())
+    # i = 7403; j = 5589
+    # feat_cls1 = IS.testing_embedding[IS.testing_label == i]
+    # feat_cls2 = IS.testing_embedding[IS.testing_label == j]
+    # confusion = calc_confusion(feat_cls1, feat_cls2, sqrt=True)  # get t instead of t^2
+    # print(confusion.item())
 
     '''Other: get intra-class variance for a specific class'''
     # i = 102

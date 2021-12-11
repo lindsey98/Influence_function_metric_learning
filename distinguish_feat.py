@@ -25,7 +25,7 @@ import pickle
 from scipy.stats import t
 from utils import predict_batchwise
 from typing import Optional, List, Union, Tuple, Any
-from influentialsample import InfluentialSample
+from influential_sample import InfluentialSample
 os.environ['CUDA_VISIBLE_DEVICES'] = "0"
 
 class GradCAMCustomize(GradCAMpp):
