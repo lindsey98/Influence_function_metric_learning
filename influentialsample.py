@@ -27,18 +27,19 @@ from scipy.stats import t
 from utils import predict_batchwise
 os.environ['CUDA_VISIBLE_DEVICES'] = "1"
 
-class Influential_Sample():
+class InfluentialSample():
     def __init__(self, dataset_name, seed, loss_type, config_name,
-                 measure, sz_embedding=512):
+                 measure, test_resize=True, sz_embedding=512):
 
         self.folder = 'dvi_data_{}_{}_loss{}/'.format(dataset_name, seed, loss_type)
         self.model_dir = '{}/ResNet_{}_Model'.format(self.folder, sz_embedding)
         self.measure = measure
         self.config_name = config_name
-        assert self.measure in ['confusion', 'confusion_abb', 'intravar']
+        assert self.measure in ['confusion', 'intravar']
 
         # load data
-        self.dl_tr, self.dl_ev = prepare_data(data_name=dataset_name, config_name=self.config_name, root=self.folder, save=False, batch_size=1)
+        self.dl_tr, self.dl_ev = prepare_data(data_name=dataset_name, config_name=self.config_name, root=self.folder, save=False, batch_size=1,
+                                              test_resize=test_resize)
         self.dataset_name = dataset_name
         self.seed = seed
         self.loss_type = loss_type
@@ -227,6 +228,8 @@ class Influential_Sample():
     def viz_2cls(self, top_bottomk, dataloader, label, cls1, cls2):
         ind_cls1 = np.where(label.detach().cpu().numpy() == cls1)[0]
         ind_cls2 = np.where(label.detach().cpu().numpy() == cls2)[0]
+
+        top_bottomk = min(top_bottomk, len(ind_cls1), len(ind_cls2))
         for i in range(top_bottomk):
             plt.subplot(2, top_bottomk, i + 1)
             img = read_image(dataloader.dataset.im_paths[ind_cls1[i]])
@@ -242,14 +245,14 @@ class Influential_Sample():
 
 if __name__ == '__main__':
 
-    dataset_name = 'cars+183_182'
+    dataset_name = 'inshop+7403_5589'
     loss_type = 'ProxyNCA_prob_orig'
-    config_name = 'cars'
+    config_name = 'inshop'
     sz_embedding = 512
-    seed = 3
+    seed = 4
     measure = 'confusion'
 
-    IS = Influential_Sample(dataset_name, seed, loss_type, config_name, measure, sz_embedding)
+    IS = InfluentialSample(dataset_name, seed, loss_type, config_name, measure, sz_embedding)
     '''Step 1: Cache loss gradient to parameters for all training'''
     # IS.cache_grad_loss_train()
     # exit()
@@ -285,7 +288,7 @@ if __name__ == '__main__':
     # IS.get_nearest_train_class(feat_collect)
 
     '''Other: get t statistic for two specific classes'''
-    i = 183; j = 182
+    i = 7403; j = 5589
     feat_cls1 = IS.testing_embedding[IS.testing_label == i]
     feat_cls2 = IS.testing_embedding[IS.testing_label == j]
     confusion = calc_confusion(feat_cls1, feat_cls2, sqrt=True)  # get t instead of t^2
@@ -296,6 +299,10 @@ if __name__ == '__main__':
     # feat_cls = IS.testing_embedding[IS.testing_label == i]
     # intra_var = calc_intravar(feat_cls)
     # print(intra_var.item())
+
+    '''Other: visualize two specific classes'''
+    # IS.viz_2cls(5, IS.dl_ev, IS.testing_label, 21626, 15606 )
+    # ()
 
 
 

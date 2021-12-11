@@ -1,8 +1,8 @@
 
 from .cars import Cars, Cars_hdf5
 from .cub import CUBirds, CUBirds_hdf5, CUBirds_class, CUBirds_hdf5_alt, CUBirds_hdf5_bb
-from .sop import SOProducts, SOProducts_hdf5
-from .inshop import InShop, InShop_hdf5
+from .sop import SOProducts, SOProducts_hdf5, SOProductsMod
+from .inshop import InShop, InShop_hdf5, InShopAll
 from .logo2k import Logo2k, Logo2k_class
 # from .vggface import VggFace
 from . import utils
@@ -27,7 +27,18 @@ _type = {
     'cub+116_114': CUBirds,
     'cub_class' : CUBirds_class,
     'sop': SOProducts,
+    'sop+12659_12660': SOProductsMod,
+    'sop+11419_15016': SOProductsMod,
+    'sop+11855_11756': SOProductsMod,
+    'sop+11835_11842': SOProductsMod,
+    'sop+21626_15606': SOProductsMod,
     'inshop': InShop,
+    'inshop+6070_7581': InShop,
+    'inshop+5077_5589': InShop,
+    'inshop+4880_5589': InShop,
+    'inshop+7841_5589': InShop,
+    'inshop+7403_5589': InShop,
+    'inshop_all': InShopAll
 }
 
 

@@ -61,15 +61,55 @@ def prepare_data(data_name='cub',
         batch_size=batch_size,
     )
 
-    if not test_resize:
-        # use this dataloader if you want to visualize (without resizing and cropping)
-        dl_ev = torch.utils.data.DataLoader(
-            dataset.load(
-                name=data_name,
-                root=dataset_config['dataset'][data_name]['root'],
-                source=dataset_config['dataset'][data_name]['source'],
-                classes=dataset_config['dataset'][data_name]['classes']['eval'],
-                transform=transforms.Compose([
+    if 'inshop' not in data_name:
+        if not test_resize:
+            # use this dataloader if you want to visualize (without resizing and cropping)
+            dl_ev = torch.utils.data.DataLoader(
+                dataset.load(
+                    name=data_name,
+                    root=dataset_config['dataset'][data_name]['root'],
+                    source=dataset_config['dataset'][data_name]['source'],
+                    classes=dataset_config['dataset'][data_name]['classes']['eval'],
+                    transform=transforms.Compose([
+                            RGBAToRGB(),
+                            transforms.ToTensor(),
+                            transforms.Normalize(
+                                mean=[0.485, 0.456, 0.406],
+                                std=[0.229, 0.224, 0.225],
+                            )
+                        ])
+                ),
+                batch_size=batch_size,
+                shuffle=False,
+                num_workers=0,
+            )
+
+        else:
+            dl_ev = torch.utils.data.DataLoader(
+                dataset.load(
+                    name=data_name,
+                    root=dataset_config['dataset'][data_name]['root'],
+                    source=dataset_config['dataset'][data_name]['source'],
+                    classes=dataset_config['dataset'][data_name]['classes']['eval'],
+                    transform=dataset.utils.make_transform(
+                        **dataset_config[transform_key],
+                        is_train=False
+                    )
+                ),
+                batch_size=batch_size,
+                shuffle=False,
+                num_workers=0,
+            )
+    else:
+        if not test_resize:
+            # use this dataloader if you want to visualize (without resizing and cropping)
+            dl_ev = torch.utils.data.DataLoader(
+                dataset.load(
+                    name='inshop_all',
+                    root=dataset_config['dataset']['inshop_all']['root'],
+                    source=dataset_config['dataset']['inshop_all']['source'],
+                    classes=dataset_config['dataset']['inshop_all']['classes']['eval'],
+                    transform=transforms.Compose([
                         RGBAToRGB(),
                         transforms.ToTensor(),
                         transforms.Normalize(
@@ -77,29 +117,28 @@ def prepare_data(data_name='cub',
                             std=[0.229, 0.224, 0.225],
                         )
                     ])
-            ),
-            batch_size=batch_size,
-            shuffle=False,
-            num_workers=0,
-        )
+                ),
+                batch_size=batch_size,
+                shuffle=False,
+                num_workers=0,
+            )
 
-    else:
-        dl_ev = torch.utils.data.DataLoader(
-            dataset.load(
-                name=data_name,
-                root=dataset_config['dataset'][data_name]['root'],
-                source=dataset_config['dataset'][data_name]['source'],
-                classes=dataset_config['dataset'][data_name]['classes']['eval'],
-                transform=dataset.utils.make_transform(
-                    **dataset_config[transform_key],
-                    is_train=False
-                )
-            ),
-            batch_size=batch_size,
-            shuffle=False,
-            num_workers=0,
-        )
-
+        else:
+            dl_ev = torch.utils.data.DataLoader(
+                dataset.load(
+                    name='inshop_all',
+                    root=dataset_config['dataset']['inshop_all']['root'],
+                    source=dataset_config['dataset']['inshop_all']['source'],
+                    classes=dataset_config['dataset']['inshop_all']['classes']['eval'],
+                    transform=dataset.utils.make_transform(
+                        **dataset_config[transform_key],
+                        is_train=False
+                    )
+                ),
+                batch_size=batch_size,
+                shuffle=False,
+                num_workers=0,
+            )
     if save:
         training_x, training_y = torch.tensor([]), torch.tensor([])
         for ct, (x, y, _) in tqdm(enumerate(dl_tr_noshuffle)):  # FIXME: memory error

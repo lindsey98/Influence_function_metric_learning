@@ -42,6 +42,31 @@ class SOProducts(BaseDatasetMod):
             else:
                 assert nb_images == type(self).nb_test_all
 
+class SOProductsMod(BaseDatasetMod):
+    def __init__(self, root, source, classes, transform=None):
+        BaseDatasetMod.__init__(self, root, source, classes, transform)
+        index = 0; nb_images = 0
+        with open(os.path.join(root, 'Ebay_{}.txt'.format('train'))) as f:
+            f.readline()
+            for (image_id, class_id, _, path) in map(str.split, f):
+                nb_images += 1
+                if int(class_id) - 1 in classes:
+                    self.im_paths.append(os.path.join(root, path))
+                    self.ys.append(int(class_id) - 1)
+                    self.I += [index]
+                    index += 1
+
+        with open(os.path.join(root, 'Ebay_{}.txt'.format('test'))) as f:
+            f.readline()
+            for (image_id, class_id, _, path) in map(str.split, f):
+                nb_images += 1
+                if int(class_id) - 1 in classes:
+                    self.im_paths.append(os.path.join(root, path))
+                    self.ys.append(int(class_id) - 1)
+                    self.I += [index]
+                    index += 1
+
+
 class SOProducts_hdf5(BaseDataset_hdf5):
     def __init__(self, root, source, classes, transform = None):
         BaseDataset_hdf5.__init__(self, root, source, classes, transform)

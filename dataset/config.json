@@ -132,6 +132,56 @@
                 "eval": "range(11318, 22634)"
             }
         },
+        "sop+12659_12660": {
+            "source": "str('./mnt/datasets/sop')",
+            "root": "str('./mnt/datasets/sop')",
+            "classes": {
+                "train": "range(0, 5659)",
+                "val": "range(5659, 11318)",
+                "trainval": "list(range(0,11318)) + [12659, 12660]",
+                "eval": "range(11318, 22634)"
+            }
+        },
+        "sop+11419_15016": {
+            "source": "str('./mnt/datasets/sop')",
+            "root": "str('./mnt/datasets/sop')",
+            "classes": {
+                "train": "range(0, 5659)",
+                "val": "range(5659, 11318)",
+                "trainval": "list(range(0,11318)) + [11419, 15016]",
+                "eval": "range(11318, 22634)"
+            }
+        },
+        "sop+11855_11756": {
+            "source": "str('./mnt/datasets/sop')",
+            "root": "str('./mnt/datasets/sop')",
+            "classes": {
+                "train": "range(0, 5659)",
+                "val": "range(5659, 11318)",
+                "trainval": "list(range(0,11318)) + [11855, 11756]",
+                "eval": "range(11318, 22634)"
+            }
+        },
+        "sop+11835_11842": {
+            "source": "str('./mnt/datasets/sop')",
+            "root": "str('./mnt/datasets/sop')",
+            "classes": {
+                "train": "range(0, 5659)",
+                "val": "range(5659, 11318)",
+                "trainval": "list(range(0,11318)) + [11835, 11842]",
+                "eval": "range(11318, 22634)"
+            }
+        },
+        "sop+21626_15606": {
+            "source": "str('./mnt/datasets/sop')",
+            "root": "str('./mnt/datasets/sop')",
+            "classes": {
+                "train": "range(0, 5659)",
+                "val": "range(5659, 11318)",
+                "trainval": "list(range(0,11318)) + [21626, 15606]",
+                "eval": "range(11318, 22634)"
+            }
+        },
         "inshop": {
             "source": "str('./mnt/datasets/inshop')",
             "root": "str('./mnt/datasets/inshop')",
@@ -140,6 +190,66 @@
                 "val": "range(1998, 3997)",
                 "trainval": "range(0, 3997)",
                 "eval": "range(0, 3985)"
+            }
+        },
+        "inshop+6070_7581": {
+            "source": "str('./mnt/datasets/inshop')",
+            "root": "str('./mnt/datasets/inshop')",
+            "classes": {
+                "train": "range(0, 1998)",
+                "val": "range(1998, 3997)",
+                "trainval": "list(range(0,3997)) + [6070, 7581]",
+                "eval": "range(3997, 3997+3985)"
+            }
+        },
+        "inshop+5077_5589": {
+            "source": "str('./mnt/datasets/inshop')",
+            "root": "str('./mnt/datasets/inshop')",
+            "classes": {
+                "train": "range(0, 1998)",
+                "val": "range(1998, 3997)",
+                "trainval": "list(range(0,3997)) + [5077, 5589]",
+                "eval": "range(3997, 3997+3985)"
+            }
+        },
+        "inshop+4880_5589": {
+            "source": "str('./mnt/datasets/inshop')",
+            "root": "str('./mnt/datasets/inshop')",
+            "classes": {
+                "train": "range(0, 1998)",
+                "val": "range(1998, 3997)",
+                "trainval": "list(range(0,3997)) + [4880, 5589]",
+                "eval": "range(3997, 3997+3985)"
+            }
+        },
+        "inshop+7841_5589": {
+            "source": "str('./mnt/datasets/inshop')",
+            "root": "str('./mnt/datasets/inshop')",
+            "classes": {
+                "train": "range(0, 1998)",
+                "val": "range(1998, 3997)",
+                "trainval": "list(range(0, 3997)) + [7841, 5589]",
+                "eval": "range(3997, 3997+3985)"
+            }
+        },
+        "inshop+7403_5589": {
+            "source": "str('./mnt/datasets/inshop')",
+            "root": "str('./mnt/datasets/inshop')",
+            "classes": {
+                "train": "range(0, 1998)",
+                "val": "range(1998, 3997)",
+                "trainval": "list(range(0, 3997)) + [7403, 5589]",
+                "eval": "range(3997, 3997+3985)"
+            }
+        },
+        "inshop_all": {
+            "source": "str('./mnt/datasets/inshop')",
+            "root": "str('./mnt/datasets/inshop')",
+            "classes": {
+                "train": "range(0, 1998)",
+                "val": "range(1998, 3997)",
+                "trainval": "range(0, 3997)",
+                "eval": "range(3997, 3997+3985)"
             }
         }
     },

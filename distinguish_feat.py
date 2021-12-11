@@ -25,6 +25,7 @@ import pickle
 from scipy.stats import t
 from utils import predict_batchwise
 from typing import Optional, List, Union, Tuple, Any
+from influentialsample import InfluentialSample
 os.environ['CUDA_VISIBLE_DEVICES'] = "0"
 
 class GradCAMCustomize(GradCAMpp):
@@ -103,66 +104,10 @@ class GradCAMCustomize(GradCAMpp):
         return self.compute_cams(scores, eigenvec, normalized)
 
 
-class DistinguishFeat():
+class DistinguishFeat(InfluentialSample):
     def __init__(self, dataset_name, seed, loss_type, config_name, sz_embedding=512):
-
-        self.folder = 'dvi_data_{}_{}_loss{}/'.format(dataset_name, seed, loss_type)
-        self.model_dir = '{}/ResNet_{}_Model'.format(self.folder, sz_embedding)
-
-        # load data
-        self.dl_tr, self.dl_ev = prepare_data(data_name=dataset_name, config_name=config_name, root=self.folder, save=False, batch_size=1, test_resize=False)
-        self.dataset_name = dataset_name
-        self.seed = seed
-        self.loss_type = loss_type
-        self.sz_embedding = sz_embedding
-        self.criterion = self._load_criterion()
-        self.model = self._load_model()
-        self.train_embedding, self.train_label, self.testing_embedding, self.testing_label = self._load_data()
-        pass
-
-    def _load_model(self):
-        feat = Feat_resnet50_max_n()
-        emb = torch.nn.Linear(2048, self.sz_embedding)
-        model = torch.nn.Sequential(feat, emb)
-        model = nn.DataParallel(model)
-        model.cuda()
-        model.load_state_dict(torch.load('{}/Epoch_{}/{}_{}_trainval_{}_{}.pth'.format(self.model_dir, 40, self.dataset_name, self.dataset_name, self.sz_embedding, self.seed)))
-        return model
-
-    def _load_criterion(self):
-        proxies = torch.load('{}/Epoch_{}/proxy.pth'.format(self.model_dir, 40), map_location='cpu')['proxies'].detach()
-        if 'ProxyNCA_prob_orig' in self.loss_type:
-            criterion = loss.ProxyNCA_prob_orig(nb_classes=self.dl_tr.dataset.nb_classes(), sz_embed=self.sz_embedding, scale=3)
-        elif 'ProxyNCA_pfix' in self.loss_type:
-            criterion = loss.ProxyNCA_pfix(nb_classes=self.dl_tr.dataset.nb_classes(), sz_embed=self.sz_embedding, scale=3)
-        elif 'ProxyAnchor' in self.loss_type:
-            criterion = loss.Proxy_Anchor(nb_classes=self.dl_tr.dataset.nb_classes(), sz_embed=self.sz_embedding)
-        elif 'ProxyAnchor_pfix' in self.loss_type:
-            criterion = loss.ProxyAnchor_pfix(nb_classes=self.dl_tr.dataset.nb_classes(), sz_embed=self.sz_embedding)
-        else:
-            raise NotImplementedError
-        criterion.proxies.data = proxies
-        criterion.cuda()
-        return criterion
-    def cache_embedding(self):
-        embedding, label, indices = predict_batchwise(self.model, self.dl_tr)
-        torch.save(embedding, '{}/Epoch_{}/training_embeddings.pth'.format(self.model_dir, 40))
-        torch.save(label, '{}/Epoch_{}/training_labels.pth'.format(self.model_dir, 40))
-
-        testing_embedding, testing_label, testing_indices = predict_batchwise(self.model, self.dl_ev)
-        torch.save(testing_embedding, '{}/Epoch_{}/testing_embeddings.pth'.format(self.model_dir, 40))
-        torch.save(testing_label, '{}/Epoch_{}/testing_labels.pth'.format(self.model_dir, 40))
-    def _load_data(self):
-        try:
-            train_embedding = torch.load('{}/Epoch_{}/training_embeddings.pth'.format(self.model_dir, 40))  # high dimensional embedding
-        except FileNotFoundError:
-            self.cache_embedding()
-        train_embedding = torch.load('{}/Epoch_{}/training_embeddings.pth'.format(self.model_dir, 40))  # high dimensional embedding
-        train_label = torch.load('{}/Epoch_{}/training_labels.pth'.format(self.model_dir, 40))
-        testing_embedding = torch.load('{}/Epoch_{}/testing_embeddings.pth'.format(self.model_dir, 40))  # high dimensional embedding
-        testing_label = torch.load('{}/Epoch_{}/testing_labels.pth'.format(self.model_dir, 40))
-
-        return train_embedding, train_label, testing_embedding, testing_label
+        super().__init__(dataset_name, seed, loss_type, config_name,
+                         'confusion', test_resize=False, sz_embedding=512)
 
     @torch.no_grad()
     def get_distinguish_feat(self, cls1, cls2):
@@ -170,12 +115,10 @@ class DistinguishFeat():
         feat_cls1 = self.testing_embedding[self.testing_label == cls1] # (N, sz_embedding)
         feat_cls2 = self.testing_embedding[self.testing_label == cls2] # (N, sz_embedding)
         # centering
-        feat_cls1_centered = feat_cls1 - feat_cls1.mean(0).unsqueeze(0)
-        feat_cls2_centered = feat_cls2 - feat_cls2.mean(0).unsqueeze(0)
         S = torch.zeros((feat_cls1.size()[-1], feat_cls1.size()[-1])) # (sz_embed, sz_embed)
-        for i in range(len(feat_cls1_centered)):
-            for j in range(len(feat_cls2_centered)):
-                outer_prod = torch.outer(feat_cls1_centered[i]-feat_cls2_centered[j], feat_cls1_centered[i]-feat_cls2_centered[j])
+        for i in range(len(feat_cls1)):
+            for j in range(len(feat_cls2)):
+                outer_prod = torch.outer(feat_cls1[i]-feat_cls2[j], feat_cls1[i]-feat_cls2[j])
                 S += outer_prod
         v, phi = torch.eig(S, eigenvectors=True)
         first_eigenveector = phi[:, 0].float()
@@ -208,13 +151,13 @@ class DistinguishFeat():
 
 
 if __name__ == '__main__':
-    dataset_name = 'cub+183_182'
+    dataset_name = 'inshop+7403_5589'
     loss_type = 'ProxyNCA_prob_orig'
-    config_name = 'cub'
+    config_name = 'inshop'
     sz_embedding = 512
-    seed = 0
+    seed = 4
 
     DF = DistinguishFeat(dataset_name, seed, loss_type, config_name, sz_embedding)
-    eigenvec = DF.get_distinguish_feat(143, 145)
-    DF.CAM([143, 145], eigenvec)
+    eigenvec = DF.get_distinguish_feat(7403, 5589)
+    DF.CAM([7403, 5589], eigenvec)
 #
