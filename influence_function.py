@@ -134,6 +134,7 @@ def grad_confusion(model, dl_ev, cls1, cls2):
     grad_confusion2params = list(grad(confusion, params))
     return grad_confusion2params
 
+
 def grad_intravar(model, dl_ev, cls):
     '''
         Calculate class confusion or gradient of class confusion to model parameters

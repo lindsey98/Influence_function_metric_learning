@@ -2,7 +2,7 @@
 from .cars import Cars, Cars_hdf5
 from .cub import CUBirds, CUBirds_hdf5, CUBirds_class, CUBirds_hdf5_alt, CUBirds_hdf5_bb
 from .sop import SOProducts, SOProducts_hdf5, SOProductsMod
-from .inshop import InShop, InShop_hdf5, InShopAll
+from .inshop import InShop, InShop_hdf5
 from .logo2k import Logo2k, Logo2k_class
 # from .vggface import VggFace
 from . import utils
@@ -38,7 +38,7 @@ _type = {
     'inshop+4880_5589': InShop,
     'inshop+7841_5589': InShop,
     'inshop+7403_5589': InShop,
-    'inshop_all': InShopAll
+    # 'inshop_all': InShopAll
 }
 
 

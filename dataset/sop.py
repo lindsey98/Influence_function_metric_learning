@@ -28,14 +28,16 @@ class SOProducts(BaseDatasetMod):
             f.readline()
             index = 0
             nb_images = 0
+            self.super_ys = []
 
-            for (image_id, class_id, _, path) in map(str.split, f):
+            for (image_id, class_id, super_class_id, path) in map(str.split, f):
                 nb_images += 1
                 if int(class_id) - 1 in classes:
                     self.im_paths.append(os.path.join(root, path))
                     self.ys.append(int(class_id) - 1)
                     self.I += [index]
                     index += 1
+                    self.super_ys.append(int(super_class_id) - 1)
 
             if train:
                 assert nb_images == type(self).nb_train_all
@@ -46,25 +48,28 @@ class SOProductsMod(BaseDatasetMod):
     def __init__(self, root, source, classes, transform=None):
         BaseDatasetMod.__init__(self, root, source, classes, transform)
         index = 0; nb_images = 0
+        self.super_ys = []
         with open(os.path.join(root, 'Ebay_{}.txt'.format('train'))) as f:
             f.readline()
-            for (image_id, class_id, _, path) in map(str.split, f):
+            for (image_id, class_id, super_class_id, path) in map(str.split, f):
                 nb_images += 1
                 if int(class_id) - 1 in classes:
                     self.im_paths.append(os.path.join(root, path))
                     self.ys.append(int(class_id) - 1)
                     self.I += [index]
                     index += 1
+                    self.super_ys.append(int(super_class_id) - 1)
 
         with open(os.path.join(root, 'Ebay_{}.txt'.format('test'))) as f:
             f.readline()
-            for (image_id, class_id, _, path) in map(str.split, f):
+            for (image_id, class_id, super_class_id, path) in map(str.split, f):
                 nb_images += 1
                 if int(class_id) - 1 in classes:
                     self.im_paths.append(os.path.join(root, path))
                     self.ys.append(int(class_id) - 1)
                     self.I += [index]
                     index += 1
+                    self.super_ys.append(int(super_class_id) - 1)
 
 
 class SOProducts_hdf5(BaseDataset_hdf5):
