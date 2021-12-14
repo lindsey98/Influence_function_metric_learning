@@ -48,26 +48,30 @@ def grad_alltrain(model, criterion, dl_tr, start=None, batch=None):
             if ct - start >= batch - 1: break # support processing a subset of training only
     return grad_all
 
-def grad_train_onecls(model, criterion, dl_tr, cls):
-    '''
-        Get gradient for one training class
-        Arguments:
-            model:
-            criterion: loss
-            dl_tr: train dataloader
-        Returns:
-            grad_all: list of shape (N_tr, |\theta|)
-    '''
-    grad_all = []
+def loss_train_onecls(model, criterion, dl_tr, cls,
+                      params_prev, params_cur):
+
+    l_prev = []
+    weight_orig = model.module[-1].weight.data
+    model.module[-1].weight.data = params_prev
     for ct, (x, t, _) in tqdm(enumerate(dl_tr)):
         if t.item() == cls:
-            grad_this = jacobian(x, t, model, criterion)
-            grad_this = [g.detach().cpu() for g in grad_this]
-            if len(grad_all):
-                grad_all = [x+y for x, y in zip(grad_this, grad_all)]
-            else:
-                grad_all = grad_this
-    return grad_all
+            x, t = x.cuda(), t.cuda()
+            m = model(x)
+            l_this = criterion(m, None, t)
+            l_prev.append(l_this.detach().cpu().item())
+
+    l_cur = []
+    model.module[-1].weight.data = params_cur
+    for ct, (x, t, _) in tqdm(enumerate(dl_tr)):
+        if t.item() == cls:
+            x, t = x.cuda(), t.cuda()
+            m = model(x)
+            l_this = criterion(m, None, t)
+            l_cur.append(l_this.detach().cpu().item())
+
+    model.module[-1].weight.data = weight_orig
+    return l_prev, l_cur
 
 def calc_intravar(feat):
     '''
@@ -224,21 +228,28 @@ def hessian_vector_product(y, x, v):
     return_grads = grad(elemwise_products, x)
     return return_grads
 
-def calc_influential_func(inverse_hvp, grad_alltrain):
-    '''
-        Calculate influential functions
-        Arguments:
-            inverse_hvp: inverse hessian vector product, of shape (|theta|,)
-            grad_alltrain: list of gradients for all training (N_train, |theta|)
-        Returns:
-            influence_values: list of influence values (N_train,)
-    '''
+# def calc_influential_func(inverse_hvp, grad_alltrain):
+#     '''
+#         Calculate influential functions
+#         Arguments:
+#             inverse_hvp: inverse hessian vector product, of shape (|theta|,)
+#             grad_alltrain: list of gradients for all training (N_train, |theta|)
+#         Returns:
+#             influence_values: list of influence values (N_train,)
+#     '''
+#     influence_values = []
+#     for grad1train in grad_alltrain:
+#         # influence = (-1) * grad(test)' H^-1 grad(train), dont forget the negative sign
+#         influence_thistrain = [(-1)*torch.dot(x.flatten().detach().cpu(), y.flatten()).item() \
+#                                for x, y in zip(inverse_hvp, grad1train)]
+#         influence_values.append(influence_thistrain)
+#     return influence_values
+
+def calc_influential_func(grad_alltrain):
     influence_values = []
     for grad1train in grad_alltrain:
-        # influence = (-1) * grad(test)' H^-1 grad(train), dont forget the negative sign
-        influence_thistrain = [(-1)*torch.dot(x.flatten().detach().cpu(), y.flatten()).item() \
-                               for x, y in zip(inverse_hvp, grad1train)]
-        influence_values.append(influence_thistrain)
+        l_prev = grad1train['l_prev']
+        l_cur = grad1train['l_cur']
+        l_diff = l_cur - l_prev
+        influence_values.append(l_diff.mean().item())
     return influence_values
-
-

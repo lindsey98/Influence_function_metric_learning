@@ -21,7 +21,7 @@ from evaluation.saliency_map import SmoothGrad, as_gray_image
 from PIL import Image
 import scipy
 from torch.autograd import Variable
-from influence_function import inverse_hessian_product, grad_confusion, grad_alltrain, grad_confusion_explicit, grad_train_onecls, calc_confusion, calc_influential_func, calc_intravar, grad_intravar
+from influence_function import *
 import pickle
 from scipy.stats import t
 from utils import predict_batchwise
@@ -73,6 +73,15 @@ class InfluentialSample():
         criterion.proxies.data = proxies
         criterion.cuda()
         return criterion
+
+    def cache_embedding(self):
+        embedding, label, indices = predict_batchwise(self.model, self.dl_tr)
+        torch.save(embedding, '{}/Epoch_{}/training_embeddings.pth'.format(self.model_dir, self.epoch))
+        torch.save(label, '{}/Epoch_{}/training_labels.pth'.format(self.model_dir, self.epoch))
+
+        testing_embedding, testing_label, testing_indices = predict_batchwise(self.model, self.dl_ev)
+        torch.save(testing_embedding, '{}/Epoch_{}/testing_embeddings.pth'.format(self.model_dir, self.epoch))
+        torch.save(testing_label, '{}/Epoch_{}/testing_labels.pth'.format(self.model_dir, self.epoch))
 
     def _load_data(self):
         try:
@@ -144,48 +153,49 @@ class InfluentialSample():
 
         return nn_train_classes
 
-    def cache_embedding(self):
-        embedding, label, indices = predict_batchwise(self.model, self.dl_tr)
-        torch.save(embedding, '{}/Epoch_{}/training_embeddings.pth'.format(self.model_dir, self.epoch))
-        torch.save(label, '{}/Epoch_{}/training_labels.pth'.format(self.model_dir, self.epoch))
 
-        testing_embedding, testing_label, testing_indices = predict_batchwise(self.model, self.dl_ev)
-        torch.save(testing_embedding, '{}/Epoch_{}/testing_embeddings.pth'.format(self.model_dir, self.epoch))
-        torch.save(testing_label, '{}/Epoch_{}/testing_labels.pth'.format(self.model_dir, self.epoch))
-
-    def cache_grad_loss_train(self):
+    def cache_grad_loss_train(self, theta, theta_hat): # TODO
         for cls in self.dl_tr.dataset.classes:
-            grad = grad_train_onecls(self.model, self.criterion, self.dl_tr, cls)
+            l_prev, l_cur = loss_train_onecls(self.model, self.criterion, self.dl_tr, cls, theta, theta_hat)
+            grad_loss = {'l_prev': l_prev, 'l_cur': l_cur}
             with open("Influential_data/{}_{}_grad4traincls_{}.pkl".format(self.dataset_name, self.loss_type, cls), "wb") as fp:  # Pickling
-                pickle.dump(grad, fp)
+                pickle.dump(grad_loss, fp)
 
-    def cache_grad_confusion_test(self, confusion_class_pairs):
-        torch.cuda.empty_cache()
-        for pair in confusion_class_pairs:
-            v = grad_confusion(self.model, self.dl_ev, pair[0], pair[1])
-            torch.save(v, "Influential_data/{}_{}_confusion_grad_test_{}_{}.pth".format(self.dataset_name, self.loss_type, pair[0], pair[1]))
-
-    def cache_grad_intravar_test(self, scatter_class):
-        for cls in scatter_class:
-            v = grad_intravar(self.model, self.dl_ev, cls)
-            torch.save(v, "Influential_data/{}_{}_intravar_grad_test_{}.pth".format(self.dataset_name, self.loss_type, cls))
-
-    def cache_ihvp(self, cls):
+    def theta_grad_descent(self, classes, n=1, lr=0.1):
+        theta_orig = self.model.module[-1].weight.data
         if self.measure == 'confusion':
-            v = torch.load("Influential_data/{}_{}_confusion_grad_test_{}_{}.pth".format(self.dataset_name, self.loss_type, cls[0], cls[1]))
-            inverse_hvp = inverse_hessian_product(self.model, self.criterion, v, self.dl_tr)
-            torch.save(inverse_hvp, "Influential_data/{}_{}_inverse_hvp_{}_{}.pth".format(self.dataset_name, self.loss_type, cls[0], cls[1]))
-        else:
-            v = torch.load("Influential_data/{}_{}_intravar_grad_test_{}.pth".format(self.dataset_name, self.loss_type, cls))
-            inverse_hvp = inverse_hessian_product(self.model, self.criterion, v, self.dl_tr)
-            torch.save(inverse_hvp, "Influential_data/{}_{}_inverse_hvp_{}.pth".format(self.dataset_name, self.loss_type, cls))
+            torch.cuda.empty_cache()
+            for pair in classes:
+                self.model.module[-1].weight.data = theta_orig
+                theta = theta_orig.clone()
+                for _ in range(n):
+                    v = grad_confusion(self.model, self.dl_ev, pair[0], pair[1]).detach() # dt2/dtheta
+                    theta_new = theta + lr * v # gradient ascent
+                    theta = theta_new
+                    self.model.module[-1].weight.data = theta
+                theta_dict = {'theta': theta_orig, 'theta_hat': theta}
+                torch.save(theta_dict, "Influential_data/{}_{}_confusion_theta_test_{}_{}.pth".format(self.dataset_name, self.loss_type,
+                                                                                                      pair[0], pair[1]))
+        if self.measure == 'intravar':
+            torch.cuda.empty_cache()
+            for cls in classes:
+                self.model.module[-1].weight.data = theta_orig
+                theta = theta_orig.clone()
+                for _ in range(n):
+                    v = grad_intravar(self.model, self.dl_ev, cls).detach() # dvar/dtheta
+                    theta_new = theta - lr * v # gradient descent
+                    theta = theta_new
+                    self.model.module[-1].weight.data = theta
+                theta_dict = {'theta': theta_orig, 'theta_hat': theta}
+                torch.save(theta_dict, "Influential_data/{}_{}_intravar_theta_test_{}.pth".format(self.dataset_name, self.loss_type,
+                                                                                                      cls))
+        self.model.module[-1].weight.data = theta_orig
 
     def run(self, pair_idx):
         if self.measure == 'confusion':
             confusion_class_pairs = self.get_confusion_class_pairs()
             pair = confusion_class_pairs[pair_idx]
             self.viz_2cls(5, self.dl_ev, self.testing_label, pair[0], pair[1])  # visualize confusion classes
-            inverse_hvp = torch.load("Influential_data/{}_{}_inverse_hvp_{}_{}.pth".format(self.dataset_name, self.loss_type, pair[0], pair[1]))
 
             grad4train = []
             for cls in self.dl_tr.dataset.classes:
@@ -193,54 +203,33 @@ class InfluentialSample():
                     grad4train_cls = pickle.load(fp)
                 grad4train.append(grad4train_cls)
 
-            influence_values = calc_influential_func(inverse_hvp, grad4train)
-            influence_values = np.stack(influence_values)[:, 0]
-            training_cls_by_influence = np.asarray(self.dl_tr.dataset.classes)[influence_values.argsort()[::-1]] # descending
-            print(training_cls_by_influence[:5])
-            print(training_cls_by_influence[-5:])
-            # self.viz_2cls(5, self.dl_tr, self.train_label, training_cls_by_influence[0], training_cls_by_influence[1]) # helpful
-            # self.viz_2cls(5, self.dl_tr, self.train_label, training_cls_by_influence[-1], training_cls_by_influence[-2]) # harmful
+            influence_values = calc_influential_func(grad4train)
+            influence_values = np.asarray(influence_values)
+            training_cls_by_influence = np.asarray(self.dl_tr.dataset.classes)[influence_values.argsort()] # ascending
+            print(training_cls_by_influence[:5]) # helpful
+            print(training_cls_by_influence[-5:]) # harmful
+            self.viz_2cls(5, self.dl_tr, self.train_label, training_cls_by_influence[0], training_cls_by_influence[1]) # helpful
+            self.viz_2cls(5, self.dl_tr, self.train_label, training_cls_by_influence[-1], training_cls_by_influence[-2]) # harmful
 
-        if self.measure == 'intravar':
-
-            scattered_classes = self.get_scatter_class()
-            cls = scattered_classes[pair_idx]
-            self.viz_cls(5, self.dl_ev, self.testing_label, cls)
-
-            inverse_hvp = torch.load("Influential_data/{}_{}_inverse_hvp_{}.pth".format(self.dataset_name, self.loss_type, cls))
-
-            grad4train = []
-            for cls in self.dl_tr.dataset.classes:
-                with open("Influential_data/{}_{}_grad4traincls_{}.pkl".format(self.dataset_name, self.loss_type, cls), "rb") as fp:  # Pickling
-                    grad4train_cls = pickle.load(fp)
-                grad4train.append(grad4train_cls)
-
-            influence_values = calc_influential_func(inverse_hvp, grad4train)
-            influence_values = np.stack(influence_values)[:, 0]
-            training_cls_by_influence = np.asarray(self.dl_tr.dataset.classes)[influence_values.argsort()[::-1]]  # descending
-            self.viz_2cls(5, self.dl_tr, self.train_label, training_cls_by_influence[0], training_cls_by_influence[1]) # harmful
-            self.viz_2cls(5, self.dl_tr, self.train_label, training_cls_by_influence[-1], training_cls_by_influence[-2]) # helpful
-
-        if self.measure == 'confusion_simple':
-            confusion_class_pairs = self.get_confusion_class_pairs()
-            pair = confusion_class_pairs[pair_idx]
-            v = torch.load("Influential_data/{}_{}_confusion_grad_test_{}_{}.pth".format(self.dataset_name, self.loss_type, pair[0], pair[1]))
-            self.viz_2cls(5, self.dl_ev, self.testing_label, pair[0], pair[1])  # visualize confusion classes
-
-            grad4train = []
-            for cls in self.dl_tr.dataset.classes:
-                with open("Influential_data/{}_{}_grad4traincls_{}.pkl".format(self.dataset_name, self.loss_type, cls), "rb") as fp:  # Pickling
-                    grad4train_cls = pickle.load(fp)
-                grad4train.append(grad4train_cls)
-
-            influence_values = calc_influential_func(v, grad4train)
-            influence_values = np.stack(influence_values)[:, 0]
-            training_cls_by_influence = np.asarray(self.dl_tr.dataset.classes)[influence_values.argsort()[::-1]] # descending
-            print(training_cls_by_influence[:5])
-            print(training_cls_by_influence[-5:])
-            # self.viz_2cls(5, self.dl_tr, self.train_label, training_cls_by_influence[0], training_cls_by_influence[1]) # helpful
-            # self.viz_2cls(5, self.dl_tr, self.train_label, training_cls_by_influence[-1], training_cls_by_influence[-2]) # harmful
-
+        # if self.measure == 'intravar':
+        #
+        #     scattered_classes = self.get_scatter_class()
+        #     cls = scattered_classes[pair_idx]
+        #     self.viz_cls(5, self.dl_ev, self.testing_label, cls)
+        #
+        #     inverse_hvp = torch.load("Influential_data/{}_{}_inverse_hvp_{}.pth".format(self.dataset_name, self.loss_type, cls))
+        #
+        #     grad4train = []
+        #     for cls in self.dl_tr.dataset.classes:
+        #         with open("Influential_data/{}_{}_grad4traincls_{}.pkl".format(self.dataset_name, self.loss_type, cls), "rb") as fp:  # Pickling
+        #             grad4train_cls = pickle.load(fp)
+        #         grad4train.append(grad4train_cls)
+        #
+        #     influence_values = calc_influential_func(inverse_hvp, grad4train)
+        #     influence_values = np.stack(influence_values)[:, 0]
+        #     training_cls_by_influence = np.asarray(self.dl_tr.dataset.classes)[influence_values.argsort()[::-1]]  # descending
+        #     self.viz_2cls(5, self.dl_tr, self.train_label, training_cls_by_influence[0], training_cls_by_influence[1]) # harmful
+        #     self.viz_2cls(5, self.dl_tr, self.train_label, training_cls_by_influence[-1], training_cls_by_influence[-2]) # helpful
 
     def viz_cls(self, top_bottomk, dataloader, label, cls):
         ind_cls = np.where(label.detach().cpu().numpy() == cls)[0]
@@ -286,7 +275,7 @@ if __name__ == '__main__':
 
     '''Step 2: Cache all confusion gradient to parameters'''
     confusion_class_pairs = IS.get_confusion_class_pairs()
-    IS.cache_grad_confusion_test(confusion_class_pairs)
+    IS.theta_grad_descent(confusion_class_pairs)
     exit()
 
     # scatter_class = IS.get_scatter_class()
