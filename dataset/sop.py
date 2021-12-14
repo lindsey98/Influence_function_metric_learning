@@ -28,7 +28,7 @@ class SOProducts(BaseDatasetMod):
             f.readline()
             index = 0
             nb_images = 0
-            self.super_ys = []
+            self.super2ys = {}
 
             for (image_id, class_id, super_class_id, path) in map(str.split, f):
                 nb_images += 1
@@ -37,7 +37,8 @@ class SOProducts(BaseDatasetMod):
                     self.ys.append(int(class_id) - 1)
                     self.I += [index]
                     index += 1
-                    self.super_ys.append(int(super_class_id) - 1)
+                    if int(class_id) - 1 not in self.super2ys.keys():
+                        self.super2ys[int(class_id) - 1] = int(super_class_id) - 1
 
             if train:
                 assert nb_images == type(self).nb_train_all
@@ -48,7 +49,7 @@ class SOProductsMod(BaseDatasetMod):
     def __init__(self, root, source, classes, transform=None):
         BaseDatasetMod.__init__(self, root, source, classes, transform)
         index = 0; nb_images = 0
-        self.super_ys = []
+        self.super2ys = {}
         with open(os.path.join(root, 'Ebay_{}.txt'.format('train'))) as f:
             f.readline()
             for (image_id, class_id, super_class_id, path) in map(str.split, f):
@@ -58,7 +59,8 @@ class SOProductsMod(BaseDatasetMod):
                     self.ys.append(int(class_id) - 1)
                     self.I += [index]
                     index += 1
-                    self.super_ys.append(int(super_class_id) - 1)
+                    if int(class_id)-1 not in self.super2ys.keys():
+                        self.super2ys[int(class_id) - 1] = int(super_class_id) - 1
 
         with open(os.path.join(root, 'Ebay_{}.txt'.format('test'))) as f:
             f.readline()
@@ -69,7 +71,8 @@ class SOProductsMod(BaseDatasetMod):
                     self.ys.append(int(class_id) - 1)
                     self.I += [index]
                     index += 1
-                    self.super_ys.append(int(super_class_id) - 1)
+                    if int(class_id)-1 not in self.super2ys.keys():
+                        self.super2ys[int(class_id) - 1] = int(super_class_id) - 1
 
 
 class SOProducts_hdf5(BaseDataset_hdf5):

@@ -256,20 +256,23 @@ class ProxyNCA_pfix(torch.nn.Module):
     '''
         ProxyNCA++ with fixed proxies
     '''
-    def __init__(self, nb_classes, sz_embed, scale, initialize_method='optim', **kwargs):
+    def __init__(self, nb_classes, sz_embed, scale, initialize_method='optim', super_classes=None, cls_mean=None, **kwargs):
         torch.nn.Module.__init__(self)
         self.proxies = torch.nn.Parameter(torch.randn(nb_classes, sz_embed)) # not training
         self.proxies.requires_grad = False
         self.scale = scale
         self.initialize_method = initialize_method
+        self.super_classes = super_classes
+        self.cls_mean = cls_mean
         self._proxy_init(nb_classes, sz_embed)
+        pass
 
     def _proxy_init(self, nb_classes, sz_embed):
         if self.initialize_method == 'optim':
             proxies = torch.randn((nb_classes, sz_embed), requires_grad=True)
             _optimizer = torch.optim.Adam(params={proxies}, lr=0.1)
             for _ in tqdm(range(100), desc="Initializing the proxies"):
-                mean, var = utils.inter_proxy_dist(proxies, cosine=True)
+                mean, var = utils.inter_proxy_dist(proxies)
                 _loss = mean + var
                 _optimizer.zero_grad()
                 _loss.backward()
@@ -286,6 +289,21 @@ class ProxyNCA_pfix(torch.nn.Module):
                     self.proxies.data[cls] = self.proxies.data[cls+1]
                 else:
                     self.proxies.data[cls] = self.proxies.data[cls-1]
+
+        elif self.initialize_method == 'super_optim':
+            proxies = torch.randn((nb_classes, sz_embed), requires_grad=True)
+            proxies.data = self.cls_mean.to(proxies.device)
+            _optimizer = torch.optim.Adam(params={proxies}, lr=0.1)
+            for _ in tqdm(range(10), desc="Initializing the proxies"):
+                mean, var = utils.inter_proxy_dist_super(proxies, self.super_classes)
+                _loss = mean + var
+                _optimizer.zero_grad()
+                _loss.backward()
+                _optimizer.step()
+
+            proxies = F.normalize(proxies, p=2, dim=-1)
+            self.proxies.data = proxies.detach()
+
 
     @torch.no_grad()
     def debug(self, X, indices, T):
@@ -311,17 +329,26 @@ class ProxyNCA_pfix(torch.nn.Module):
 
     @torch.no_grad()
     def assign_cls4proxy(self, cls_mean):
-        # cls2proxy = torch.einsum('bi,mi->bm', cls_mean, self.proxies) # class mean to proxy affinity
-        # row_ind, col_ind = linear_sum_assignment((1-cls2proxy.detach().cpu()).numpy()) # row_ind: which class, col_ind: which proxy
-        # cls_indx = row_ind.argsort() # class from 1, 2 ... C
-        # sorted_class = row_ind[cls_indx]
-        # sorted_proxies = col_ind[cls_indx] # proxy indices correponding to class from 1, 2 ... C
-        # self.proxies.data = self.proxies[sorted_proxies] # sort proxies according to proxy indices
-        # logging.info('Number of updated proxies: {}'.format(np.sum(sorted_proxies != np.asarray(range(len(self.proxies))))))
-
-        #TODO
-        self.proxies.data = cls_mean.to(self.proxies.device)
-        logging.info('Reassign proxies as class centers')
+        # if self.super_classes is None:
+        cls2proxy = torch.einsum('bi,mi->bm', cls_mean, self.proxies) # class mean to proxy affinity
+        row_ind, col_ind = linear_sum_assignment((1-cls2proxy.detach().cpu()).numpy()) # row_ind: which class, col_ind: which proxy
+        cls_indx = row_ind.argsort() # class from 1, 2 ... C
+        sorted_class = row_ind[cls_indx]
+        sorted_proxies = col_ind[cls_indx] # proxy indices correponding to class from 1, 2 ... C
+        self.proxies.data = self.proxies[sorted_proxies] # sort proxies according to proxy indices
+        logging.info('Number of updated proxies: {}'.format(np.sum(sorted_proxies != np.asarray(range(len(self.proxies))))))
+        # else:
+            # for super_cls in set(self.super_classes.detach().cpu().numpy().tolist()):
+            #     proxies_supercls = self.proxies[self.super_classes == super_cls] # find proxies belonging to this superclass category
+            #     clsmean_supercls = cls_mean[self.super_classes == super_cls] # find class means for these classes
+            #     cls2proxy = torch.einsum('bi,mi->bm', clsmean_supercls, proxies_supercls)  # class mean to proxy affinity
+            #     row_ind, col_ind = linear_sum_assignment((1 - cls2proxy.detach().cpu()).numpy())  # row_ind: which class, col_ind: which proxy
+            #     cls_indx = row_ind.argsort()  # class from 1, 2 ... C
+            #     sorted_proxies = col_ind[cls_indx]  # proxy indices correponding to class from 1, 2 ... C
+            #     self.proxies[self.super_classes == super_cls].data = proxies_supercls[sorted_proxies]  # sort proxies according to proxy indices
+            #     logging.info('Number of updated proxies: {} for super class {}'.format(np.sum(sorted_proxies != np.asarray(range(len(proxies_supercls)))),
+            #                                                                            super_cls))
+            #     pass
 
     def forward(self, X, indices, T):
         P = self.proxies
@@ -427,18 +454,18 @@ class ProxyAnchor_pfix(torch.nn.Module):
     '''
         Fixed anchor
     '''
-    def __init__(self, nb_classes, sz_embed, initialize_method='optim', mrg=0.1, alpha=32):
+    def __init__(self, nb_classes, sz_embed, initialize_method='optim', super_classes=None, cls_mean=None, mrg=0.1, alpha=32):
         torch.nn.Module.__init__(self)
         self.proxies = torch.nn.Parameter(torch.randn(nb_classes, sz_embed)) # not training
         self.proxies.requires_grad = False
         self.initialize_method = initialize_method
-        self._proxy_init(nb_classes, sz_embed)
+        self._proxy_init(nb_classes, sz_embed, super_classes, cls_mean)
         self.nb_classes = nb_classes
         self.sz_embed = sz_embed
         self.mrg = mrg
         self.alpha = alpha
 
-    def _proxy_init(self, nb_classes, sz_embed):
+    def _proxy_init(self, nb_classes, sz_embed, super_classes, cls_mean):
         if self.initialize_method == 'optim':
             proxies = torch.randn((nb_classes, sz_embed), requires_grad=True)
             _optimizer = torch.optim.Adam(params={proxies}, lr=0.1)
@@ -460,6 +487,19 @@ class ProxyAnchor_pfix(torch.nn.Module):
                     self.proxies.data[cls] = self.proxies.data[cls+1]
                 else:
                     self.proxies.data[cls] = self.proxies.data[cls-1]
+        elif self.initialize_method == 'super_optim':
+            proxies = torch.randn((nb_classes, sz_embed), requires_grad=True)
+            proxies.data = cls_mean.to(self.proxies.device)
+            _optimizer = torch.optim.Adam(params={proxies}, lr=0.1)
+            for _ in tqdm(range(25), desc="Initializing the proxies"):
+                mean, var = utils.inter_proxy_dist_super(proxies, super_classes)
+                _loss = mean + var
+                _optimizer.zero_grad()
+                _loss.backward()
+                _optimizer.step()
+
+            proxies = F.normalize(proxies, p=2, dim=-1)
+            self.proxies.data = proxies.detach()
         else:
             raise NotImplementedError
 
@@ -472,10 +512,6 @@ class ProxyAnchor_pfix(torch.nn.Module):
         sorted_proxies = col_ind[cls_indx]
         self.proxies.data = self.proxies[sorted_proxies]
         logging.info('Number of updated proxies: {}'.format(np.sum(sorted_proxies != np.asarray(range(len(self.proxies))))))
-
-        #TODO
-        # self.proxies.data = cls_mean.to(self.proxies.device)
-        # logging.info('Reassign proxies as class centers')
 
     @torch.no_grad()
     def debug(self, X, indices, T):

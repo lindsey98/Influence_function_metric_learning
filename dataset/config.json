@@ -189,7 +189,7 @@
                 "train": "range(0, 1998)",
                 "val": "range(1998, 3997)",
                 "trainval": "range(0, 3997)",
-                "eval": "range(0, 3985)"
+                "eval": "range(3997, 3997+3985)"
             }
         },
         "inshop+6070_7581": {

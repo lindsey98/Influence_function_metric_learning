@@ -335,6 +335,19 @@ def inter_proxy_dist(proxies, cosine=True, neighbor_only=False):
 
     return reduced_mean, reduced_std
 
+def inter_proxy_dist_super(proxies, super_class):
+    _, IP = pairwise_distance(proxies, squared=True) # cosine similarity
+    super_class_mask = super_class[:, None] == super_class # same super class
+    upper_idx = torch.triu_indices(IP.size()[0], IP.size()[1], 1) # take upper triangle indices
+
+    upper_triu = IP[upper_idx[0], upper_idx[1]]
+    upper_mask = super_class_mask[upper_idx[0], upper_idx[1]]
+
+    reduced_mean = (0.8 * upper_triu * upper_mask.float()).mean() + (upper_triu * (1 - upper_mask.float())).mean() # less panelty on with-in superclass distance
+    reduced_std = torch.std(upper_triu * (1 - upper_mask.float())) # make super categories approximately evenly distributed
+
+    return reduced_mean, reduced_std
+
 
 def batch_lbl_stats(y):
     '''

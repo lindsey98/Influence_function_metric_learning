@@ -49,6 +49,7 @@ class InShop(BaseDatasetMod):
         self.or_super_class_names = {'train': [], 'query': [], 'gallery': []}
         self.or_super_ys = {'train': [], 'query': [], 'gallery': []}
 
+
         print(dset_type)
         print(classes)
 
@@ -57,7 +58,6 @@ class InShop(BaseDatasetMod):
             im_path, im_id, eval_type = [
                 l for l in line.split(' ') if l != '' and l != '\n']
             y = int(im_id.split('_')[1])
-
             # this is the old code chunk
             self.or_super_class_names[eval_type] += ['/'.join(im_path.split('/')[1:3])]
             self.or_super_ys[eval_type] += [self.class_names_dict['/'.join(im_path.split('/')[1:3])]]
@@ -107,45 +107,58 @@ class InShop(BaseDatasetMod):
         self.im_paths = []
         self.ys = []
         self.I = []
-        self.super_ys = []
+        self.super2ys = {}
+
         if dset_type == 'train':
             for ix in range(len(self.or_ys[dset_type])):
                 y = self.or_ys[dset_type][ix]
                 im_path = self.or_im_paths[dset_type][ix]
                 ii = self.or_I[dset_type][ix]
                 s_y = self.or_super_ys[dset_type][ix]
+                if y not in self.super2ys.keys():
+                    self.super2ys[y] = s_y
                 if y in classes:
                     self.im_paths.append(im_path)
                     self.ys.append(y)
                     self.I.append(ii)
-                    self.super_ys.append(s_y)
 
             for ix in range(len(self.or_ys['query'])): # add additional classes into training
                 y = self.or_ys['query'][ix]
                 im_path = self.or_im_paths['query'][ix]
                 ii = self.or_I['query'][ix]
                 s_y = self.or_super_ys['query'][ix]
+                if y not in self.super2ys.keys():
+                    self.super2ys[y] = s_y
                 if y in classes:
                     self.im_paths.append(im_path)
                     self.ys.append(y)
                     self.I.append(ii)
-                    self.super_ys.append(s_y)
+
 
             for ix in range(len(self.or_ys['gallery'])):
                 y = self.or_ys['gallery'][ix]
                 im_path = self.or_im_paths['gallery'][ix]
                 ii = self.or_I['gallery'][ix]
                 s_y = self.or_super_ys['gallery'][ix]
+                if y not in self.super2ys.keys():
+                    self.super2ys[y] = s_y
                 if y in classes:
                     self.im_paths.append(im_path)
                     self.ys.append(y)
                     self.I.append(ii)
                     self.super_ys.append(s_y)
         else:
-            self.im_paths = self.or_im_paths[dset_type]
-            self.ys = self.or_ys[dset_type]
-            self.I = self.or_I[dset_type]
-            self.super_ys = self.or_super_ys[dset_type]
+            for ix in range(len(self.or_ys[dset_type])):
+                y = self.or_ys[dset_type][ix]
+                im_path = self.or_im_paths[dset_type][ix]
+                ii = self.or_I[dset_type][ix]
+                s_y = self.or_super_ys[dset_type][ix]
+                if y not in self.super2ys.keys():
+                    self.super2ys[y] = s_y
+                if y in classes:
+                    self.im_paths.append(im_path)
+                    self.ys.append(y)
+                    self.I.append(ii)
 
 
 class InShop_hdf5(BaseDataset_hdf5):

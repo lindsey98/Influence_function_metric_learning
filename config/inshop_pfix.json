@@ -4,7 +4,8 @@
     "criterion": {
         "type": "loss.ProxyNCA_pfix",
         "args": {
-            "scale": "3"
+            "scale": "3",
+            "initialize_method": "str('super_optim')"
         }
     },
     "lr_scheduler": {
