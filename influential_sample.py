@@ -213,9 +213,9 @@ class InfluentialSample():
 
         # if self.measure == 'intravar':
         #
-        #     scattered_classes = self.get_scatter_class()
-        #     cls = scattered_classes[pair_idx]
-        #     self.viz_cls(5, self.dl_ev, self.testing_label, cls)
+            # scattered_classes = self.get_scatter_class()
+            # cls = scattered_classes[pair_idx]
+            # self.viz_cls(5, self.dl_ev, self.testing_label, cls)
         #
         #     inverse_hvp = torch.load("Influential_data/{}_{}_inverse_hvp_{}.pth".format(self.dataset_name, self.loss_type, cls))
         #
