@@ -28,7 +28,7 @@ parser.add_argument('--apex', default=False, action='store_true')
 parser.add_argument('--warmup_k', default=5, type=int)
 
 parser.add_argument('--dataset', default='cub')
-parser.add_argument('--seed', default=0, type=int)
+parser.add_argument('--seed', default=4, type=int)
 parser.add_argument('--embedding-size', default = 512, type=int, dest = 'sz_embedding')
 parser.add_argument('--config', default='config/cub_reweight.json')
 parser.add_argument('--mode', default='trainval', choices=['train', 'trainval', 'test',
@@ -36,13 +36,12 @@ parser.add_argument('--mode', default='trainval', choices=['train', 'trainval', 
                     help='train with train data or train with trainval')
 parser.add_argument('--batch-size', default = 32, type=int, dest = 'sz_batch')
 parser.add_argument('--no_warmup', default=True, action='store_true')
-parser.add_argument('--loss-type', default='ProxyNCA_prob_orig_confusion_144_142_NN', type=str)
-parser.add_argument('--helpful', default=[60, 83, 58, 63, 61], nargs='+', type=int)
-parser.add_argument('--harmful', default=[53, 48, 8, 26, 10], nargs='+', type=int)
-parser.add_argument('--model_dir', default='models/dvi_data_cub_0_lossProxyNCA_prob_orig/ResNet_512_Model', type=str)
+parser.add_argument('--loss-type', default='ProxyNCA_pfix_intravar_136', type=str)
+parser.add_argument('--helpful', default=[58, 76, 97, 62, 13], nargs='+', type=int)
+parser.add_argument('--harmful', default=[50, 77, 75, 89, 41], nargs='+', type=int)
+parser.add_argument('--model_dir', default='models/dvi_data_cub_4_lossProxyNCA_pfix/ResNet_512_Model', type=str)
 parser.add_argument('--workers', default=2, type=int, dest = 'nb_workers')
 
-# folder = 'models/dvi_data_{}_{}_loss{}/'.format(args.dataset, args.seed, args.loss_type)
 args = parser.parse_args()
 
 def save_best_checkpoint(model):
@@ -284,7 +283,8 @@ if __name__ == '__main__':
     model = torch.nn.Sequential(feat, emb)
     model = torch.nn.DataParallel(model)
     model = model.cuda()
-    model.load_state_dict(torch.load('{}/Epoch_{}/{}_{}_trainval_{}_{}.pth'.format(args.model_dir, 40, args.dataset, args.dataset, args.sz_embedding, args.seed)))
+    model.load_state_dict(torch.load('{}/Epoch_{}/{}_{}_trainval_{}_{}.pth'.format(args.model_dir, 40, args.dataset, args.dataset,
+                                                                                   args.sz_embedding, args.seed)))
 
     '''Loss'''
     criterion = config['criterion']['type'](
