@@ -295,8 +295,9 @@ class ProxyNCA_pfix(torch.nn.Module):
             proxies.data = self.cls_mean.to(proxies.device)
             _optimizer = torch.optim.Adam(params={proxies}, lr=0.1)
             for _ in tqdm(range(10), desc="Initializing the proxies"):
-                mean, var = utils.inter_proxy_dist_super(proxies, self.super_classes)
+                mean, var = utils.inter_proxy_dist_super(proxies, self.super_classes) # FIXME: more epochs, on var, add L2-normalization
                 _loss = mean + var
+                # print(_loss.item())
                 _optimizer.zero_grad()
                 _loss.backward()
                 _optimizer.step()
