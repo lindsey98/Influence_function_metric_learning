@@ -16,7 +16,7 @@ from torch.utils.data import Dataset, DataLoader
 os.environ["CUDA_VISIBLE_DEVICES"]="1, 0"
 
 parser = argparse.ArgumentParser(description='Training ProxyNCA++')
-parser.add_argument('--epochs', default = 1, type=int, dest = 'nb_epochs')
+parser.add_argument('--epochs', default = 40, type=int, dest = 'nb_epochs')
 parser.add_argument('--log-filename', default = 'example')
 parser.add_argument('--lr_steps', default=[1000], nargs='+', type=int)
 parser.add_argument('--source_dir', default='', type=str)
@@ -35,11 +35,11 @@ parser.add_argument('--mode', default='trainval', choices=['train', 'trainval', 
                                                            'testontrain', 'testontrain_super'],
                     help='train with train data or train with trainval')
 parser.add_argument('--batch-size', default = 32, type=int, dest = 'sz_batch')
-parser.add_argument('--no_warmup', default=True, action='store_true')
-parser.add_argument('--loss-type', default='ProxyNCA_pfix_intravar_136', type=str)
-parser.add_argument('--helpful', default=[58, 76, 97, 62, 13], nargs='+', type=int)
-parser.add_argument('--harmful', default=[50, 77, 75, 89, 41], nargs='+', type=int)
-parser.add_argument('--model_dir', default='models/dvi_data_cub_4_lossProxyNCA_pfix/ResNet_512_Model', type=str)
+parser.add_argument('--no_warmup', default=False, action='store_true')
+parser.add_argument('--loss-type', default='ProxyNCA_pfix_confusion_116_118', type=str)
+parser.add_argument('--helpful', default=[41, 96, 95, 47, 55], nargs='+', type=int)
+parser.add_argument('--harmful', default=[73, 91, 89, 90, 80], nargs='+', type=int)
+# parser.add_argument('--model_dir', default='models/dvi_data_cub_4_lossProxyNCA_pfix/ResNet_512_Model', type=str)
 parser.add_argument('--workers', default=2, type=int, dest = 'nb_workers')
 
 args = parser.parse_args()
@@ -283,8 +283,8 @@ if __name__ == '__main__':
     model = torch.nn.Sequential(feat, emb)
     model = torch.nn.DataParallel(model)
     model = model.cuda()
-    model.load_state_dict(torch.load('{}/Epoch_{}/{}_{}_trainval_{}_{}.pth'.format(args.model_dir, 40, args.dataset, args.dataset,
-                                                                                   args.sz_embedding, args.seed)))
+    # model.load_state_dict(torch.load('{}/Epoch_{}/{}_{}_trainval_{}_{}.pth'.format(args.model_dir, 40, args.dataset, args.dataset,
+    #                                                                                args.sz_embedding, args.seed)))
 
     '''Loss'''
     criterion = config['criterion']['type'](
@@ -292,8 +292,8 @@ if __name__ == '__main__':
         sz_embed = args.sz_embedding,
         **config['criterion']['args']
     )
-    proxies = torch.load('{}/Epoch_{}/proxy.pth'.format(args.model_dir, 40), map_location='cpu')['proxies'].detach()
-    criterion.proxies.data = proxies
+    # proxies = torch.load('{}/Epoch_{}/proxy.pth'.format(args.model_dir, 40), map_location='cpu')['proxies'].detach()
+    # criterion.proxies.data = proxies
     criterion.cuda()
 
     opt = config['opt']['type'](
@@ -314,6 +314,32 @@ if __name__ == '__main__':
             {
                 **{'params': criterion.proxies},
                 **config['opt']['args']['proxynca']
+            },
+        ],
+        **config['opt']['args']['base']
+    )
+
+    opt_warmup = config['opt']['type'](
+        [
+            {
+                **{'params': list(feat.parameters()
+                    )
+                },
+                'lr': 0
+            },
+            {
+                **{'params': list(emb.parameters()
+                    )
+                },
+                **config['opt']['args']['embedding']
+
+            },
+
+            {
+                **{'params': criterion.proxies}
+                ,
+                **config['opt']['args']['proxynca']
+
             },
         ],
         **config['opt']['args']['base']
@@ -352,9 +378,7 @@ if __name__ == '__main__':
     losses = []
     scores = []
     scores_tr = []
-
     t1 = time.time()
-
 
     if args.init_eval:
         logging.info("**Evaluating initial model...**")
@@ -386,6 +410,20 @@ if __name__ == '__main__':
     logging.info('Number of training: {}'.format(len(dl_tr.dataset)))
     logging.info('Number of original training: {}'.format(len(dl_tr_noshuffle.dataset)))
 
+    '''Warmup training'''
+    if not args.no_warmup:
+        # warm up training for 5 epochs
+        logging.info("**warm up for %d epochs.**" % args.warmup_k)
+        for e in range(0, args.warmup_k):
+            for ct, (x, y, indices) in tqdm(enumerate(dl_tr)):
+                opt_warmup.zero_grad()
+                m = model(x.cuda())
+                weights = find_cls_weights(args.helpful, args.harmful, y).cuda(); weights = weights.detach()
+                loss = criterion(m, indices, y, weights)
+                loss.backward()
+                torch.nn.utils.clip_grad_value_(model.parameters(), 10)
+                opt_warmup.step()
+            logging.info('warm up ends in %d epochs' % (args.warmup_k - e))
 
     '''training loop'''
     for e in range(0, args.nb_epochs):

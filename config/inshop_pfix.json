@@ -23,7 +23,7 @@
         }
     },
    
-    "nb_epochs": "40",
+    "nb_epochs": "80",
     "sz_batch": "32*3",
     "sz_embedding": "512",
     "num_class_per_batch": "32",

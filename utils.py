@@ -335,8 +335,9 @@ def inter_proxy_dist(proxies, cosine=True, neighbor_only=False):
 
     return reduced_mean, reduced_std
 
+
 def inter_proxy_dist_super(proxies, super_class):
-    # proxies = F.normalize(proxies, p=2, dim=-1)
+#     proxies = F.normalize(proxies, p=2, dim=-1)
     _, IP = pairwise_distance(proxies, squared=True) # cosine similarity
     super_class_mask = super_class[:, None] == super_class # same super class
 
@@ -347,8 +348,11 @@ def inter_proxy_dist_super(proxies, super_class):
     reduced_mean = (0.8 * upper_triu * upper_mask.float()).mean() + (upper_triu * (1 - upper_mask.float())).mean() # less panelty on with-in superclass distance
     reduced_std = 0.8 * torch.std(upper_triu * upper_mask.float()) + torch.std(upper_triu * (1 - upper_mask.float())) # make super categories approximately evenly distributed
     # reduced_std = torch.std(upper_triu * (1 - upper_mask.float())) # make super categories approximately evenly distributed
-
-    return reduced_mean, reduced_std
+    D_within_super = upper_triu[upper_mask != 0]
+    D_inter_super = upper_triu[1 - upper_mask.float() != 0]
+    D_diff =  D_inter_super.mean() - D_within_super.mean()
+    D_diff_clamp = 0.2 * torch.clamp(D_diff + 0.2, min=0.0) # if difference (in cosine) is larger than 0.2, all good
+    return reduced_mean, reduced_std, D_diff_clamp
 
 
 def batch_lbl_stats(y):
