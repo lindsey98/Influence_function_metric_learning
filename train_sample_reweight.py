@@ -2,19 +2,18 @@
 import logging
 import dataset
 import utils
-
 import os
-
 import torch
 import numpy as np
 import matplotlib
+matplotlib.use('agg', force=True)
 import time
 import argparse
 import json
 from tqdm import tqdm
 from torch.utils.data import Dataset, DataLoader
 
-os.environ["CUDA_VISIBLE_DEVICES"]="1,0"
+os.environ["CUDA_VISIBLE_DEVICES"]="1, 0"
 
 parser = argparse.ArgumentParser(description='Training ProxyNCA++')
 parser.add_argument('--epochs', default = 40, type=int, dest = 'nb_epochs')
@@ -22,25 +21,30 @@ parser.add_argument('--log-filename', default = 'example')
 parser.add_argument('--lr_steps', default=[1000], nargs='+', type=int)
 parser.add_argument('--source_dir', default='', type=str)
 parser.add_argument('--root_dir', default='', type=str)
+parser.add_argument('--eval_nmi', default=False, action='store_true')
 parser.add_argument('--recall', default=[1, 2, 4, 8], nargs='+', type=int)
 parser.add_argument('--init_eval', default=False, action='store_true')
 parser.add_argument('--apex', default=False, action='store_true')
 parser.add_argument('--warmup_k', default=5, type=int)
 
-parser.add_argument('--dataset', default='cub+178_172')
+parser.add_argument('--dataset', default='cub')
 parser.add_argument('--seed', default=4, type=int)
-parser.add_argument('--eval_nmi', default=True, action='store_true')
 parser.add_argument('--embedding-size', default = 512, type=int, dest = 'sz_embedding')
-parser.add_argument('--config', default='config/cub.json')
-parser.add_argument('--mode', default='trainval', choices=['train', 'trainval',
-                                                           'test', 'testontrain'],
+parser.add_argument('--config', default='config/cub_reweight.json')
+parser.add_argument('--mode', default='trainval', choices=['train', 'trainval', 'test',
+                                                           'testontrain', 'testontrain_super'],
                     help='train with train data or train with trainval')
 parser.add_argument('--batch-size', default = 32, type=int, dest = 'sz_batch')
-parser.add_argument('--no_warmup', default=False, action='store_true')
-parser.add_argument('--loss-type', default='ProxyNCA_prob_orig', type=str)
-parser.add_argument('--workers', default = 4, type=int, dest = 'nb_workers')
+parser.add_argument('--no_warmup', default=True, action='store_true')
+parser.add_argument('--loss-type', default='ProxyNCA_pfix_confusion_sample_117_129_reverse', type=str)
+parser.add_argument('--helpful', default='Influential_data/{}_{}_harmful_testcls{}.npy'.format('cub', 'ProxyNCA_pfix', '3'), type=str)
+parser.add_argument('--harmful', default='Influential_data/{}_{}_helpful_testcls{}.npy'.format('cub', 'ProxyNCA_pfix', '3'), type=str)
+parser.add_argument('--model_dir', default='models/dvi_data_cub_4_lossProxyNCA_pfix/ResNet_512_Model', type=str)
+parser.add_argument('--workers', default=2, type=int, dest = 'nb_workers')
 
 args = parser.parse_args()
+args.helpful = np.load(args.helpful)
+args.harmful = np.load(args.harmful)
 
 def save_best_checkpoint(model):
     torch.save(model.state_dict(), 'results/' + args.log_filename + '.pt')
@@ -53,11 +57,21 @@ def load_best_checkpoint(model):
     model = model.cuda()
     return model
 
+def find_samples_weights(helpful, harmful, indices):
+    weights = torch.ones_like(y)
+    weights.requires_grad = False
+    for i, ind in enumerate(indices):
+        if ind.item() in helpful:
+            weights[i] = 2.
+        elif ind.item() in harmful:
+            weights[i] = 0.
+        else:
+            weights[i] = 1.
+    return weights
+
 if __name__ == '__main__':
 
     # set random seed for all gpus
-    # random.seed(args.seed)
-    # np.random.seed(args.seed) # FIXME: to not set seed
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed_all(args.seed)
 
@@ -78,7 +92,8 @@ if __name__ == '__main__':
     if (args.mode =='trainval' or args.mode == 'test' or args.mode == 'testontrain'):
         if args.dataset == 'sop' or args.dataset == 'sop_h5':
             args.recall = [1, 10, 100, 1000]
-        args.eval_nmi = True
+        elif 'cub' in args.dataset or 'cars' in args.dataset: # FIXME: logo2k didnt evaluate NMI cuz it's time-consuming
+            args.eval_nmi = True
 
     args.nb_epochs = config['nb_epochs']
     args.sz_batch = config['sz_batch']
@@ -105,6 +120,8 @@ if __name__ == '__main__':
         args.log_filename = args.log_filename.replace('test', 'trainval')
     elif args.mode == 'testontrain':
         args.log_filename = args.log_filename.replace('testontrain', 'trainval')
+    elif args.mode == 'testontrain_super':
+        args.log_filename = args.log_filename.replace('testontrain_super', 'trainval')
     best_epoch = args.nb_epochs
 
     '''Dataloader'''
@@ -200,8 +217,7 @@ if __name__ == '__main__':
             )
 
     elif args.mode == 'trainval' or args.mode == 'test' \
-            or args.mode == 'testontrain':
-        # print(dataset_config['dataset'][args.dataset]['root'])
+            or args.mode == 'testontrain' or args.mode == 'testontrain_super':
         tr_dataset = dataset.load(
                 name = args.dataset,
                 root = dataset_config['dataset'][args.dataset]['root'],
@@ -216,10 +232,8 @@ if __name__ == '__main__':
     if is_random_sampler:
         batch_sampler = dataset.utils.RandomBatchSampler(tr_dataset.ys, args.sz_batch, True, num_class_per_batch, num_gradcum)
     else:
-
         batch_sampler = dataset.utils.BalancedBatchSampler(torch.Tensor(tr_dataset.ys), num_class_per_batch,
                                                            int(args.sz_batch / num_class_per_batch))
-
 
     dl_tr = torch.utils.data.DataLoader(
         tr_dataset,
@@ -243,7 +257,6 @@ if __name__ == '__main__':
             shuffle=False,
             batch_size=64,
     )
-
 
     print("===")
     if args.mode == 'train':
@@ -272,13 +285,41 @@ if __name__ == '__main__':
     model = torch.nn.Sequential(feat, emb)
     model = torch.nn.DataParallel(model)
     model = model.cuda()
+    model.load_state_dict(torch.load('{}/Epoch_{}/{}_{}_trainval_{}_{}.pth'.format(args.model_dir, 40, args.dataset, args.dataset,
+                                                                                   args.sz_embedding, args.seed)))
 
     '''Loss'''
     criterion = config['criterion']['type'](
         nb_classes = dl_tr.dataset.nb_classes(),
         sz_embed = args.sz_embedding,
         **config['criterion']['args']
-    ).cuda()
+    )
+    proxies = torch.load('{}/Epoch_{}/proxy.pth'.format(args.model_dir, 40), map_location='cpu')['proxies'].detach()
+    criterion.proxies.data = proxies
+    criterion.cuda()
+
+    opt = config['opt']['type'](
+        [
+            {
+                **{'params': list(feat.parameters()
+                    )
+                },
+                **config['opt']['args']['backbone']
+            },
+            {
+                **{'params': list(emb.parameters()
+                    )
+                },
+                **config['opt']['args']['embedding']
+            },
+
+            {
+                **{'params': criterion.proxies},
+                **config['opt']['args']['proxynca']
+            },
+        ],
+        **config['opt']['args']['base']
+    )
 
     opt_warmup = config['opt']['type'](
         [
@@ -301,30 +342,6 @@ if __name__ == '__main__':
                 ,
                 **config['opt']['args']['proxynca']
 
-            },
-        ],
-        **config['opt']['args']['base']
-    )
-
-    # options for model and loss
-    opt = config['opt']['type'](
-        [
-            {
-                **{'params': list(feat.parameters()
-                    )
-                },
-                **config['opt']['args']['backbone']
-            },
-            {
-                **{'params': list(emb.parameters()
-                    )
-                },
-                **config['opt']['args']['embedding']
-            },
-
-            {
-                **{'params': criterion.proxies},
-                **config['opt']['args']['proxynca']
             },
         ],
         **config['opt']['args']['base']
@@ -356,7 +373,6 @@ if __name__ == '__main__':
             opt,
             milestones=args.lr_steps,
             gamma=0.1
-            #opt, **config['lr_scheduler2']['args']
         )
 
     logging.info("Training parameters: {}".format(vars(args)))
@@ -364,8 +380,8 @@ if __name__ == '__main__':
     losses = []
     scores = []
     scores_tr = []
-
     t1 = time.time()
+
 
     if args.init_eval:
         logging.info("**Evaluating initial model...**")
@@ -396,26 +412,21 @@ if __name__ == '__main__':
 
     logging.info('Number of training: {}'.format(len(dl_tr.dataset)))
     logging.info('Number of original training: {}'.format(len(dl_tr_noshuffle.dataset)))
-    if 'inshop' not in args.dataset:
-        logging.info('Number of testing: {}'.format(len(dl_ev.dataset)))
-    else:
-        logging.info('Number of query set: {}'.format(len(dl_query.dataset)))
-        logging.info('Number of gallery set: {}'.format(len(dl_gallery.dataset)))
 
     '''Warmup training'''
     if not args.no_warmup:
-        #warm up training for 5 epochs
+        # warm up training for 5 epochs
         logging.info("**warm up for %d epochs.**" % args.warmup_k)
         for e in range(0, args.warmup_k):
-            for ct, (x, y, _) in tqdm(enumerate(dl_tr)):
+            for ct, (x, y, indices) in tqdm(enumerate(dl_tr)):
                 opt_warmup.zero_grad()
                 m = model(x.cuda())
-                loss = criterion(m, None, y.cuda())
+                weights = find_samples_weights(args.helpful, args.harmful, indices).cuda(); weights = weights.detach()
+                loss = criterion(m, indices, y, weights)
                 loss.backward()
                 torch.nn.utils.clip_grad_value_(model.parameters(), 10)
                 opt_warmup.step()
-            logging.info('warm up ends in %d epochs' % (args.warmup_k-e))
-
+            logging.info('warm up ends in %d epochs' % (args.warmup_k - e))
 
     '''training loop'''
     for e in range(0, args.nb_epochs):
@@ -435,7 +446,8 @@ if __name__ == '__main__':
             it += 1
             x, y = x.cuda(), y.cuda()
             m = model(x)
-            loss = criterion(m, indices, y)
+            weights = find_samples_weights(args.helpful, args.harmful, indices).cuda(); weights = weights.detach()
+            loss = criterion(m, indices, y, weights)
             opt.zero_grad()
             loss.backward() # backprop
             torch.nn.utils.clip_grad_value_(model.parameters(), 10) # clip gradient?
@@ -458,7 +470,6 @@ if __name__ == '__main__':
 
         model.losses = losses
         model.current_epoch = e
-
 
         if e == best_epoch:
             break
@@ -484,7 +495,7 @@ if __name__ == '__main__':
                 best_tnmi = torch.Tensor(tnmi).mean()
 
             if e == (args.nb_epochs - 1):
-                #saving last epoch
+                # saving last epoch
                 results['last_NMI'] = nmi
                 results['last_hmean'] = chmean
                 results['best_epoch'] = best_val_epoch
@@ -494,8 +505,7 @@ if __name__ == '__main__':
                 results['last_R8'] = recall[3]
                 results['last_mapr'] = map_R
 
-
-                #saving best epoch
+                # saving best epoch
                 results['best_NMI'] = best_val_nmi
                 results['best_hmean'] = best_val_hmean
                 results['best_R1'] = best_val_r1
@@ -504,14 +514,11 @@ if __name__ == '__main__':
                 results['best_R8'] = best_val_r8
                 results['best_mapr'] = best_val_mapr
 
-
             logging.info('Best val epoch: %s', str(best_val_epoch))
             logging.info('Best val hmean: %s', str(best_val_hmean))
             logging.info('Best val nmi: %s', str(best_val_nmi))
             logging.info('Best val r1: %s', str(best_val_r1))
             logging.info('Best val MAP@R: %s', str(best_val_mapr))
-
-            logging.info(str(lr_steps))
 
         if e == args.nb_epochs-1:
             save_dir = 'dvi_data_{}_{}_loss{}/ResNet_{}_Model'.format(args.dataset, args.seed,

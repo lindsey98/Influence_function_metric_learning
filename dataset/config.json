@@ -11,41 +11,41 @@
             "root":"str('mnt/datasets/CUB_200_2011')"
 
         },
-        "cub+143_145": {
+        "cub+143_140": {
             "classes": {
                 "train": "range(0, 50)",
                 "val": "range(50,100)",
-                "trainval":"list(range(0,100)) + [143, 145]",
+                "trainval":"list(range(0,100)) + [143, 140]",
                 "eval": "range(100, 200)"
             },
             "source": "str('mnt/datasets/CUB_200_2011')",
             "root":"str('mnt/datasets/CUB_200_2011')"
         },
-        "cub+172_178": {
+        "cub+178_172": {
             "classes": {
                 "train": "range(0, 50)",
                 "val": "range(50,100)",
-                "trainval":"list(range(0,100)) + [172, 178]",
+                "trainval":"list(range(0,100)) + [178, 172]",
                 "eval": "range(100, 200)"
             },
             "source": "str('mnt/datasets/CUB_200_2011')",
             "root":"str('mnt/datasets/CUB_200_2011')"
         },
-        "cub+144_142": {
+        "cub+116_118": {
             "classes": {
                 "train": "range(0, 50)",
                 "val": "range(50,100)",
-                "trainval":"list(range(0,100)) + [144, 142]",
+                "trainval":"list(range(0,100)) + [116, 118]",
                 "eval": "range(100, 200)"
             },
             "source": "str('mnt/datasets/CUB_200_2011')",
             "root":"str('mnt/datasets/CUB_200_2011')"
         },
-        "cub+196_192": {
+        "cub+117_129": {
             "classes": {
                 "train": "range(0, 50)",
                 "val": "range(50,100)",
-                "trainval":"list(range(0,100)) + [196, 192]",
+                "trainval":"list(range(0,100)) + [117, 129]",
                 "eval": "range(100, 200)"
             },
             "source": "str('mnt/datasets/CUB_200_2011')",

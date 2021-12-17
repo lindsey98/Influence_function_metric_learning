@@ -20,7 +20,6 @@ from torchvision.io.image import read_image
 from PIL import Image
 import scipy
 from torch.autograd import Variable
-from influence_function import inverse_hessian_product, grad_confusion, grad_alltrain, calc_confusion, calc_influential_func, calc_intravar, grad_intravar
 import pickle
 from scipy.stats import t
 from utils import predict_batchwise

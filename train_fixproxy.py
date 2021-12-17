@@ -25,27 +25,26 @@ parser.add_argument('--lr_steps', default=[1000], nargs='+', type=int)
 parser.add_argument('--source_dir', default='', type=str)
 parser.add_argument('--root_dir', default='', type=str)
 parser.add_argument('--recall', default=[1, 2, 4, 8], nargs='+', type=int)
-parser.add_argument('--init_eval', default=True, action='store_true')
+parser.add_argument('--init_eval', default=False, action='store_true')
 parser.add_argument('--apex', default=False, action='store_true')
 parser.add_argument('--warmup_k', default=5, type=int)
 
-parser.add_argument('--dataset', default='cub')
+parser.add_argument('--dataset', default='inshop')
 parser.add_argument('--seed', default=0, type=int)
 parser.add_argument('--eval_nmi', default=True, action='store_true')
 parser.add_argument('--embedding-size', default = 512, type=int, dest = 'sz_embedding')
-parser.add_argument('--config', default='config/cub_pfix.json')
+parser.add_argument('--config', default='config/inshop_pfix.json')
 parser.add_argument('--mode', default='trainval', choices=['train', 'trainval', 'test',
                                                            'testontrain', 'testontrain_super'],
                     help='train with train data or train with trainval')
 parser.add_argument('--batch-size', default = 32, type=int, dest = 'sz_batch')
 parser.add_argument('--no_warmup', default=False, action='store_true')
-parser.add_argument('--loss-type', default='ProxyNCA_pfix_test', type=str)
+parser.add_argument('--loss-type', default='ProxyNCA_pfix_complicate_loss', type=str)
 parser.add_argument('--workers', default = 4, type=int, dest = 'nb_workers')
 
 args = parser.parse_args()
 
-def proxy_assignment(model, dl_tr_noshuffle, criterion):
-
+def get_cls_mean(model, dl_tr_noshuffle):
     X, T, *_ = utils.predict_batchwise(model, dl_tr_noshuffle)
     cls_means = torch.tensor([])
     for cls in range(dl_tr_noshuffle.dataset.nb_classes()):
@@ -55,11 +54,17 @@ def proxy_assignment(model, dl_tr_noshuffle, criterion):
         clsmean = X_cls.mean(0) # (sz_embed,)
         cls_means = torch.cat([cls_means, clsmean.unsqueeze(0)], dim=0)
 
-    cls_means = F.normalize(cls_means, dim=-1, p=2).to(criterion.proxies.device) # (C, sz_embed)
+    cls_means = F.normalize(cls_means, dim=-1, p=2) # (C, sz_embed)
+    return cls_means
+
+def proxy_assignment(model, dl_tr_noshuffle, criterion):
+
+    cls_means = get_cls_mean(model, dl_tr_noshuffle).to(criterion.proxies.device)
     logging.info('Proxy re-assigned!')
     criterion.assign_cls4proxy(cls_means) # assign proxy to closest class
     criterion = criterion.cuda()
     return criterion
+
 
 if __name__ == '__main__':
 
@@ -230,22 +235,6 @@ if __name__ == '__main__':
         batch_sampler = dataset.utils.BalancedBatchSampler(torch.Tensor(tr_dataset.ys), num_class_per_batch,
                                                            int(args.sz_batch / num_class_per_batch))
 
-    # excluded_indices = np.load(os.path.join('hard_samples_ind',
-    #                                         '{}_ProxyNCA_pfix_hard_fit.npy'.format(args.dataset)))
-    #
-    # batch_sampler = dataset.utils.BalancedBatchExcludeSampler(labels=torch.Tensor(tr_dataset.ys),
-    #                                                           n_classes=num_class_per_batch,
-    #                                                           n_samples=int(args.sz_batch / num_class_per_batch),
-    #                                                           exclude_ind=excluded_indices )
-    # dl_tr_noshuffle = torch.utils.data.DataLoader(
-    #     tr_dataset,
-    #     batch_sampler = dataset.utils.BalancedBatchExcludeSamplerNoshuffle(labels=torch.Tensor(tr_dataset.ys),
-    #                                                                       n_classes=num_class_per_batch,
-    #                                                                       n_samples=int(args.sz_batch / num_class_per_batch),
-    #                                                                       exclude_ind=excluded_indices),
-    #     num_workers = args.nb_workers,
-    # )
-
     dl_tr = torch.utils.data.DataLoader(
         tr_dataset,
         batch_sampler = batch_sampler,
@@ -301,11 +290,23 @@ if __name__ == '__main__':
     model = model.cuda()
 
     '''Loss'''
-    criterion = config['criterion']['type'](
-        nb_classes = dl_tr.dataset.nb_classes(),
-        sz_embed = args.sz_embedding,
-        **config['criterion']['args']
-    )
+    cls_mean = get_cls_mean(model, dl_tr_noshuffle)
+    if 'inshop' or 'sop' in args.dataset:
+        criterion = config['criterion']['type'](
+            nb_classes = dl_tr.dataset.nb_classes(),
+            sz_embed = args.sz_embedding,
+            super_classes=torch.tensor([dl_tr.dataset.super2ys[cls] for cls in dl_tr.dataset.classes]),
+            cls_mean = cls_mean,
+            **config['criterion']['args']
+        )
+    else:
+        criterion = config['criterion']['type'](
+            nb_classes = dl_tr.dataset.nb_classes(),
+            sz_embed = args.sz_embedding,
+            **config['criterion']['args']
+        )
+    criterion.cuda()
+    criterion = proxy_assignment(model, dl_tr_noshuffle, criterion)
 
     opt_warmup = config['opt']['type'](
         [
@@ -423,9 +424,6 @@ if __name__ == '__main__':
         logging.info('Number of query set: {}'.format(len(dl_query.dataset)))
         logging.info('Number of gallery set: {}'.format(len(dl_gallery.dataset)))
 
-    # initialization
-    criterion = proxy_assignment(model, dl_tr_noshuffle, criterion)
-
     '''Warmup training'''
     if not args.no_warmup: # TODO: now dont use warmup
         #warm up training for 5 epochs
@@ -440,16 +438,9 @@ if __name__ == '__main__':
                 opt_warmup.step()
             logging.info('warm up ends in %d epochs' % (args.warmup_k-e))
 
-
+    criterion = proxy_assignment(model, dl_tr_noshuffle, criterion)
     '''training loop'''
     for e in range(0, args.nb_epochs):
-        # loss recorder similarity recorder
-        if e == 0:
-            process_recorder = {}
-            with open("{0}/{1}_recorder.json".format('log', args.log_filename), 'wt') as handle:
-                json.dump(process_recorder, handle)
-        with open("{0}/{1}_recorder.json".format('log', args.log_filename), 'rt') as handle:
-            process_recorder = json.load(handle)
 
         if args.mode == 'train':
             curr_lr = opt.param_groups[0]['lr']
@@ -489,16 +480,6 @@ if __name__ == '__main__':
 
         model.losses = losses
         model.current_epoch = e
-
-        # save proxy-similarity and class labels
-        train_embs, train_cls, _, base_loss = utils.predict_batchwise_loss(model, dl_tr_noshuffle, criterion)
-        cached_sim = utils.inner_product_sim(X=train_embs, P=criterion.proxies, T=train_cls)
-        process_recorder[e] = {'epoch': e,
-                               'losses': base_loss.detach().cpu().numpy().tolist(),
-                               'classes': train_cls.long().detach().cpu().numpy().tolist(),
-                               'similarity': cached_sim.detach().cpu().numpy().tolist()}
-        with open("{0}/{1}_recorder.json".format('log', args.log_filename), 'wt') as handle:
-            json.dump(process_recorder, handle)
 
         if e == best_epoch:
             break
@@ -553,10 +534,10 @@ if __name__ == '__main__':
 
             logging.info(str(lr_steps))
 
-        # if 'inshop' in args.dataset:
-        #     utils.evaluate_inshop(model, dl_query, dl_gallery)
-        # else:
-        #     utils.evaluate(model, dl_ev, args.eval_nmi, args.recall)
+        if 'inshop' in args.dataset:
+            utils.evaluate_inshop(model, dl_query, dl_gallery)
+        else:
+            utils.evaluate(model, dl_ev, args.eval_nmi, args.recall)
 
         # Proxy reassigned after every epoch
         criterion = proxy_assignment(model, dl_tr_noshuffle, criterion)
@@ -588,7 +569,7 @@ if __name__ == '__main__':
                 best_test_nmi, (best_test_r1, best_test_r10, best_test_r20, best_test_r30, best_test_r40, best_test_r50), best_mapr = utils.evaluate_inshop(model, dl_query, dl_gallery)
             else:
                 best_test_nmi, (best_test_r1, best_test_r2, best_test_r4, best_test_r8), best_mapr = utils.evaluate(model, dl_ev, args.eval_nmi, args.recall)
-            #logging.info('Best test r8: %s', str(best_test_r8))
+
         if 'inshop' in args.dataset:
             results['NMI'] = best_test_nmi
             results['R1']  = best_test_r1

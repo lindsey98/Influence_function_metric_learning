@@ -444,7 +444,7 @@ class ProxyNCA_pfix_reweight(torch.nn.Module):
         T = binarize_and_smooth_labels(
             T=T, nb_classes=len(P), smoothing_const=0
         )
-
+        # print(weights)
         loss = weights * torch.sum(- T * F.log_softmax(-D, -1), -1)
         loss = loss.mean()
         return loss

@@ -35,11 +35,11 @@ parser.add_argument('--mode', default='trainval', choices=['train', 'trainval', 
                                                            'testontrain', 'testontrain_super'],
                     help='train with train data or train with trainval')
 parser.add_argument('--batch-size', default = 32, type=int, dest = 'sz_batch')
-parser.add_argument('--no_warmup', default=False, action='store_true')
-parser.add_argument('--loss-type', default='ProxyNCA_pfix_confusion_116_118', type=str)
-parser.add_argument('--helpful', default=[41, 96, 95, 47, 55], nargs='+', type=int)
-parser.add_argument('--harmful', default=[73, 91, 89, 90, 80], nargs='+', type=int)
-# parser.add_argument('--model_dir', default='models/dvi_data_cub_4_lossProxyNCA_pfix/ResNet_512_Model', type=str)
+parser.add_argument('--no_warmup', default=True, action='store_true')
+parser.add_argument('--loss-type', default='ProxyNCA_pfix_confusion_117_129_reverse', type=str)
+parser.add_argument('--helpful', default=[56, 93,  5, 79, 78], nargs='+', type=int)
+parser.add_argument('--harmful', default=[29, 26, 21, 45, 57], nargs='+', type=int)
+parser.add_argument('--model_dir', default='models/dvi_data_cub_4_lossProxyNCA_pfix/ResNet_512_Model', type=str)
 parser.add_argument('--workers', default=2, type=int, dest = 'nb_workers')
 
 args = parser.parse_args()
@@ -283,8 +283,8 @@ if __name__ == '__main__':
     model = torch.nn.Sequential(feat, emb)
     model = torch.nn.DataParallel(model)
     model = model.cuda()
-    # model.load_state_dict(torch.load('{}/Epoch_{}/{}_{}_trainval_{}_{}.pth'.format(args.model_dir, 40, args.dataset, args.dataset,
-    #                                                                                args.sz_embedding, args.seed)))
+    model.load_state_dict(torch.load('{}/Epoch_{}/{}_{}_trainval_{}_{}.pth'.format(args.model_dir, 40, args.dataset, args.dataset,
+                                                                                   args.sz_embedding, args.seed)))
 
     '''Loss'''
     criterion = config['criterion']['type'](
@@ -292,8 +292,8 @@ if __name__ == '__main__':
         sz_embed = args.sz_embedding,
         **config['criterion']['args']
     )
-    # proxies = torch.load('{}/Epoch_{}/proxy.pth'.format(args.model_dir, 40), map_location='cpu')['proxies'].detach()
-    # criterion.proxies.data = proxies
+    proxies = torch.load('{}/Epoch_{}/proxy.pth'.format(args.model_dir, 40), map_location='cpu')['proxies'].detach()
+    criterion.proxies.data = proxies
     criterion.cuda()
 
     opt = config['opt']['type'](
@@ -379,6 +379,7 @@ if __name__ == '__main__':
     scores = []
     scores_tr = []
     t1 = time.time()
+
 
     if args.init_eval:
         logging.info("**Evaluating initial model...**")

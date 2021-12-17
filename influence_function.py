@@ -243,7 +243,7 @@ def grad_intravar(model, dl_ev, cls):
 #         influence_values.append(influence_thistrain)
 #     return influence_values
 
-def calc_influential_func(grad_alltrain):
+def calc_influential_func_cls(grad_alltrain):
     influence_values = []
     for grad1train in grad_alltrain:
         l_prev = grad1train['l_prev']
@@ -251,3 +251,10 @@ def calc_influential_func(grad_alltrain):
         l_diff = np.stack(l_cur) - np.stack(l_prev) # l'-l0, if l_diff < 0, helpful
         influence_values.append(np.mean(l_diff < 0).item()) # FIXME: how to define influence
     return influence_values
+
+
+def calc_influential_func_sample(grad_alltrain):
+    l_prev = grad_alltrain['l_prev']
+    l_cur = grad_alltrain['l_cur']
+    l_diff = np.stack(l_cur) - np.stack(l_prev) # l'-l0, if l_diff < 0, helpful
+    return l_diff
