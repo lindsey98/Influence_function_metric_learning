@@ -425,6 +425,10 @@ if __name__ == '__main__':
         logging.info('Number of gallery set: {}'.format(len(dl_gallery.dataset)))
 
     '''Warmup training'''
+    label_converter = {}
+    for i, cls in enumerate(dl_tr_noshuffle.dataset.classes):  # FIXME: label converter: training labels might not be continuous
+        label_converter[cls] = i
+
     if not args.no_warmup: # TODO: now dont use warmup
         #warm up training for 5 epochs
         logging.info("**warm up for %d epochs.**" % args.warmup_k)
@@ -432,7 +436,8 @@ if __name__ == '__main__':
             for ct, (x, y, _) in tqdm(enumerate(dl_tr)):
                 opt_warmup.zero_grad()
                 m = model(x.cuda())
-                loss = criterion(m, None, y.cuda())
+                yhat = torch.tensor([label_converter[this.item()] for this in y.numpy()])
+                loss = criterion(m, None, yhat.cuda())
                 loss.backward()
                 torch.nn.utils.clip_grad_value_(model.parameters(), 10)
                 opt_warmup.step()
@@ -457,7 +462,8 @@ if __name__ == '__main__':
             it += 1
             x, y = x.cuda(), y.cuda()
             m = model(x)
-            loss = criterion(m, indices, y)
+            yhat = torch.tensor([label_converter[this.item()] for this in y.numpy()])
+            loss = criterion(m, None, yhat.cuda())
             opt.zero_grad()
             loss.backward() # backprop
             torch.nn.utils.clip_grad_value_(model.parameters(), 10) # clip gradient?
