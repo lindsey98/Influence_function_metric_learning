@@ -106,8 +106,7 @@ class GradCAMCustomize(GradCAMpp):
 class DistinguishFeat(InfluentialSample):
     def __init__(self, dataset_name, seed, loss_type, config_name, sz_embedding=512):
         super().__init__(dataset_name, seed, loss_type, config_name,
-                         'confusion', test_resize=False, sz_embedding=512)
-
+                         'confusion', test_resize=False, sz_embedding=sz_embedding)
     @torch.no_grad()
     def get_distinguish_feat(self, cls1, cls2):
 
@@ -150,9 +149,9 @@ class DistinguishFeat(InfluentialSample):
 
 
 if __name__ == '__main__':
-    dataset_name = 'inshop+7403_5589'
-    loss_type = 'ProxyNCA_prob_orig'
-    config_name = 'inshop'
+    dataset_name = 'cub_143_140'
+    loss_type = 'ProxyNCA_pfix'
+    config_name = 'cub'
     sz_embedding = 512
     seed = 4
 

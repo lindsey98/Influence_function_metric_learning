@@ -29,17 +29,17 @@ parser.add_argument('--init_eval', default=False, action='store_true')
 parser.add_argument('--apex', default=False, action='store_true')
 parser.add_argument('--warmup_k', default=5, type=int)
 
-parser.add_argument('--dataset', default='inshop')
-parser.add_argument('--seed', default=0, type=int)
+parser.add_argument('--dataset', default='cub+143_140')
+parser.add_argument('--seed', default=4, type=int)
 parser.add_argument('--eval_nmi', default=True, action='store_true')
 parser.add_argument('--embedding-size', default = 512, type=int, dest = 'sz_embedding')
-parser.add_argument('--config', default='config/inshop_pfix.json')
+parser.add_argument('--config', default='config/cub_pfix.json')
 parser.add_argument('--mode', default='trainval', choices=['train', 'trainval', 'test',
                                                            'testontrain', 'testontrain_super'],
                     help='train with train data or train with trainval')
 parser.add_argument('--batch-size', default = 32, type=int, dest = 'sz_batch')
 parser.add_argument('--no_warmup', default=False, action='store_true')
-parser.add_argument('--loss-type', default='ProxyNCA_pfix_complicate_loss', type=str)
+parser.add_argument('--loss-type', default='ProxyNCA_pfix', type=str)
 parser.add_argument('--workers', default = 4, type=int, dest = 'nb_workers')
 
 args = parser.parse_args()
@@ -47,7 +47,7 @@ args = parser.parse_args()
 def get_cls_mean(model, dl_tr_noshuffle):
     X, T, *_ = utils.predict_batchwise(model, dl_tr_noshuffle)
     cls_means = torch.tensor([])
-    for cls in range(dl_tr_noshuffle.dataset.nb_classes()):
+    for cls in dl_tr_noshuffle.dataset.classes:
         indices = T == cls
         X_cls = X[indices, :]  # class-specific embedding
         X_cls = F.normalize(X_cls, dim=-1, p=2) # (N_cls, sz_embed)
@@ -291,7 +291,7 @@ if __name__ == '__main__':
 
     '''Loss'''
     cls_mean = get_cls_mean(model, dl_tr_noshuffle)
-    if 'inshop' or 'sop' in args.dataset:
+    if 'inshop' in args.dataset or 'sop' in args.dataset:
         criterion = config['criterion']['type'](
             nb_classes = dl_tr.dataset.nb_classes(),
             sz_embed = args.sz_embedding,
