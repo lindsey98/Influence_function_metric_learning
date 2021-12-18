@@ -45,24 +45,28 @@ def prepare_data(data_name='cub',
         transform_key = config['transform_key']
     print('Transformation: ', transform_key)
 
-    dl_tr_noshuffle = torch.utils.data.DataLoader(
-        dataset=dataset.load(
-            name=data_name,
-            root=dataset_config['dataset'][data_name]['root'],
-            source=dataset_config['dataset'][data_name]['source'],
-            classes=dataset_config['dataset'][data_name]['classes']['trainval'],
-            transform=dataset.utils.make_transform(
-                **dataset_config[transform_key],
-                is_train=False
-            )
-        ),
-        num_workers=0,
-        shuffle=False,
-        batch_size=batch_size,
-    )
-
     if 'inshop' not in data_name:
         if not test_resize:
+            dl_tr_noshuffle = torch.utils.data.DataLoader(
+                dataset=dataset.load(
+                    name=data_name,
+                    root=dataset_config['dataset'][data_name]['root'],
+                    source=dataset_config['dataset'][data_name]['source'],
+                    classes=dataset_config['dataset'][data_name]['classes']['trainval'],
+                    transform=transforms.Compose([
+                            RGBAToRGB(),
+                            transforms.ToTensor(),
+                            transforms.Normalize(
+                                mean=[0.485, 0.456, 0.406],
+                                std=[0.229, 0.224, 0.225],
+                            )
+                        ])
+                ),
+                num_workers=0,
+                shuffle=False,
+                batch_size=batch_size,
+            )
+
             # use this dataloader if you want to visualize (without resizing and cropping)
             dl_ev = torch.utils.data.DataLoader(
                 dataset.load(
@@ -85,6 +89,22 @@ def prepare_data(data_name='cub',
             )
 
         else:
+            dl_tr_noshuffle = torch.utils.data.DataLoader(
+                dataset=dataset.load(
+                    name=data_name,
+                    root=dataset_config['dataset'][data_name]['root'],
+                    source=dataset_config['dataset'][data_name]['source'],
+                    classes=dataset_config['dataset'][data_name]['classes']['trainval'],
+                    transform=dataset.utils.make_transform(
+                        **dataset_config[transform_key],
+                        is_train=False
+                    )
+                ),
+                num_workers=0,
+                shuffle=False,
+                batch_size=batch_size,
+            )
+
             dl_ev = torch.utils.data.DataLoader(
                 dataset.load(
                     name=data_name,

@@ -128,8 +128,6 @@ class XGradCAMCustomize(GradCAMCustomize):
             for act, grad in zip(self.hook_a, self.hook_g)
         ]
 
-
-
 def saliency(input, model, eigenvec):
     # we don't need gradients w.r.t. weights for a trained model
     for param in model.parameters():
@@ -154,7 +152,6 @@ def saliency(input, model, eigenvec):
     # normalize to [0..1]
     slc = (slc - slc.min()) / (slc.max() - slc.min())
     return slc
-
 
 class DistinguishFeat(InfluentialSample):
     def __init__(self, dataset_name, seed, loss_type, config_name, sz_embedding=512):
@@ -192,15 +189,14 @@ class DistinguishFeat(InfluentialSample):
         first_eigenveector = phi[:, 0].float()
         return first_eigenveector
 
-    def CAM(self, interested_cls, eigenvector):
+    def CAM(self, interested_cls, eigenvector, dl, base_dir='XCAM'):
         assert len(interested_cls) == 2
         cam_extractor = XGradCAMCustomize(self.model, target_layer=self.model.module[0].base.layer1)
-        for ct, (x, y, indices) in tqdm(enumerate(self.dl_ev)):
-            os.makedirs('./XCAM/{}'.format(self.dataset_name), exist_ok=True)
-            os.makedirs('./XCAM/{}/Confusion_{}_{}'.format(self.dataset_name, interested_cls[0], interested_cls[1]), exist_ok=True)
+        for ct, (x, y, indices) in tqdm(enumerate(dl)):
+            os.makedirs('./{}/{}'.format(base_dir, self.dataset_name), exist_ok=True)
+            os.makedirs('./{}/{}/Confusion_{}_{}'.format(base_dir, self.dataset_name, interested_cls[0], interested_cls[1]), exist_ok=True)
             if y.item() in interested_cls:
-                os.makedirs('./XCAM/{}/Confusion_{}_{}/{}'.format(self.dataset_name, interested_cls[0], interested_cls[1], y.item()), exist_ok=True)
-
+                os.makedirs('./{}/{}/Confusion_{}_{}/{}'.format(base_dir, self.dataset_name, interested_cls[0], interested_cls[1], y.item()), exist_ok=True)
                 x, y = x.cuda(), y.cuda()
                 out = self.model(x) # (1, sz_embed)
                 # Retrieve the CAM by passing the class index and the model output
@@ -212,83 +208,96 @@ class DistinguishFeat(InfluentialSample):
                 # Display it
                 plt.imshow(result); plt.axis('off'); plt.tight_layout()
                 # plt.show()
-                plt.savefig('./XCAM/{}/Confusion_{}_{}/{}/{}'.format(self.dataset_name,
+                plt.savefig('./{}/{}/Confusion_{}_{}/{}/{}'.format(base_dir, self.dataset_name,
                                                                  interested_cls[0], interested_cls[1],
                                                                  y.item(),
                                                                  os.path.basename(self.dl_ev.dataset.im_paths[indices[0]])))
 
-    def CAM_confuse(self, interested_cls, eigenvector):
-        assert len(interested_cls) == 2
-        cam_extractor = XGradCAMCustomize(self.model, target_layer=self.model.module[0].base.layer1)
-        for ct, (x, y, indices) in tqdm(enumerate(self.dl_ev)):
-            os.makedirs('./XCAM_confuse/{}'.format(self.dataset_name), exist_ok=True)
-            os.makedirs('./XCAM_confuse/{}/Confusion_{}_{}'.format(self.dataset_name, interested_cls[0], interested_cls[1]), exist_ok=True)
-            if y.item() in interested_cls:
-                os.makedirs('./XCAM_confuse/{}/Confusion_{}_{}/{}'.format(self.dataset_name, interested_cls[0], interested_cls[1], y.item()), exist_ok=True)
+    def CAM_sample(self, interested_cls, helpful_ind, harmful_ind,
+                   eigenvector, dl, base_dir='XCAM'):
 
+        cam_extractor = XGradCAMCustomize(self.model, target_layer=self.model.module[0].base.layer1)
+        os.makedirs('./{}/{}'.format(base_dir, self.dataset_name), exist_ok=True)
+
+        for ct, (x, y, indices) in tqdm(enumerate(dl)):
+            if indices.item() in helpful_ind:
+                os.makedirs('./{}/{}/Confusion_{}_{}/{}'.format(base_dir, self.dataset_name, interested_cls[0], interested_cls[1], 'helpful'), exist_ok=True)
                 x, y = x.cuda(), y.cuda()
                 out = self.model(x) # (1, sz_embed)
-                # Retrieve the CAM by passing the class index and the model output
                 activation_map = cam_extractor(out, eigenvector)
-                # Resize the CAM and overlay it
-                img = to_pil_image(read_image(self.dl_ev.dataset.im_paths[indices[0]]))
+                img = to_pil_image(read_image(dl.dataset.im_paths[indices[0]]))
                 result = overlay_mask(img, to_pil_image(activation_map[0].detach().cpu(), mode='F'), alpha=0.5)
 
                 # Display it
                 plt.imshow(result); plt.axis('off'); plt.tight_layout()
                 # plt.show()
-                plt.savefig('./XCAM_confuse/{}/Confusion_{}_{}/{}/{}'.format(self.dataset_name,
+                plt.savefig('./{}/{}/Confusion_{}_{}/{}/{}'.format(base_dir, self.dataset_name,
                                                                  interested_cls[0], interested_cls[1],
-                                                                 y.item(),
-                                                                 os.path.basename(self.dl_ev.dataset.im_paths[indices[0]])))
-
-    def SaliencyMap_confuse(self, interested_cls, eigenvector):
-        assert len(interested_cls) == 2
-        for ct, (x, y, indices) in tqdm(enumerate(self.dl_ev)):
-            os.makedirs('./SMap_confuse/{}'.format(self.dataset_name), exist_ok=True)
-            os.makedirs('./SMap_confuse/{}/Confusion_{}_{}'.format(self.dataset_name, interested_cls[0], interested_cls[1]), exist_ok=True)
-            if y.item() in interested_cls:
-                os.makedirs('./SMap_confuse/{}/Confusion_{}_{}/{}'.format(self.dataset_name, interested_cls[0], interested_cls[1], y.item()), exist_ok=True)
-
+                                                                 'helpful',
+                                                                 os.path.basename(dl.dataset.im_paths[indices[0]])))
+            elif indices.item() in harmful_ind:
+                os.makedirs('./{}/{}/Confusion_{}_{}/{}'.format(base_dir, self.dataset_name, interested_cls[0], interested_cls[1], 'harmful'), exist_ok=True)
                 x, y = x.cuda(), y.cuda()
-                # Retrieve the CAM by passing the class index and the model output
-                s_map = saliency(x, self.model, eigenvector)
-
-                # Resize the CAM and overlay it
-                img = to_pil_image(read_image(self.dl_ev.dataset.im_paths[indices[0]]))
-                result = overlay_mask(img, to_pil_image(s_map.detach().cpu(), mode='F'), alpha=0.35)
+                out = self.model(x) # (1, sz_embed)
+                activation_map = cam_extractor(out, eigenvector)
+                img = to_pil_image(read_image(dl.dataset.im_paths[indices[0]]))
+                result = overlay_mask(img, to_pil_image(activation_map[0].detach().cpu(), mode='F'), alpha=0.5)
 
                 # Display it
                 plt.imshow(result); plt.axis('off'); plt.tight_layout()
                 # plt.show()
-                plt.savefig('./SMap_confuse/{}/Confusion_{}_{}/{}/{}'.format(self.dataset_name,
+                plt.savefig('./{}/{}/Confusion_{}_{}/{}/{}'.format(base_dir, self.dataset_name,
                                                                  interested_cls[0], interested_cls[1],
-                                                                 y.item(),
-                                                                 os.path.basename(self.dl_ev.dataset.im_paths[indices[0]])))
+                                                                 'harmful',
+                                                                 os.path.basename(dl.dataset.im_paths[indices[0]])))
 
-    def SaliencyMap(self, interested_cls, eigenvector):
-        assert len(interested_cls) == 2
-        for ct, (x, y, indices) in tqdm(enumerate(self.dl_ev)):
-            os.makedirs('./SMap/{}'.format(self.dataset_name), exist_ok=True)
-            os.makedirs('./SMap/{}/Confusion_{}_{}'.format(self.dataset_name, interested_cls[0], interested_cls[1]), exist_ok=True)
-            if y.item() in interested_cls:
-                os.makedirs('./SMap/{}/Confusion_{}_{}/{}'.format(self.dataset_name, interested_cls[0], interested_cls[1], y.item()), exist_ok=True)
-
-                x, y = x.cuda(), y.cuda()
-                # Retrieve the CAM by passing the class index and the model output
-                s_map = saliency(x, self.model, eigenvector)
-
-                # Resize the CAM and overlay it
-                img = to_pil_image(read_image(self.dl_ev.dataset.im_paths[indices[0]]))
-                result = overlay_mask(img, to_pil_image(s_map.detach().cpu(), mode='F'), alpha=0.35)
-
-                # Display it
-                plt.imshow(result); plt.axis('off'); plt.tight_layout()
-                # plt.show()
-                plt.savefig('./SMap/{}/Confusion_{}_{}/{}/{}'.format(self.dataset_name,
-                                                                 interested_cls[0], interested_cls[1],
-                                                                 y.item(),
-                                                                 os.path.basename(self.dl_ev.dataset.im_paths[indices[0]])))
+    # def SaliencyMap_confuse(self, interested_cls, eigenvector):
+    #     assert len(interested_cls) == 2
+    #     for ct, (x, y, indices) in tqdm(enumerate(self.dl_ev)):
+    #         os.makedirs('./SMap_confuse/{}'.format(self.dataset_name), exist_ok=True)
+    #         os.makedirs('./SMap_confuse/{}/Confusion_{}_{}'.format(self.dataset_name, interested_cls[0], interested_cls[1]), exist_ok=True)
+    #         if y.item() in interested_cls:
+    #             os.makedirs('./SMap_confuse/{}/Confusion_{}_{}/{}'.format(self.dataset_name, interested_cls[0], interested_cls[1], y.item()), exist_ok=True)
+    #
+    #             x, y = x.cuda(), y.cuda()
+    #             # Retrieve the CAM by passing the class index and the model output
+    #             s_map = saliency(x, self.model, eigenvector)
+    #
+    #             # Resize the CAM and overlay it
+    #             img = to_pil_image(read_image(self.dl_ev.dataset.im_paths[indices[0]]))
+    #             result = overlay_mask(img, to_pil_image(s_map.detach().cpu(), mode='F'), alpha=0.35)
+    #
+    #             # Display it
+    #             plt.imshow(result); plt.axis('off'); plt.tight_layout()
+    #             # plt.show()
+    #             plt.savefig('./SMap_confuse/{}/Confusion_{}_{}/{}/{}'.format(self.dataset_name,
+    #                                                              interested_cls[0], interested_cls[1],
+    #                                                              y.item(),
+    #                                                              os.path.basename(self.dl_ev.dataset.im_paths[indices[0]])))
+    #
+    # def SaliencyMap(self, interested_cls, eigenvector):
+    #     assert len(interested_cls) == 2
+    #     for ct, (x, y, indices) in tqdm(enumerate(self.dl_ev)):
+    #         os.makedirs('./SMap/{}'.format(self.dataset_name), exist_ok=True)
+    #         os.makedirs('./SMap/{}/Confusion_{}_{}'.format(self.dataset_name, interested_cls[0], interested_cls[1]), exist_ok=True)
+    #         if y.item() in interested_cls:
+    #             os.makedirs('./SMap/{}/Confusion_{}_{}/{}'.format(self.dataset_name, interested_cls[0], interested_cls[1], y.item()), exist_ok=True)
+    #
+    #             x, y = x.cuda(), y.cuda()
+    #             # Retrieve the CAM by passing the class index and the model output
+    #             s_map = saliency(x, self.model, eigenvector)
+    #
+    #             # Resize the CAM and overlay it
+    #             img = to_pil_image(read_image(self.dl_ev.dataset.im_paths[indices[0]]))
+    #             result = overlay_mask(img, to_pil_image(s_map.detach().cpu(), mode='F'), alpha=0.35)
+    #
+    #             # Display it
+    #             plt.imshow(result); plt.axis('off'); plt.tight_layout()
+    #             # plt.show()
+    #             plt.savefig('./SMap/{}/Confusion_{}_{}/{}/{}'.format(self.dataset_name,
+    #                                                              interested_cls[0], interested_cls[1],
+    #                                                              y.item(),
+    #                                                              os.path.basename(self.dl_ev.dataset.im_paths[indices[0]])))
 
 if __name__ == '__main__':
     dataset_name = 'cub'
@@ -306,9 +315,13 @@ if __name__ == '__main__':
 
     # eigenvec = DF.get_distinguish_feat(i, j)
     eigenvec = DF.get_confusing_feat(i, j)
-    # print(eigenvec.shape)
+    print(eigenvec.shape)
+    '''Training'''
+    # harmful = np.load('Influential_data/{}_{}_harmful_testcls{}.npy'.format('cub', 'ProxyNCA_pfix', '0'))
+    # helpful = np.load('Influential_data/{}_{}_helpful_testcls{}.npy'.format('cub', 'ProxyNCA_pfix', '0'))
+    # DF.CAM_sample(interested_cls=[i, j], helpful_ind=helpful, harmful_ind=harmful,
+    #               eigenvector=eigenvec, dl=DF.dl_tr)
 
-    # DF.SaliencyMap([i, j], eigenvec)
-
-    DF.CAM_confuse([i, j], eigenvec)
+    '''Two testing classes'''
+    DF.CAM(interested_cls=[i, j], eigenvector=eigenvec, dl=DF.dl_ev)
 #

@@ -36,9 +36,9 @@ parser.add_argument('--mode', default='trainval', choices=['train', 'trainval', 
                     help='train with train data or train with trainval')
 parser.add_argument('--batch-size', default = 32, type=int, dest = 'sz_batch')
 parser.add_argument('--no_warmup', default=True, action='store_true')
-parser.add_argument('--loss-type', default='ProxyNCA_pfix_confusion_sample_117_129_reverse', type=str)
-parser.add_argument('--helpful', default='Influential_data/{}_{}_harmful_testcls{}.npy'.format('cub', 'ProxyNCA_pfix', '3'), type=str)
-parser.add_argument('--harmful', default='Influential_data/{}_{}_helpful_testcls{}.npy'.format('cub', 'ProxyNCA_pfix', '3'), type=str)
+parser.add_argument('--loss-type', default='ProxyNCA_pfix_confusion_sample500_116_118', type=str)
+parser.add_argument('--helpful', default='Influential_data/{}_{}_helpful_testcls{}.npy'.format('cub', 'ProxyNCA_pfix', '2'), type=str)
+parser.add_argument('--harmful', default='Influential_data/{}_{}_harmful_testcls{}.npy'.format('cub', 'ProxyNCA_pfix', '2'), type=str)
 parser.add_argument('--model_dir', default='models/dvi_data_cub_4_lossProxyNCA_pfix/ResNet_512_Model', type=str)
 parser.add_argument('--workers', default=2, type=int, dest = 'nb_workers')
 
@@ -521,7 +521,7 @@ if __name__ == '__main__':
             logging.info('Best val MAP@R: %s', str(best_val_mapr))
 
         if e == args.nb_epochs-1:
-            save_dir = 'dvi_data_{}_{}_loss{}/ResNet_{}_Model'.format(args.dataset, args.seed,
+            save_dir = 'models/dvi_data_{}_{}_loss{}/ResNet_{}_Model'.format(args.dataset, args.seed,
                                                                       args.loss_type, str(args.sz_embedding))
             os.makedirs('{}'.format(save_dir), exist_ok=True)
             os.makedirs('{}/Epoch_{}'.format(save_dir, e+1), exist_ok=True)

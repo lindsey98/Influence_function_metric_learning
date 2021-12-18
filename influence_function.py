@@ -49,24 +49,31 @@ def grad_alltrain(model, criterion, dl_tr, start=None, batch=None):
             if ct - start >= batch - 1: break # support processing a subset of training only
     return grad_all
 
+def calc_loss_train(model, dl, criterion, indices=None):
+    l = []
+    if indices is not None:
+        for ct, (x, t, ind) in tqdm(enumerate(dl)):
+            if ind.item() in indices:
+                x, t = x.cuda(), t.cuda()
+                m = model(x)
+                l_this = criterion(m, None, t)
+                l.append(l_this.detach().cpu().item())
+    else:
+        for ct, (x, t, _) in tqdm(enumerate(dl)):
+            x, t = x.cuda(), t.cuda()
+            m = model(x)
+            l_this = criterion(m, None, t)
+            l.append(l_this.detach().cpu().item())
+    return l
+
 def loss_change_train(model, criterion, dl_tr, params_prev, params_cur):
 
-    l_prev = []
     weight_orig = model.module[-1].weight.data
     model.module[-1].weight.data = params_prev
-    for ct, (x, t, _) in tqdm(enumerate(dl_tr)):
-        x, t = x.cuda(), t.cuda()
-        m = model(x)
-        l_this = criterion(m, None, t)
-        l_prev.append(l_this.detach().cpu().item())
+    l_prev = calc_loss_train(model, dl_tr, criterion, None)
 
-    l_cur = []
     model.module[-1].weight.data = params_cur
-    for ct, (x, t, _) in tqdm(enumerate(dl_tr)):
-        x, t = x.cuda(), t.cuda()
-        m = model(x)
-        l_this = criterion(m, None, t)
-        l_cur.append(l_this.detach().cpu().item())
+    l_cur = calc_loss_train(model, dl_tr, criterion, None)
 
     model.module[-1].weight.data = weight_orig # dont forget to revise the weights back to the original
     return np.asarray(l_prev), np.asarray(l_cur)
