@@ -29,7 +29,7 @@ parser.add_argument('--init_eval', default=False, action='store_true')
 parser.add_argument('--apex', default=False, action='store_true')
 parser.add_argument('--warmup_k', default=5, type=int)
 
-parser.add_argument('--dataset', default='cub+143_140')
+parser.add_argument('--dataset', default='cub+117_129')
 parser.add_argument('--seed', default=4, type=int)
 parser.add_argument('--eval_nmi', default=True, action='store_true')
 parser.add_argument('--embedding-size', default = 512, type=int, dest = 'sz_embedding')
@@ -436,7 +436,7 @@ if __name__ == '__main__':
             for ct, (x, y, _) in tqdm(enumerate(dl_tr)):
                 opt_warmup.zero_grad()
                 m = model(x.cuda())
-                yhat = torch.tensor([label_converter[this.item()] for this in y.numpy()])
+                yhat = torch.tensor([label_converter[this] for this in y.numpy()])
                 loss = criterion(m, None, yhat.cuda())
                 loss.backward()
                 torch.nn.utils.clip_grad_value_(model.parameters(), 10)
@@ -462,7 +462,7 @@ if __name__ == '__main__':
             it += 1
             x, y = x.cuda(), y.cuda()
             m = model(x)
-            yhat = torch.tensor([label_converter[this.item()] for this in y.numpy()])
+            yhat = torch.tensor([label_converter[this] for this in y.detach().cpu().numpy()])
             loss = criterion(m, None, yhat.cuda())
             opt.zero_grad()
             loss.backward() # backprop

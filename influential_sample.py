@@ -31,7 +31,7 @@ class InfluentialSample():
     def __init__(self, dataset_name, seed, loss_type, config_name,
                  measure, test_resize=True, sz_embedding=512, epoch=40):
 
-        self.folder = 'dvi_data_{}_{}_loss{}/'.format(dataset_name, seed, loss_type)
+        self.folder = 'models/dvi_data_{}_{}_loss{}/'.format(dataset_name, seed, loss_type)
         self.model_dir = '{}/ResNet_{}_Model'.format(self.folder, sz_embedding)
         self.measure = measure
         self.config_name = config_name
