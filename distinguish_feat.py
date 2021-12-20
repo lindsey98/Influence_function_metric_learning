@@ -6,16 +6,16 @@ from loss import *
 import torch.nn as nn
 import os
 import matplotlib.pyplot as plt
-from torchcam.methods import GradCAMpp
+from torchcam.methods import GradCAMpp, GradCAM
 from torchvision.transforms.functional import normalize, resize, to_pil_image
 from torchcam.utils import overlay_mask
 from torchvision.io.image import read_image
 from PIL import Image
 from typing import Optional, List, Union, Tuple, Any
 from influential_sample import InfluentialSample
-os.environ['CUDA_VISIBLE_DEVICES'] = "1"
+os.environ['CUDA_VISIBLE_DEVICES'] = "0"
 
-class GradCAMCustomize(GradCAMpp):
+class GradCAMCustomize(GradCAM):
 
     def __init__(
         self,
@@ -29,6 +29,62 @@ class GradCAMCustomize(GradCAMpp):
             target_layer,
             input_shape,
             **kwargs)
+
+    def _get_weights(self, scores: torch.Tensor, eigenvector: torch.Tensor) -> List[torch.Tensor]:  # type: ignore[override]
+        """Computes the weight coefficients of the hooked activation maps"""
+        # Backpropagate
+        self._backprop(scores, eigenvector)
+        # Global average pool the gradients over spatial dimensions
+        return [grad.squeeze(0).flatten(1).mean(-1) for grad in self.hook_g]
+
+    def _backprop(self, scores: torch.Tensor, eigenvec: torch.Tensor) -> None:
+        # Backpropagate to get the gradients on the hooked layer
+        eigenvec = eigenvec.to(scores.device)
+        eigenvec.requires_grad = False
+        loss = torch.dot(scores.squeeze(0), eigenvec) # alpha^T embedding
+        self.model.zero_grad()
+        loss.backward(retain_graph=True)
+
+    def compute_cams(self, scores: torch.Tensor, eigenvec: torch.Tensor, normalized: bool = True) -> List[torch.Tensor]:
+
+        # Get map weight & unsqueeze it
+        weights = self._get_weights(scores, eigenvec)
+        cams: List[torch.Tensor] = []
+
+        for weight, activation in zip(weights, self.hook_a):
+            missing_dims = activation.ndim - weight.ndim - 1  # type: ignore[union-attr]
+            weight = weight[(...,) + (None,) * missing_dims]
+
+            # Perform the weighted combination to get the CAM
+            cam = torch.nansum(weight * activation.squeeze(0), dim=0)  # type: ignore[union-attr]
+
+            if self._relu:
+                cam = F.relu(cam, inplace=True)
+
+            # Normalize the CAM
+            if normalized:
+                cam = self._normalize(cam)
+
+            cams.append(cam)
+
+        return cams
+
+    def __call__(self, scores: torch.Tensor, eigenvec: torch.Tensor, normalized: bool = True) -> List[torch.Tensor]:
+        return self.compute_cams(scores, eigenvec, normalized)
+
+class GradCAMppCustomize(GradCAMCustomize):
+
+    def __init__(
+                self,
+                model: nn.Module,
+                target_layer: Optional[Union[Union[nn.Module, str], List[Union[nn.Module, str]]]] = None,
+                input_shape: Tuple[int, ...] = (3, 224, 224),
+                **kwargs: Any,
+        ) -> None:
+        super().__init__(model,
+                             target_layer,
+                             input_shape,
+                             **kwargs)
 
     def _get_weights(self, scores, eigenvector) -> List[torch.Tensor]:  # type: ignore[override]
         """Computes the weight coefficients of the hooked activation maps"""
@@ -54,43 +110,6 @@ class GradCAMCustomize(GradCAMpp):
             for a, grad in zip(alpha, self.hook_g)
         ]
 
-    def _backprop(self, scores: torch.Tensor, eigenvec: torch.Tensor) -> None:
-        # Backpropagate to get the gradients on the hooked layer
-        eigenvec = eigenvec.to(scores.device)
-        eigenvec.requires_grad = False
-        loss = torch.dot(scores.squeeze(0), eigenvec) # alpha^T embedding
-        self.model.zero_grad()
-        loss.backward(retain_graph=True)
-
-    def compute_cams(self, scores: torch.Tensor, eigenvec: torch.Tensor, normalized: bool = True) -> List[torch.Tensor]:
-
-        # Get map weight & unsqueeze it
-        weights = self._get_weights(scores, eigenvec)
-        cams: List[torch.Tensor] = []
-
-        for weight, activation in zip(weights, self.hook_a):
-            missing_dims = activation.ndim - weight.ndim - 1  # type: ignore[union-attr]
-            weight = weight[(...,) + (None,) * missing_dims]
-
-            # Perform the weighted combination to get the CAM
-            cam = torch.nansum(weight * activation.squeeze(0), dim=0)  # type: ignore[union-attr]
-            # print("weights", weights)
-            # print("activation", activation)
-
-            if self._relu:
-                cam = F.relu(cam, inplace=True)
-
-            # Normalize the CAM
-            if normalized:
-                cam = self._normalize(cam)
-
-            cams.append(cam)
-
-        return cams
-
-    def __call__(self, scores: torch.Tensor, eigenvec: torch.Tensor, normalized: bool = True) -> List[torch.Tensor]:
-        return self.compute_cams(scores, eigenvec, normalized)
-
 class XGradCAMCustomize(GradCAMCustomize):
 
     def __init__(
@@ -115,54 +134,30 @@ class XGradCAMCustomize(GradCAMCustomize):
             for act, grad in zip(self.hook_a, self.hook_g)
         ]
 
-# class LayerCAMCustomize(GradCAMCustomize):
-#
-#     def __init__(
-#         self,
-#         model: nn.Module,
-#         target_layer: Optional[Union[Union[nn.Module, str], List[Union[nn.Module, str]]]] = None,
-#         input_shape: Tuple[int, ...] = (3, 224, 224),
-#         **kwargs: Any,
-#     ) -> None:
-#
-#         super().__init__(model,
-#             target_layer,
-#             input_shape,
-#             **kwargs)
-#
-#     def _get_weights(self, scores, eigenvector) -> List[torch.Tensor]:  # type: ignore[override]
-#         self._backprop(scores, eigenvector)
-#         return [torch.relu(grad).squeeze(0) for grad in self.hook_g]
-#
-#     @staticmethod
-#     def _scale_cams(cams: List[torch.Tensor], gamma: float = 2.) -> List[torch.Tensor]:
-#         # cf. Equation 9 in the paper
-#         return [torch.tanh(gamma * cam) for cam in cams]
+class LayerCAMCustomize(GradCAMCustomize):
 
-# def saliency(input, model, eigenvec):
-#     # we don't need gradients w.r.t. weights for a trained model
-#     for param in model.parameters():
-#         param.requires_grad = False
-#
-#     # set model in eval mode
-#     model.eval()
-#
-#     # we want to calculate gradient of higest score w.r.t. input
-#     # so set requires_grad to True for input
-#     input.requires_grad = True
-#     # forward pass to calculate predictions
-#     scores = model(input)
-#     eigenvec = eigenvec.to(scores.device)
-#     eigenvec.requires_grad = False
-#     loss = torch.dot(scores.squeeze(0), eigenvec)
-#     model.zero_grad()
-#     loss.backward(retain_graph=True)
-#
-#     # get max along channel axis
-#     slc, _ = torch.max(torch.abs(input.grad[0]), dim=0)
-#     # normalize to [0..1]
-#     slc = (slc - slc.min()) / (slc.max() - slc.min())
-#     return slc
+    def __init__(
+        self,
+        model: nn.Module,
+        target_layer: Optional[Union[Union[nn.Module, str], List[Union[nn.Module, str]]]] = None,
+        input_shape: Tuple[int, ...] = (3, 224, 224),
+        **kwargs: Any,
+    ) -> None:
+
+        super().__init__(model,
+            target_layer,
+            input_shape,
+            **kwargs)
+
+    def _get_weights(self, scores, eigenvector) -> List[torch.Tensor]:  # type: ignore[override]
+        self._backprop(scores, eigenvector)
+        return [torch.relu(grad).squeeze(0) for grad in self.hook_g]
+
+    @staticmethod
+    def _scale_cams(cams: List[torch.Tensor], gamma: float = 2.) -> List[torch.Tensor]:
+        # cf. Equation 9 in the paper
+        return [torch.tanh(gamma * cam) for cam in cams]
+
 
 class DistinguishFeat(InfluentialSample):
     def __init__(self, dataset_name, seed, loss_type, config_name, sz_embedding=512):
@@ -200,9 +195,9 @@ class DistinguishFeat(InfluentialSample):
         first_eigenveector = phi[:, 0].float()
         return first_eigenveector
 
-    def CAM(self, interested_cls, eigenvector, dl, base_dir='XCAM'):
+    def CAM(self, interested_cls, eigenvector, dl, base_dir='CAM'):
         assert len(interested_cls) == 2
-        cam_extractor = XGradCAMCustomize(self.model, target_layer=self.model.module[0].base.layer1)
+        cam_extractor = GradCAMCustomize(self.model, target_layer=self.model.module[0].base.layer1)
         for ct, (x, y, indices) in tqdm(enumerate(dl)):
             os.makedirs('./{}/{}'.format(base_dir, self.dataset_name), exist_ok=True)
             os.makedirs('./{}/{}/Confusion_{}_{}'.format(base_dir, self.dataset_name, interested_cls[0], interested_cls[1]), exist_ok=True)
@@ -225,9 +220,9 @@ class DistinguishFeat(InfluentialSample):
                                                                   os.path.basename(dl.dataset.im_paths[indices[0]])))
 
     def CAM_sample(self, interested_cls, helpful_ind, harmful_ind,
-                   eigenvector, dl, base_dir='XCAM'):
+                   eigenvector, dl, base_dir='CAM'):
 
-        cam_extractor = XGradCAMCustomize(self.model, target_layer=self.model.module[0].base.layer1)
+        cam_extractor = GradCAMCustomize(self.model, target_layer=self.model.module[0].base.layer1)
         os.makedirs('./{}/{}'.format(base_dir, self.dataset_name), exist_ok=True)
 
         for ct, (x, y, indices) in tqdm(enumerate(dl)):
@@ -274,35 +269,33 @@ if __name__ == '__main__':
     config_name = 'cub'
     sz_embedding = 512
     seed = 4
-    i = 117; j = 129
+    i = 143; j = 140
 
     DF = DistinguishFeat(dataset_name, seed, loss_type, config_name, sz_embedding)
-    # feat_cls1 = DF.testing_embedding[DF.testing_label == i]
-    # feat_cls2 = DF.testing_embedding[DF.testing_label == j]
-    # confusion = calc_confusion(feat_cls1, feat_cls2, sqrt=True)  # get t instead of t^2
-    # print(confusion.item())
 
     '''Analyze confusing features'''
     eigenvec = DF.get_confusing_feat(i, j)
     # print(eigenvec.shape)
 
     '''Training'''
-    helpful = np.load('Influential_data/{}_{}_helpful_testcls{}.npy'.format('cub', 'ProxyNCA_pfix', '3'))
-    harmful = np.load('Influential_data/{}_{}_harmful_testcls{}.npy'.format('cub', 'ProxyNCA_pfix', '3'))
-    DF.CAM_sample(interested_cls=[i, j], helpful_ind=helpful, harmful_ind=harmful,
-                  eigenvector=eigenvec, dl=DF.dl_tr)
+    # helpful = np.load('Influential_data/{}_{}_helpful_testcls{}.npy'.format('cub', 'ProxyNCA_pfix', '3'))
+    # harmful = np.load('Influential_data/{}_{}_harmful_testcls{}.npy'.format('cub', 'ProxyNCA_pfix', '3'))
+    # DF.CAM_sample(interested_cls=[i, j],
+    #               helpful_ind=helpful, harmful_ind=harmful,
+    #               eigenvector=eigenvec, dl=DF.dl_tr)
 
     '''Two testing classes'''
-    DF.CAM(interested_cls=[i, j], eigenvector=eigenvec, dl=DF.dl_ev)
+    DF.CAM(interested_cls=[i, j], eigenvector=eigenvec, dl=DF.dl_ev, base_dir='CAM')
 
     '''Analyze distingushing features'''
-    # dataset_name = 'cub+178_172'
+    # dataset_name = 'cub+143_140'
     # loss_type = 'ProxyNCA_pfix'
     # config_name = 'cub'
     # sz_embedding = 512
     # seed = 4
-    # i = 178; j = 172
-
+    # i = 143; j = 140
+    #
     # DF = DistinguishFeat(dataset_name, seed, loss_type, config_name, sz_embedding)
     # eigenvec = DF.get_distinguish_feat(i, j)
-    # DF.CAM(interested_cls=[i, j], eigenvector=eigenvec, dl=DF.dl_ev, base_dir='XCAM_distinguish')
+    # DF.CAM(interested_cls=[i, j], eigenvector=eigenvec,
+    #        dl=DF.dl_ev, base_dir='CAM_distinguish')
