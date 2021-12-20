@@ -1,163 +1,63 @@
 import numpy as np
 import torch
 import torchvision
+from matplotlib import cm
 
 from loss import *
 import torch.nn as nn
 import os
 import matplotlib.pyplot as plt
-from torchcam.methods import GradCAMpp, GradCAM
 from torchvision.transforms.functional import normalize, resize, to_pil_image
-from torchcam.utils import overlay_mask
 from torchvision.io.image import read_image
 from PIL import Image
-from typing import Optional, List, Union, Tuple, Any
 from influential_sample import InfluentialSample
+from CAM_methods import *
 os.environ['CUDA_VISIBLE_DEVICES'] = "0"
 
-class GradCAMCustomize(GradCAM):
+def overlay_mask(img: Image.Image, mask: Image.Image, colormap: str = 'jet', alpha: float = 0.7) -> Image.Image:
 
-    def __init__(
-        self,
-        model: nn.Module,
-        target_layer: Optional[Union[Union[nn.Module, str], List[Union[nn.Module, str]]]] = None,
-        input_shape: Tuple[int, ...] = (3, 224, 224),
-        **kwargs: Any,
-    ) -> None:
+    """Overlay a colormapped mask on a background image
 
-        super().__init__(model,
-            target_layer,
-            input_shape,
-            **kwargs)
+    Example::
+        >>> from PIL import Image
+        >>> import matplotlib.pyplot as plt
+        >>> from torchcam.utils import overlay_mask
+        >>> img = ...
+        >>> cam = ...
+        >>> overlay = overlay_mask(img, cam)
 
-    def _get_weights(self, scores: torch.Tensor, eigenvector: torch.Tensor) -> List[torch.Tensor]:  # type: ignore[override]
-        """Computes the weight coefficients of the hooked activation maps"""
-        # Backpropagate
-        self._backprop(scores, eigenvector)
-        # Global average pool the gradients over spatial dimensions
-        return [grad.squeeze(0).flatten(1).mean(-1) for grad in self.hook_g]
+    Args:
+        img: background image
+        mask: mask to be overlayed in grayscale
+        colormap: colormap to be applied on the mask
+        alpha: transparency of the background image
 
-    def _backprop(self, scores: torch.Tensor, eigenvec: torch.Tensor) -> None:
-        # Backpropagate to get the gradients on the hooked layer
-        eigenvec = eigenvec.to(scores.device)
-        eigenvec.requires_grad = False
-        loss = torch.dot(scores.squeeze(0), eigenvec) # alpha^T embedding
-        self.model.zero_grad()
-        loss.backward(retain_graph=True)
+    Returns:
+        overlayed image
 
-    def compute_cams(self, scores: torch.Tensor, eigenvec: torch.Tensor, normalized: bool = True) -> List[torch.Tensor]:
+    Raises:
+        TypeError: when the arguments have invalid types
+        ValueError: when the alpha argument has an incorrect value
+    """
 
-        # Get map weight & unsqueeze it
-        weights = self._get_weights(scores, eigenvec)
-        cams: List[torch.Tensor] = []
+    if not isinstance(img, Image.Image) or not isinstance(mask, Image.Image):
+        raise TypeError('img and mask arguments need to be PIL.Image')
 
-        for weight, activation in zip(weights, self.hook_a):
-            missing_dims = activation.ndim - weight.ndim - 1  # type: ignore[union-attr]
-            weight = weight[(...,) + (None,) * missing_dims]
+    if not isinstance(alpha, float) or alpha < 0 or alpha >= 1:
+        raise ValueError('alpha argument is expected to be of type float between 0 and 1')
 
-            # Perform the weighted combination to get the CAM
-            cam = torch.nansum(weight * activation.squeeze(0), dim=0)  # type: ignore[union-attr]
+    cmap = cm.get_cmap(colormap)
+    # Resize mask and apply colormap
+    overlay = mask.resize(img.size, resample=Image.BICUBIC)
+    overlay = (255 * cmap(np.asarray(overlay) ** 2)[:, :, :3]).astype(np.uint8)
 
-            if self._relu:
-                cam = F.relu(cam, inplace=True)
+    # Overlay the image with the mask
+    img = np.asarray(img)
+    if len(img.shape) < 3: # create a dummy axis if img is single channel
+        img = img[:, :, np.newaxis]
+    overlayed_img = Image.fromarray((alpha * img + (1 - alpha) * overlay).astype(np.uint8))
 
-            # Normalize the CAM
-            if normalized:
-                cam = self._normalize(cam)
-
-            cams.append(cam)
-
-        return cams
-
-    def __call__(self, scores: torch.Tensor, eigenvec: torch.Tensor, normalized: bool = True) -> List[torch.Tensor]:
-        return self.compute_cams(scores, eigenvec, normalized)
-
-class GradCAMppCustomize(GradCAMCustomize):
-
-    def __init__(
-                self,
-                model: nn.Module,
-                target_layer: Optional[Union[Union[nn.Module, str], List[Union[nn.Module, str]]]] = None,
-                input_shape: Tuple[int, ...] = (3, 224, 224),
-                **kwargs: Any,
-        ) -> None:
-        super().__init__(model,
-                             target_layer,
-                             input_shape,
-                             **kwargs)
-
-    def _get_weights(self, scores, eigenvector) -> List[torch.Tensor]:  # type: ignore[override]
-        """Computes the weight coefficients of the hooked activation maps"""
-        # Backpropagate
-        self._backprop(scores, eigenvector)
-        # Alpha coefficient for each pixel
-        grad_2 = [grad.pow(2) for grad in self.hook_g]
-        grad_3 = [g2 * grad for g2, grad in zip(grad_2, self.hook_g)]
-        # Watch out for NaNs produced by underflow
-        spatial_dims = self.hook_a[0].ndim - 2  # type: ignore[union-attr]
-        denom = [
-            2 * g2 + (g3 * act).flatten(2).sum(-1)[(...,) + (None,) * spatial_dims]
-            for g2, g3, act in zip(grad_2, grad_3, self.hook_a)
-        ]
-        nan_mask = [g2 > 0 for g2 in grad_2]
-        alpha = grad_2
-        for idx, d, mask in zip(range(len(grad_2)), denom, nan_mask):
-            alpha[idx][mask].div_(d[mask])
-
-        # Apply pixel coefficient in each weight
-        return [
-            a.squeeze_(0).mul_(torch.relu(grad.squeeze(0))).flatten(1).sum(-1)
-            for a, grad in zip(alpha, self.hook_g)
-        ]
-
-class XGradCAMCustomize(GradCAMCustomize):
-
-    def __init__(
-        self,
-        model: nn.Module,
-        target_layer: Optional[Union[Union[nn.Module, str], List[Union[nn.Module, str]]]] = None,
-        input_shape: Tuple[int, ...] = (3, 224, 224),
-        **kwargs: Any,
-    ) -> None:
-
-        super().__init__(model,
-            target_layer,
-            input_shape,
-            **kwargs)
-
-    def _get_weights(self, scores, eigenvector) -> List[torch.Tensor]:  # type: ignore[override]
-        """Computes the weight coefficients of the hooked activation maps"""
-        # Backpropagate
-        self._backprop(scores, eigenvector)
-        return [
-            (grad * act).squeeze(0).flatten(1).sum(-1) / act.squeeze(0).flatten(1).sum(-1)
-            for act, grad in zip(self.hook_a, self.hook_g)
-        ]
-
-class LayerCAMCustomize(GradCAMCustomize):
-
-    def __init__(
-        self,
-        model: nn.Module,
-        target_layer: Optional[Union[Union[nn.Module, str], List[Union[nn.Module, str]]]] = None,
-        input_shape: Tuple[int, ...] = (3, 224, 224),
-        **kwargs: Any,
-    ) -> None:
-
-        super().__init__(model,
-            target_layer,
-            input_shape,
-            **kwargs)
-
-    def _get_weights(self, scores, eigenvector) -> List[torch.Tensor]:  # type: ignore[override]
-        self._backprop(scores, eigenvector)
-        return [torch.relu(grad).squeeze(0) for grad in self.hook_g]
-
-    @staticmethod
-    def _scale_cams(cams: List[torch.Tensor], gamma: float = 2.) -> List[torch.Tensor]:
-        # cf. Equation 9 in the paper
-        return [torch.tanh(gamma * cam) for cam in cams]
-
+    return overlayed_img
 
 class DistinguishFeat(InfluentialSample):
     def __init__(self, dataset_name, seed, loss_type, config_name, sz_embedding=512):
@@ -278,14 +178,14 @@ if __name__ == '__main__':
     # print(eigenvec.shape)
 
     '''Training'''
-    # helpful = np.load('Influential_data/{}_{}_helpful_testcls{}.npy'.format('cub', 'ProxyNCA_pfix', '3'))
-    # harmful = np.load('Influential_data/{}_{}_harmful_testcls{}.npy'.format('cub', 'ProxyNCA_pfix', '3'))
-    # DF.CAM_sample(interested_cls=[i, j],
-    #               helpful_ind=helpful, harmful_ind=harmful,
-    #               eigenvector=eigenvec, dl=DF.dl_tr)
+    helpful = np.load('Influential_data/{}_{}_helpful_testcls{}.npy'.format('cub', 'ProxyNCA_pfix', '0'))
+    harmful = np.load('Influential_data/{}_{}_harmful_testcls{}.npy'.format('cub', 'ProxyNCA_pfix', '0'))
+    DF.CAM_sample(interested_cls=[i, j],
+                  helpful_ind=helpful, harmful_ind=harmful,
+                  eigenvector=eigenvec, dl=DF.dl_tr)
 
     '''Two testing classes'''
-    DF.CAM(interested_cls=[i, j], eigenvector=eigenvec, dl=DF.dl_ev, base_dir='CAM')
+    # DF.CAM(interested_cls=[i, j], eigenvector=eigenvec, dl=DF.dl_ev, base_dir='CAM')
 
     '''Analyze distingushing features'''
     # dataset_name = 'cub+143_140'
