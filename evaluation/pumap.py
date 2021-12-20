@@ -45,120 +45,84 @@ def prepare_data(data_name='cub',
         transform_key = config['transform_key']
     print('Transformation: ', transform_key)
 
-    if 'inshop' not in data_name:
-        if not test_resize:
-            dl_tr_noshuffle = torch.utils.data.DataLoader(
-                dataset=dataset.load(
-                    name=data_name,
-                    root=dataset_config['dataset'][data_name]['root'],
-                    source=dataset_config['dataset'][data_name]['source'],
-                    classes=dataset_config['dataset'][data_name]['classes']['trainval'],
-                    transform=transforms.Compose([
-                            RGBAToRGB(),
-                            transforms.ToTensor(),
-                            transforms.Normalize(
-                                mean=[0.485, 0.456, 0.406],
-                                std=[0.229, 0.224, 0.225],
-                            )
-                        ])
-                ),
-                num_workers=0,
-                shuffle=False,
-                batch_size=batch_size,
-            )
+    if 'inshop' in data_name:
+        data_name = 'inshop_all'
 
-            # use this dataloader if you want to visualize (without resizing and cropping)
-            dl_ev = torch.utils.data.DataLoader(
-                dataset.load(
-                    name=data_name,
-                    root=dataset_config['dataset'][data_name]['root'],
-                    source=dataset_config['dataset'][data_name]['source'],
-                    classes=dataset_config['dataset'][data_name]['classes']['eval'],
-                    transform=transforms.Compose([
-                            RGBAToRGB(),
-                            transforms.ToTensor(),
-                            transforms.Normalize(
-                                mean=[0.485, 0.456, 0.406],
-                                std=[0.229, 0.224, 0.225],
-                            )
-                        ])
-                ),
-                batch_size=batch_size,
-                shuffle=False,
-                num_workers=0,
-            )
-
-        else:
-            dl_tr_noshuffle = torch.utils.data.DataLoader(
-                dataset=dataset.load(
-                    name=data_name,
-                    root=dataset_config['dataset'][data_name]['root'],
-                    source=dataset_config['dataset'][data_name]['source'],
-                    classes=dataset_config['dataset'][data_name]['classes']['trainval'],
-                    transform=dataset.utils.make_transform(
-                        **dataset_config[transform_key],
-                        is_train=False
+    if not test_resize:
+        dl_tr_noshuffle = torch.utils.data.DataLoader(
+            dataset=dataset.load(
+                name=data_name,
+                root=dataset_config['dataset'][data_name]['root'],
+                source=dataset_config['dataset'][data_name]['source'],
+                classes=dataset_config['dataset'][data_name]['classes']['trainval'],
+                transform=transforms.Compose([
+                    RGBAToRGB(),
+                    transforms.ToTensor(),
+                    transforms.Normalize(
+                        mean=[0.485, 0.456, 0.406],
+                        std=[0.229, 0.224, 0.225],
                     )
-                ),
-                num_workers=0,
-                shuffle=False,
-                batch_size=batch_size,
-            )
+                ])
+            ),
+            num_workers=0,
+            shuffle=False,
+            batch_size=batch_size,
+        )
 
-            dl_ev = torch.utils.data.DataLoader(
-                dataset.load(
-                    name=data_name,
-                    root=dataset_config['dataset'][data_name]['root'],
-                    source=dataset_config['dataset'][data_name]['source'],
-                    classes=dataset_config['dataset'][data_name]['classes']['eval'],
-                    transform=dataset.utils.make_transform(
-                        **dataset_config[transform_key],
-                        is_train=False
+        # use this dataloader if you want to visualize (without resizing and cropping)
+        dl_ev = torch.utils.data.DataLoader(
+            dataset.load(
+                name=data_name,
+                root=dataset_config['dataset'][data_name]['root'],
+                source=dataset_config['dataset'][data_name]['source'],
+                classes=dataset_config['dataset'][data_name]['classes']['eval'],
+                transform=transforms.Compose([
+                    RGBAToRGB(),
+                    transforms.ToTensor(),
+                    transforms.Normalize(
+                        mean=[0.485, 0.456, 0.406],
+                        std=[0.229, 0.224, 0.225],
                     )
-                ),
-                batch_size=batch_size,
-                shuffle=False,
-                num_workers=0,
-            )
+                ])
+            ),
+            batch_size=batch_size,
+            shuffle=False,
+            num_workers=0,
+        )
+
     else:
-        if not test_resize:
-            # use this dataloader if you want to visualize (without resizing and cropping)
-            dl_ev = torch.utils.data.DataLoader(
-                dataset.load(
-                    name='inshop_all',
-                    root=dataset_config['dataset']['inshop_all']['root'],
-                    source=dataset_config['dataset']['inshop_all']['source'],
-                    classes=dataset_config['dataset']['inshop_all']['classes']['eval'],
-                    transform=transforms.Compose([
-                        RGBAToRGB(),
-                        transforms.ToTensor(),
-                        transforms.Normalize(
-                            mean=[0.485, 0.456, 0.406],
-                            std=[0.229, 0.224, 0.225],
-                        )
-                    ])
-                ),
-                batch_size=batch_size,
-                shuffle=False,
-                num_workers=0,
-            )
+        dl_tr_noshuffle = torch.utils.data.DataLoader(
+            dataset=dataset.load(
+                name=data_name,
+                root=dataset_config['dataset'][data_name]['root'],
+                source=dataset_config['dataset'][data_name]['source'],
+                classes=dataset_config['dataset'][data_name]['classes']['trainval'],
+                transform=dataset.utils.make_transform(
+                    **dataset_config[transform_key],
+                    is_train=False
+                )
+            ),
+            num_workers=0,
+            shuffle=False,
+            batch_size=batch_size,
+        )
 
-        else:
-            dl_ev = torch.utils.data.DataLoader(
-                dataset.load(
-                    name='inshop_all',
-                    root=dataset_config['dataset']['inshop_all']['root'],
-                    source=dataset_config['dataset']['inshop_all']['source'],
-                    classes=dataset_config['dataset']['inshop_all']['classes']['eval'],
-                    transform=dataset.utils.make_transform(
-                        **dataset_config[transform_key],
-                        is_train=False
-                    )
-                ),
-                batch_size=batch_size,
-                shuffle=False,
-                num_workers=0,
-            )
+        dl_ev = torch.utils.data.DataLoader(
+            dataset.load(
+                name=data_name,
+                root=dataset_config['dataset'][data_name]['root'],
+                source=dataset_config['dataset'][data_name]['source'],
+                classes=dataset_config['dataset'][data_name]['classes']['eval'],
+                transform=dataset.utils.make_transform(
+                    **dataset_config[transform_key],
+                    is_train=False
+                )
+            ),
+            batch_size=batch_size,
+            shuffle=False,
+            num_workers=0,
+        )
+
     if save:
         training_x, training_y = torch.tensor([]), torch.tensor([])
         for ct, (x, y, _) in tqdm(enumerate(dl_tr_noshuffle)):  # FIXME: memory error

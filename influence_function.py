@@ -68,7 +68,7 @@ def calc_loss_train(model, dl, criterion, indices=None):
 
 def loss_change_train(model, criterion, dl_tr, params_prev, params_cur):
 
-    weight_orig = model.module[-1].weight.data
+    weight_orig = model.module[-1].weight.data # cache original parameters
     model.module[-1].weight.data = params_prev
     l_prev = calc_loss_train(model, dl_tr, criterion, None)
 
