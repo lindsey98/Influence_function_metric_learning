@@ -318,13 +318,13 @@ class InfluentialSample():
 if __name__ == '__main__':
 
     dataset_name = 'cars'
-    loss_type = 'ProxyNCA_pfix'
+    loss_type = 'ProxyNCA_pfix_intravar_sample500_160_reverse'
     config_name = 'cars'
     sz_embedding = 512
     seed = 4
     measure = 'intravar'
-    epoch = 40
-    # epoch = 10
+    # epoch = 40
+    epoch = 10
     #
     IS = InfluentialSample(dataset_name, seed, loss_type, config_name, measure, True, sz_embedding, epoch)
 
@@ -334,7 +334,7 @@ if __name__ == '__main__':
     # exit()
     # IS.theta_grad_ascent(confusion_class_pairs) Not used
 
-    scatter_classes = IS.get_scatter_class()
+    # scatter_classes = IS.get_scatter_class()
     # IS.theta_grad_descent(scatter_classes)
     # exit()
 
@@ -356,8 +356,8 @@ if __name__ == '__main__':
     # exit()
 
     '''Step 3: Calc influence functions'''
-    IS.run_sample(3)
-    exit()
+    # IS.run_sample(3)
+    # exit()
 
     '''Others: get theta1, theta2 intersection'''
     # helpful1, harmful1 = IS.run_sample(3)
@@ -377,11 +377,11 @@ if __name__ == '__main__':
     # exit()
 
     '''Other: get t statistic for two specific classes'''
-    i = 143; j = 179
-    feat_cls1 = IS.testing_embedding[IS.testing_label == i]
-    feat_cls2 = IS.testing_embedding[IS.testing_label == j]
-    confusion = calc_confusion(feat_cls1, feat_cls2, sqrt=True)  # get t instead of t^2
-    print(confusion.item())
+    # i = 143; j = 179
+    # feat_cls1 = IS.testing_embedding[IS.testing_label == i]
+    # feat_cls2 = IS.testing_embedding[IS.testing_label == j]
+    # confusion = calc_confusion(feat_cls1, feat_cls2, sqrt=True)  # get t instead of t^2
+    # print(confusion.item())
 
     # testing_embedding, testing_label, testing_indices = predict_batchwise(IS.model, IS.dl_ev)
     # feat_cls1 = testing_embedding[testing_label == i]
@@ -390,10 +390,10 @@ if __name__ == '__main__':
     # print(confusion.item())
 
     '''Other: get intra-class variance for a specific class'''
-    # i = 136
-    # feat_cls = IS.testing_embedding[IS.testing_label == i]
-    # intra_var = calc_intravar(feat_cls)
-    # print(intra_var.item())
+    i = 160
+    feat_cls = IS.testing_embedding[IS.testing_label == i]
+    intra_var = calc_intravar(feat_cls)
+    print(intra_var.item())
 
     '''Other: get losses for specific indices'''
     # dataset_name = 'cub'

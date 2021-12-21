@@ -36,9 +36,9 @@ parser.add_argument('--mode', default='trainval', choices=['train', 'trainval', 
                     help='train with train data or train with trainval')
 parser.add_argument('--batch-size', default = 32, type=int, dest = 'sz_batch')
 parser.add_argument('--no_warmup', default=True, action='store_true')
-parser.add_argument('--loss-type', default='ProxyNCA_pfix_intravar_sample500_157_reverse', type=str)
-parser.add_argument('--helpful', default='Influential_data/{}_{}_harmful_{}_testcls{}.npy'.format('cars', 'ProxyNCA_pfix', 'intravar', '1'), type=str)
-parser.add_argument('--harmful', default='Influential_data/{}_{}_helpful_{}_testcls{}.npy'.format('cars', 'ProxyNCA_pfix', 'intravar', '1'), type=str)
+parser.add_argument('--loss-type', default='ProxyNCA_pfix_intravar_sample500_160_reverse', type=str)
+parser.add_argument('--helpful', default='Influential_data/{}_{}_harmful_{}_testcls{}.npy'.format('cars', 'ProxyNCA_pfix', 'intravar', '3'), type=str)
+parser.add_argument('--harmful', default='Influential_data/{}_{}_helpful_{}_testcls{}.npy'.format('cars', 'ProxyNCA_pfix', 'intravar', '3'), type=str)
 parser.add_argument('--model_dir', default='models/dvi_data_{}_{}_lossProxyNCA_pfix/ResNet_512_Model'.format('cars', 4), type=str)
 parser.add_argument('--workers', default=2, type=int, dest = 'nb_workers')
 
