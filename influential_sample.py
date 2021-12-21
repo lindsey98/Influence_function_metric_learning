@@ -14,7 +14,7 @@ from torchvision.io.image import read_image
 from influence_function import *
 import pickle
 from utils import predict_batchwise
-os.environ['CUDA_VISIBLE_DEVICES'] = "0"
+os.environ['CUDA_VISIBLE_DEVICES'] = "1"
 
 class InfluentialSample():
     def __init__(self, dataset_name, seed, loss_type, config_name,
@@ -218,7 +218,8 @@ class InfluentialSample():
                     intravar, v = grad_intravar(self.model, self.dl_ev, cls) # dvar/dtheta
                     intravar = intravar.detach()
                     v = v[0].detach()
-                    if intravar_orig.item() - intravar.item() >= 50.: # FIXME: threshold selection
+                    print(intravar.item())
+                    if intravar_orig.item() - intravar.item() >= 30.: # FIXME: threshold selection
                         break
                     theta_new = theta - lr * v # gradient descent
                     theta = theta_new
@@ -256,11 +257,10 @@ class InfluentialSample():
         training_sample_by_influence = influence_values.argsort()  # ascending
         self.viz_sample(training_sample_by_influence[:10])  # helpful
         self.viz_sample(training_sample_by_influence[-10:])  # harmful
-        np.save("Influential_data/{}_{}_helpful_testcls{}".format(self.dataset_name, self.loss_type, pair_idx),
+        np.save("Influential_data/{}_{}_helpful_{}_testcls{}".format(self.dataset_name, self.loss_type, self.measure, pair_idx),
                 training_sample_by_influence[:500])
-        np.save("Influential_data/{}_{}_harmful_testcls{}".format(self.dataset_name, self.loss_type, pair_idx),
+        np.save("Influential_data/{}_{}_harmful_{}_testcls{}".format(self.dataset_name, self.loss_type, self.measure, pair_idx),
                 training_sample_by_influence[-500:])
-        # return training_sample_by_influence[:500], training_sample_by_influence[-500:] # FIXME
 
 
     def run_sample_worse(self, pair_idx):
@@ -318,13 +318,13 @@ class InfluentialSample():
 if __name__ == '__main__':
 
     dataset_name = 'cars'
-    loss_type = 'ProxyNCA_pfix_confusion_sample500_143_179_reverse'
+    loss_type = 'ProxyNCA_pfix'
     config_name = 'cars'
     sz_embedding = 512
     seed = 4
-    measure = 'confusion'
-    # epoch = 40
-    epoch = 10
+    measure = 'intravar'
+    epoch = 40
+    # epoch = 10
     #
     IS = InfluentialSample(dataset_name, seed, loss_type, config_name, measure, True, sz_embedding, epoch)
 
@@ -334,7 +334,7 @@ if __name__ == '__main__':
     # exit()
     # IS.theta_grad_ascent(confusion_class_pairs) Not used
 
-    # scatter_classes = IS.get_scatter_class()
+    scatter_classes = IS.get_scatter_class()
     # IS.theta_grad_descent(scatter_classes)
     # exit()
 
@@ -347,17 +347,19 @@ if __name__ == '__main__':
     # IS.cache_grad_loss_train_all(theta, theta_hat, pair_idx)
     # exit()
 
-    # i = 136
+    # cls_idx = 3
+    # i = scatter_classes[cls_idx]
     # theta_dict = torch.load("Influential_data/{}_{}_intravar_theta_test_{}.pth".format(IS.dataset_name, IS.loss_type, i))
     # theta = theta_dict['theta']
     # theta_hat = theta_dict['theta_hat']
-    # IS.cache_grad_loss_train(theta, theta_hat)
+    # IS.cache_grad_loss_train_all(theta, theta_hat, cls_idx)
     # exit()
 
     '''Step 3: Calc influence functions'''
-    # IS.run_sample(3)
-    # exit()
+    IS.run_sample(3)
+    exit()
 
+    '''Others: get theta1, theta2 intersection'''
     # helpful1, harmful1 = IS.run_sample(3)
     # helpful2, harmful2 = IS.run_sample_worse(3)
     # print(len(set(helpful1).intersection(set(harmful2))))

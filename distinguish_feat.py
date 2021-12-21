@@ -12,7 +12,7 @@ from torchvision.io.image import read_image
 from PIL import Image
 from influential_sample import InfluentialSample
 from CAM_methods import *
-os.environ['CUDA_VISIBLE_DEVICES'] = "0"
+os.environ['CUDA_VISIBLE_DEVICES'] = "1"
 
 def overlay_mask(img: Image.Image, mask: Image.Image, colormap: str = 'jet', alpha: float = 0.7) -> Image.Image:
 
@@ -65,6 +65,17 @@ class DistinguishFeat(InfluentialSample):
                          'confusion', test_resize=False, sz_embedding=sz_embedding)
 
     @torch.no_grad()
+    def get_pc_feat(self, cls):
+        feat_cls = self.testing_embedding[self.testing_label == cls]
+        feat_mean = feat_cls.mean(0)
+        S = torch.zeros((feat_cls.size()[-1], feat_cls.size()[-1])) # (sz_embed, sz_embed)
+        for i in range(len(feat_cls)):
+            S += torch.outer(feat_cls[i] - feat_mean, feat_cls[i] - feat_mean)
+        v, phi = torch.eig(S / (feat_cls.size()[0] - 1), eigenvectors=True)
+        first_eigenveector = phi[:, 0].float()
+        return first_eigenveector
+
+    @torch.no_grad()
     def get_distinguish_feat(self, cls1, cls2):
 
         feat_cls1 = self.testing_embedding[self.testing_label == cls1] # (N, sz_embedding)
@@ -75,7 +86,7 @@ class DistinguishFeat(InfluentialSample):
             for j in range(len(feat_cls2)):
                 outer_prod = torch.outer(feat_cls1[i]-feat_cls2[j], feat_cls1[i]-feat_cls2[j])
                 S += outer_prod
-        v, phi = torch.eig(S, eigenvectors=True)
+        v, phi = torch.eig(S / (feat_cls1.size()[0] * feat_cls2.size()[0]), eigenvectors=True)
         first_eigenveector = phi[:, 0].float()
         return first_eigenveector
 
@@ -90,7 +101,8 @@ class DistinguishFeat(InfluentialSample):
             for j in range(len(feat_cls2)):
                 outer_prod = torch.outer(feat_cls1[i], feat_cls2[j])
                 E_XY += outer_prod
-        E_X = torch.sum(feat_cls1, dim=0); E_Y = torch.sum(feat_cls2, dim=0)
+        E_XY = E_XY / (feat_cls1.size()[0] * feat_cls2.size()[0])
+        E_X = torch.mean(feat_cls1, dim=0); E_Y = torch.mean(feat_cls2, dim=0)
         v, phi = torch.eig(E_XY - torch.outer(E_X, E_Y), eigenvectors=True)
         first_eigenveector = phi[:, 0].float()
         return first_eigenveector
@@ -164,38 +176,38 @@ class DistinguishFeat(InfluentialSample):
 
 
 if __name__ == '__main__':
-    dataset_name = 'cub'
-    loss_type = 'ProxyNCA_pfix'
-    config_name = 'cub'
-    sz_embedding = 512
-    seed = 4
-    i = 143; j = 140
-
-    DF = DistinguishFeat(dataset_name, seed, loss_type, config_name, sz_embedding)
-
-    '''Analyze confusing features'''
-    eigenvec = DF.get_confusing_feat(i, j)
-    # print(eigenvec.shape)
-
-    '''Training'''
-    helpful = np.load('Influential_data/{}_{}_helpful_testcls{}.npy'.format('cub', 'ProxyNCA_pfix', '0'))
-    harmful = np.load('Influential_data/{}_{}_harmful_testcls{}.npy'.format('cub', 'ProxyNCA_pfix', '0'))
-    DF.CAM_sample(interested_cls=[i, j],
-                  helpful_ind=helpful, harmful_ind=harmful,
-                  eigenvector=eigenvec, dl=DF.dl_tr)
-
-    '''Two testing classes'''
-    # DF.CAM(interested_cls=[i, j], eigenvector=eigenvec, dl=DF.dl_ev, base_dir='CAM')
-
-    '''Analyze distingushing features'''
-    # dataset_name = 'cub+143_140'
+    # dataset_name = 'cub'
     # loss_type = 'ProxyNCA_pfix'
     # config_name = 'cub'
     # sz_embedding = 512
     # seed = 4
-    # i = 143; j = 140
-    #
+    # i = 117; j = 129
+
     # DF = DistinguishFeat(dataset_name, seed, loss_type, config_name, sz_embedding)
-    # eigenvec = DF.get_distinguish_feat(i, j)
-    # DF.CAM(interested_cls=[i, j], eigenvector=eigenvec,
-    #        dl=DF.dl_ev, base_dir='CAM_distinguish')
+
+    '''Analyze confusing features'''
+    # eigenvec = DF.get_confusing_feat(i, j)
+    # print(eigenvec.shape)
+
+    '''Training'''
+    # helpful = np.load('Influential_data/{}_{}_helpful_testcls{}.npy'.format('cub', 'ProxyNCA_pfix', '0'))
+    # harmful = np.load('Influential_data/{}_{}_harmful_testcls{}.npy'.format('cub', 'ProxyNCA_pfix', '0'))
+    # DF.CAM_sample(interested_cls=[i, j],
+    #               helpful_ind=helpful, harmful_ind=harmful,
+    #               eigenvector=eigenvec, dl=DF.dl_tr, base_dir='CAM+')
+
+    '''Two testing classes'''
+    # DF.CAM(interested_cls=[i, j], eigenvector=eigenvec, dl=DF.dl_ev, base_dir='CAM+')
+
+    '''Analyze distingushing features'''
+    dataset_name = 'cub+117_129'
+    loss_type = 'ProxyNCA_pfix'
+    config_name = 'cub'
+    sz_embedding = 512
+    seed = 4
+    i = 117; j = 129
+
+    DF = DistinguishFeat(dataset_name, seed, loss_type, config_name, sz_embedding)
+    eigenvec = DF.get_distinguish_feat(i, j)
+    DF.CAM(interested_cls=[i, j], eigenvector=eigenvec,
+           dl=DF.dl_ev, base_dir='CAM+_distinguish')
