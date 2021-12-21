@@ -12,6 +12,7 @@ from torchvision.io.image import read_image
 from PIL import Image
 from influential_sample import InfluentialSample
 from CAM_methods import *
+from influence_function import *
 os.environ['CUDA_VISIBLE_DEVICES'] = "1"
 
 def overlay_mask(img: Image.Image, mask: Image.Image, colormap: str = 'jet', alpha: float = 0.7) -> Image.Image:
@@ -60,9 +61,28 @@ def overlay_mask(img: Image.Image, mask: Image.Image, colormap: str = 'jet', alp
     return overlayed_img
 
 class DistinguishFeat(InfluentialSample):
-    def __init__(self, dataset_name, seed, loss_type, config_name, sz_embedding=512):
+    def __init__(self, dataset_name, seed, loss_type, config_name,
+                 measure, test_resize=True, sz_embedding=512, epoch=40):
         super().__init__(dataset_name, seed, loss_type, config_name,
-                         'confusion', test_resize=False, sz_embedding=sz_embedding)
+                 measure, test_resize, sz_embedding, epoch)
+
+    def get_dist_between_samples(self, cls1, cls2):
+        feat_cls1 = self.testing_embedding[self.testing_label == cls1]
+        feat_cls2 = self.testing_embedding[self.testing_label == cls2]
+        indices_cls1 = torch.arange(len(self.testing_embedding))[self.testing_label == cls1]
+        indices_cls2 = torch.arange(len(self.testing_embedding))[self.testing_label == cls2]
+
+        D = torch.cdist(feat_cls1, feat_cls2, p=2)
+
+        # most confusing samples
+        D_flatten = D.flatten()
+        index_flatten = torch.tensor([[indices_cls1[i], indices_cls2[j]] for i in range(D.size()[0]) for j in range(D.size()[1])])
+
+        sort_idx = torch.argsort(D_flatten)
+        minimal_D = D_flatten[sort_idx]
+        minimal_index = index_flatten[sort_idx]
+
+        return minimal_D, minimal_index
 
     @torch.no_grad()
     def get_pc_feat(self, cls):
@@ -107,18 +127,67 @@ class DistinguishFeat(InfluentialSample):
         first_eigenveector = phi[:, 0].float()
         return first_eigenveector
 
-    def CAM(self, interested_cls, eigenvector, dl, base_dir='CAM'):
+    def dominant_samples(self, interested_cls, coeff, dl, base_dir='CAM'):
+        torch.cuda.empty_cache()
+        cam_extractor = GradCAMCustomize(self.model, target_layer=self.model.module[0].base.layer1)
+
+        os.makedirs('./{}/{}'.format(base_dir, self.dataset_name), exist_ok=True)
+        os.makedirs('./{}/{}/{}_{}_dominant_feat'.format(base_dir, self.dataset_name, self.measure, interested_cls),
+                    exist_ok=True)
+
+        feat_cls = self.testing_embedding[self.testing_label == interested_cls] # (N, sz_embed)
+        proj = torch.matmul(feat_cls, coeff)
+        sample_indices = torch.arange(len(self.testing_embedding))[self.testing_label == interested_cls]
+
+        # rank and visualize
+        sort_indices = sample_indices[torch.argsort(proj, descending=True)] # descending
+        top_bottom_indices = torch.cat((sort_indices[:10], sort_indices[-10:]))
+
+        result_vis = []
+        orig_vis = []
+        for ct, (x, y, indices) in tqdm(enumerate(dl)):
+            if indices.item() in top_bottom_indices:
+                x, y = x.cuda(), y.cuda()
+                out = self.model(x)  # (1, sz_embed)
+                # Retrieve the CAM by passing the class index and the model output
+                activation_map = cam_extractor(out, coeff)
+                # Resize the CAM and overlay it
+                img = to_pil_image(read_image(dl.dataset.im_paths[indices[0]]))
+                result = overlay_mask(img, to_pil_image(activation_map[0].detach().cpu(), mode='F'), alpha=0.5)
+                orig_vis.append(img)
+                result_vis.append(result)
+            if len(result_vis) == len(top_bottom_indices):
+                break
+
+        for i in range(10):
+            plt.subplot(2, 5, i + 1)
+            plt.imshow(result_vis[i])
+            plt.axis('off')
+        plt.tight_layout()
+        # plt.show()
+        plt.savefig('./{}/{}/{}_{}_dominant_feat/{}.png'.format(base_dir, self.dataset_name, self.measure, interested_cls, 'cam'))
+
+        for i in range(10):
+            plt.subplot(2, 5, i + 1)
+            plt.imshow(orig_vis[i])
+            plt.axis('off')
+        plt.tight_layout()
+        # plt.show()
+        plt.savefig('./{}/{}/{}_{}_dominant_feat/{}.png'.format(base_dir, self.dataset_name, self.measure, interested_cls, 'original'))
+
+
+    def CAM(self, interested_cls, coeff, dl, base_dir='CAM'):
         assert len(interested_cls) == 2
         cam_extractor = GradCAMCustomize(self.model, target_layer=self.model.module[0].base.layer1)
         for ct, (x, y, indices) in tqdm(enumerate(dl)):
             os.makedirs('./{}/{}'.format(base_dir, self.dataset_name), exist_ok=True)
-            os.makedirs('./{}/{}/Confusion_{}_{}'.format(base_dir, self.dataset_name, interested_cls[0], interested_cls[1]), exist_ok=True)
+            os.makedirs('./{}/{}/{}_{}_{}'.format(base_dir, self.dataset_name, self.measure, interested_cls[0], interested_cls[1]), exist_ok=True)
             if y.item() in interested_cls:
-                os.makedirs('./{}/{}/Confusion_{}_{}/{}'.format(base_dir, self.dataset_name, interested_cls[0], interested_cls[1], y.item()), exist_ok=True)
+                os.makedirs('./{}/{}/{}_{}_{}/{}'.format(base_dir, self.dataset_name, self.measure, interested_cls[0], interested_cls[1], y.item()), exist_ok=True)
                 x, y = x.cuda(), y.cuda()
                 out = self.model(x) # (1, sz_embed)
                 # Retrieve the CAM by passing the class index and the model output
-                activation_map = cam_extractor(out, eigenvector)
+                activation_map = cam_extractor(out, coeff)
                 # Resize the CAM and overlay it
                 img = to_pil_image(read_image(dl.dataset.im_paths[indices[0]]))
                 result = overlay_mask(img, to_pil_image(activation_map[0].detach().cpu(), mode='F'), alpha=0.5)
@@ -126,25 +195,31 @@ class DistinguishFeat(InfluentialSample):
                 # Display it
                 plt.imshow(result); plt.axis('off'); plt.tight_layout()
                 # plt.show()
-                plt.savefig('./{}/{}/Confusion_{}_{}/{}/{}'.format(base_dir, self.dataset_name,
-                                                                  interested_cls[0], interested_cls[1],
-                                                                  y.item(),
-                                                                  os.path.basename(dl.dataset.im_paths[indices[0]])))
+                plt.savefig('./{}/{}/{}_{}_{}/{}/{}'.format(base_dir, self.dataset_name,
+                                                            self.measure,
+                                                            interested_cls[0], interested_cls[1],
+                                                            y.item(),
+                                                            os.path.basename(dl.dataset.im_paths[indices[0]])))
 
-    def CAM_sample(self, interested_cls, helpful_ind, harmful_ind,
-                   eigenvector, dl, base_dir='CAM'):
+    def CAM_helpful_harmful(self, interested_cls, helpful_ind, harmful_ind,
+                            coeff, dl, base_dir='CAM'):
 
         cam_extractor = GradCAMCustomize(self.model, target_layer=self.model.module[0].base.layer1)
         os.makedirs('./{}/{}'.format(base_dir, self.dataset_name), exist_ok=True)
 
         for ct, (x, y, indices) in tqdm(enumerate(dl)):
             if indices.item() in helpful_ind:
-                os.makedirs('./{}/{}/Confusion_{}_{}/{}'.format(base_dir, self.dataset_name,
-                                                                interested_cls[0], interested_cls[1],
-                                                                'helpful'), exist_ok=True)
+                if self.measure == 'confusion':
+                    os.makedirs('./{}/{}/{}_{}_{}/{}'.format(base_dir, self.dataset_name, self.measure,
+                                                                    interested_cls[0], interested_cls[1],
+                                                                    'helpful'), exist_ok=True)
+                else:
+                    os.makedirs('./{}/{}/{}_{}/{}'.format(base_dir, self.dataset_name, self.measure,
+                                                             interested_cls,
+                                                             'helpful'), exist_ok=True)
                 x, y = x.cuda(), y.cuda()
                 out = self.model(x) # (1, sz_embed)
-                activation_map = cam_extractor(out, eigenvector)
+                activation_map = cam_extractor(out, coeff)
 
                 img = to_pil_image(read_image(dl.dataset.im_paths[indices[0]]))
                 result = overlay_mask(img, to_pil_image(activation_map[0].detach().cpu(), mode='F'), alpha=0.5)
@@ -152,39 +227,100 @@ class DistinguishFeat(InfluentialSample):
                 # Display it
                 plt.imshow(result); plt.axis('off'); plt.tight_layout()
                 # plt.show()
-                plt.savefig('./{}/{}/Confusion_{}_{}/{}/{}'.format(base_dir, self.dataset_name,
-                                                                  interested_cls[0], interested_cls[1],
-                                                                  'helpful',
-                                                                  os.path.basename(dl.dataset.im_paths[indices[0]])))
+                if self.measure == 'confusion':
+                    plt.savefig('./{}/{}/{}_{}_{}/{}/{}'.format(base_dir, self.dataset_name, self.measure,
+                                                                      interested_cls[0], interested_cls[1],
+                                                                      'helpful',
+                                                                      os.path.basename(dl.dataset.im_paths[indices[0]])))
+                else:
+                    plt.savefig('./{}/{}/{}_{}/{}/{}'.format(base_dir, self.dataset_name, self.measure,
+                                                                interested_cls,
+                                                                'helpful',
+                                                                os.path.basename(dl.dataset.im_paths[indices[0]])))
             elif indices.item() in harmful_ind:
-                os.makedirs('./{}/{}/Confusion_{}_{}/{}'.format(base_dir, self.dataset_name,
-                                                                interested_cls[0], interested_cls[1],
-                                                                'harmful'), exist_ok=True)
+                if self.measure == 'confusion':
+                    os.makedirs('./{}/{}/{}_{}_{}/{}'.format(base_dir, self.dataset_name, self.measure,
+                                                             interested_cls[0], interested_cls[1],
+                                                             'harmful'), exist_ok=True)
+                else:
+                    os.makedirs('./{}/{}/{}_{}/{}'.format(base_dir, self.dataset_name, self.measure,
+                                                          interested_cls,
+                                                          'harmful'), exist_ok=True)
                 x, y = x.cuda(), y.cuda()
                 out = self.model(x) # (1, sz_embed)
-                activation_map = cam_extractor(out, eigenvector)
+                activation_map = cam_extractor(out, coeff)
                 img = to_pil_image(read_image(dl.dataset.im_paths[indices[0]]))
                 result = overlay_mask(img, to_pil_image(activation_map[0].detach().cpu(), mode='F'), alpha=0.5)
 
                 # Display it
                 plt.imshow(result); plt.axis('off'); plt.tight_layout()
                 # plt.show()
-                plt.savefig('./{}/{}/Confusion_{}_{}/{}/{}'.format(base_dir, self.dataset_name,
-                                                                 interested_cls[0], interested_cls[1],
-                                                                 'harmful',
-                                                                 os.path.basename(dl.dataset.im_paths[indices[0]])))
+                if self.measure == 'confusion':
+                    plt.savefig('./{}/{}/{}_{}_{}/{}/{}'.format(base_dir, self.dataset_name, self.measure,
+                                                                interested_cls[0], interested_cls[1],
+                                                                'harmful',
+                                                                os.path.basename(dl.dataset.im_paths[indices[0]])))
+                else:
+                    plt.savefig('./{}/{}/{}_{}/{}/{}'.format(base_dir, self.dataset_name, self.measure,
+                                                             interested_cls,
+                                                             'harmful',
+                                                             os.path.basename(dl.dataset.im_paths[indices[0]])))
+
+    def CAM_sample(self, interested_cls,
+                   ind1, ind2, dl, base_dir='CAM_sample'): # Only for confusion analysis
+        assert len(interested_cls) == 2
+        cam_extractor = GradCAMCustomize(self.model, target_layer=self.model.module[0].base.layer1)
+        os.makedirs('./{}/{}'.format(base_dir, self.dataset_name), exist_ok=True)
+        os.makedirs('./{}/{}/{}_{}_{}/'.format(base_dir, self.dataset_name, self.measure, interested_cls[0], interested_cls[1]), exist_ok=True)
+
+        # Get the two embeddings first
+        for _, (x, y, indices) in tqdm(enumerate(self.dl_ev)):
+            if indices.item() == ind1.item():
+                emb1 = self.model(x.cuda())
+            elif indices.item() == ind2.item():
+                emb2 = self.model(x.cuda())
+            else:
+                if 'emb1' in locals() and 'emb2' in locals():
+                    break
+
+        emb1_detach = emb1.detach().squeeze(0)
+        emb2_detach = emb2.detach().squeeze(0)
+        activation_map1 = cam_extractor(emb1, emb2_detach)
+        img1 = to_pil_image(read_image(dl.dataset.im_paths[ind1]))
+        result1 = overlay_mask(img1, to_pil_image(activation_map1[0].detach().cpu(), mode='F'), alpha=0.5)
+
+        activation_map2 = cam_extractor(emb2, emb1_detach)
+        img2 = to_pil_image(read_image(dl.dataset.im_paths[ind2]))
+        result2 = overlay_mask(img2, to_pil_image(activation_map2[0].detach().cpu(), mode='F'), alpha=0.5)
+
+        # Display it
+        plt.subplot(1, 2, 1)
+        plt.imshow(result1)
+        plt.axis('off'); plt.tight_layout()
+        plt.subplot(1, 2, 2)
+        plt.imshow(result2)
+        plt.axis('off'); plt.tight_layout()
+        # plt.show()
+        plt.savefig('./{}/{}/{}_{}_{}/{}_{}.png'.format(base_dir, self.dataset_name, self.measure,
+                                                          interested_cls[0], interested_cls[1],
+                                                          ind1,
+                                                          ind2))
 
 
 if __name__ == '__main__':
-    # dataset_name = 'cub'
-    # loss_type = 'ProxyNCA_pfix'
-    # config_name = 'cub'
-    # sz_embedding = 512
-    # seed = 4
+    dataset_name = 'cars'
+    loss_type = 'ProxyNCA_pfix'
+    config_name = 'cars'
+    sz_embedding = 512
+    seed = 4
+    measure = 'intravar'
+    test_resize = False
     # i = 117; j = 129
+    i = 160
 
-    # DF = DistinguishFeat(dataset_name, seed, loss_type, config_name, sz_embedding)
+    DF = DistinguishFeat(dataset_name, seed, loss_type, config_name, measure, test_resize)
 
+    '''###### For Confusion Analysis #####'''
     '''Analyze confusing features'''
     # eigenvec = DF.get_confusing_feat(i, j)
     # print(eigenvec.shape)
@@ -194,20 +330,43 @@ if __name__ == '__main__':
     # harmful = np.load('Influential_data/{}_{}_harmful_testcls{}.npy'.format('cub', 'ProxyNCA_pfix', '0'))
     # DF.CAM_sample(interested_cls=[i, j],
     #               helpful_ind=helpful, harmful_ind=harmful,
-    #               eigenvector=eigenvec, dl=DF.dl_tr, base_dir='CAM+')
+    #               eigenvector=eigenvec, dl=DF.dl_tr, base_dir='CAM')
 
     '''Two testing classes'''
-    # DF.CAM(interested_cls=[i, j], eigenvector=eigenvec, dl=DF.dl_ev, base_dir='CAM+')
+    # DF.CAM(interested_cls=[i, j], eigenvector=eigenvec, dl=DF.dl_ev, base_dir='CAM')
 
     '''Analyze distingushing features'''
-    dataset_name = 'cub+117_129'
-    loss_type = 'ProxyNCA_pfix'
-    config_name = 'cub'
-    sz_embedding = 512
-    seed = 4
-    i = 117; j = 129
+    # dataset_name = 'cub+117_129'
+    # loss_type = 'ProxyNCA_pfix'
+    # config_name = 'cub'
+    # sz_embedding = 512
+    # seed = 4
+    # i = 117; j = 129
+    #
+    # DF = DistinguishFeat(dataset_name, seed, loss_type, config_name, sz_embedding)
+    # eigenvec = DF.get_distinguish_feat(i, j)
+    # DF.CAM(interested_cls=[i, j], coeff=eigenvec,
+    #        dl=DF.dl_ev, base_dir='CAM_distinguish')
 
-    DF = DistinguishFeat(dataset_name, seed, loss_type, config_name, sz_embedding)
-    eigenvec = DF.get_distinguish_feat(i, j)
-    DF.CAM(interested_cls=[i, j], eigenvector=eigenvec,
-           dl=DF.dl_ev, base_dir='CAM+_distinguish')
+    '''Analyze two confusing samples in specific'''
+    # minimal_D, minimal_idx_pair = DF.get_dist_between_samples(i, j)
+    # for pair_idx in range(10):
+    #     ind1, ind2 = minimal_idx_pair[pair_idx]
+    #     DF.CAM_sample(interested_cls=(i, j), ind1=ind1, ind2=ind2, dl=DF.dl_ev)
+
+
+    '''###### For Intra Class Variance Analysis #####'''
+    '''Analyze confusing features'''
+    # eigenvec = DF.get_pc_feat(i)
+    # print(eigenvec.shape)
+
+    '''Training'''
+    # helpful = np.load('Influential_data/{}_{}_helpful_testcls{}.npy'.format('cub', 'ProxyNCA_pfix', '0'))
+    # harmful = np.load('Influential_data/{}_{}_harmful_testcls{}.npy'.format('cub', 'ProxyNCA_pfix', '0'))
+    # DF.CAM_helpful_harmful(interested_cls=i,
+    #               helpful_ind=helpful, harmful_ind=harmful,
+    #               eigenvector=eigenvec, dl=DF.dl_tr, base_dir='CAM')
+
+    '''Analyze most significantly varying direction'''
+    # DF.dominant_samples(i, eigenvec, DF.dl_ev)
+
