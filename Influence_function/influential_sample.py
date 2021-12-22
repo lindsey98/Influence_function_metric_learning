@@ -11,7 +11,7 @@ import os
 import matplotlib.pyplot as plt
 from torchvision.transforms.functional import normalize, resize, to_pil_image
 from torchvision.io.image import read_image
-from influence_function import *
+from Influence_function.influence_function import *
 import pickle
 from utils import predict_batchwise
 os.environ['CUDA_VISIBLE_DEVICES'] = "1"

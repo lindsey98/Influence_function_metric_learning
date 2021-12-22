@@ -1,18 +1,13 @@
-import numpy as np
-import torch
-import torchvision
 from matplotlib import cm
 
-from loss import *
-import torch.nn as nn
 import os
 import matplotlib.pyplot as plt
-from torchvision.transforms.functional import normalize, resize, to_pil_image
+from torchvision.transforms.functional import to_pil_image
 from torchvision.io.image import read_image
 from PIL import Image
-from influential_sample import InfluentialSample
-from CAM_methods import *
-from influence_function import *
+from Influence_function.influential_sample import InfluentialSample
+from Explaination.CAM_methods import *
+from Influence_function.influence_function import *
 os.environ['CUDA_VISIBLE_DEVICES'] = "1"
 
 def overlay_mask(img: Image.Image, mask: Image.Image, colormap: str = 'jet', alpha: float = 0.7) -> Image.Image:
@@ -308,15 +303,15 @@ class DistinguishFeat(InfluentialSample):
 
 
 if __name__ == '__main__':
-    dataset_name = 'cars'
+    dataset_name = 'cub'
     loss_type = 'ProxyNCA_pfix'
-    config_name = 'cars'
+    config_name = 'cub'
     sz_embedding = 512
     seed = 4
-    measure = 'intravar'
+    measure = 'confusion'
     test_resize = False
-    # i = 117; j = 129
-    i = 160
+    i = 143; j = 140
+    # i = 160
 
     DF = DistinguishFeat(dataset_name, seed, loss_type, config_name, measure, test_resize)
 
@@ -352,7 +347,13 @@ if __name__ == '__main__':
     # minimal_D, minimal_idx_pair = DF.get_dist_between_samples(i, j)
     # for pair_idx in range(10):
     #     ind1, ind2 = minimal_idx_pair[pair_idx]
-    #     DF.CAM_sample(interested_cls=(i, j), ind1=ind1, ind2=ind2, dl=DF.dl_ev)
+        # os.makedirs(os.path.join('Background_erase', '{}_{}_{}_{}').format(dataset_name, DF.measure, i, j), exist_ok=True)
+        # shutil.copyfile(DF.dl_ev.dataset.im_paths[ind1],
+        #                 os.path.join('Background_erase', '{}_{}_{}_{}', '{}.png').format(dataset_name, DF.measure, i, j, ind1))
+        # shutil.copyfile(DF.dl_ev.dataset.im_paths[ind2],
+        #                 os.path.join('Background_erase', '{}_{}_{}_{}', '{}.png').format(dataset_name, DF.measure, i, j, ind2))
+
+        # DF.CAM_sample(interested_cls=(i, j), ind1=ind1, ind2=ind2, dl=DF.dl_ev)
 
 
     '''###### For Intra Class Variance Analysis #####'''
@@ -370,3 +371,14 @@ if __name__ == '__main__':
     '''Analyze most significantly varying direction'''
     # DF.dominant_samples(i, eigenvec, DF.dl_ev)
 
+
+    '''###### Background removal experiment #####'''
+    from evaluation.pumap import load_single_sample
+    ind1, ind2 = 2568, 2404
+    x1 = load_single_sample(config_name, img_path='Background_erase/{}_confusion_{}_{}/{}_e.png'.format(dataset_name, i, j, ind1), test_resize=True)
+    x2 = load_single_sample(config_name, img_path='Background_erase/{}_confusion_{}_{}/{}_e.png'.format(dataset_name, i, j, ind2), test_resize=True)
+    with torch.no_grad():
+        emb1 = DF.model(x1.unsqueeze(0).cuda()).detach().cpu()
+        emb2 = DF.model(x2.unsqueeze(0).cuda()).detach().cpu()
+    print('Previous distance', (DF.testing_embedding[ind1] - DF.testing_embedding[ind2]).square().sum().sqrt().item())
+    print('After distance', (emb1 - emb2).square().sum().sqrt().item())

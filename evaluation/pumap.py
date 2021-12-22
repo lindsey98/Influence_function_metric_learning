@@ -23,7 +23,36 @@ from torchvision.transforms.functional import normalize, resize, to_pil_image
 import scipy
 from torchvision import transforms
 from dataset.utils import RGBAToRGB
+from PIL import Image
 os.environ['CUDA_VISIBLE_DEVICES'] = "0"
+
+def load_single_sample(config_name, img_path, test_resize=False):
+    dataset_config = utils.load_config('dataset/config.json')
+
+    config = utils.load_config('config/{}.json'.format(config_name))
+    transform_key = 'transform_parameters'
+    if 'transform_key' in config.keys():
+        transform_key = config['transform_key']
+    print('Transformation: ', transform_key)
+
+    if not test_resize:
+        transform = transforms.Compose([
+            RGBAToRGB(),
+            transforms.ToTensor(),
+            transforms.Normalize(
+                mean=[0.485, 0.456, 0.406],
+                std=[0.229, 0.224, 0.225],
+            )
+        ])
+    else:
+        transform = dataset.utils.make_transform(
+            **dataset_config[transform_key],
+            is_train=False
+        )
+
+    im = Image.open(img_path)
+    im = transform(im)
+    return im
 
 def prepare_data(data_name='cub',
                  config_name='',
