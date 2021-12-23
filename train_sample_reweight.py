@@ -27,10 +27,10 @@ parser.add_argument('--init_eval', default=False, action='store_true')
 parser.add_argument('--apex', default=False, action='store_true')
 parser.add_argument('--warmup_k', default=5, type=int)
 
-parser.add_argument('--dataset', default='cars')
+parser.add_argument('--dataset', default='cub')
 parser.add_argument('--seed', default=4, type=int)
 parser.add_argument('--embedding-size', default = 512, type=int, dest = 'sz_embedding')
-parser.add_argument('--config', default='config/cars_reweight.json')
+parser.add_argument('--config', default='config/cub_reweight.json')
 parser.add_argument('--mode', default='trainval', choices=['train', 'trainval', 'test',
                                                            'testontrain', 'testontrain_super'],
                     help='train with train data or train with trainval')
@@ -39,7 +39,7 @@ parser.add_argument('--no_warmup', default=True, action='store_true')
 parser.add_argument('--loss-type', default='ProxyNCA_pfix_intravar_sample500_160_reverse', type=str)
 parser.add_argument('--helpful', default='Influential_data/{}_{}_harmful_{}_testcls{}.npy'.format('cars', 'ProxyNCA_pfix', 'intravar', '3'), type=str)
 parser.add_argument('--harmful', default='Influential_data/{}_{}_helpful_{}_testcls{}.npy'.format('cars', 'ProxyNCA_pfix', 'intravar', '3'), type=str)
-parser.add_argument('--model_dir', default='models/dvi_data_{}_{}_lossProxyNCA_pfix/ResNet_512_Model'.format('cars', 4), type=str)
+parser.add_argument('--model_dir', default='models/dvi_data_{}_{}_lossProxyNCA_pfix/ResNet_512_Model'.format('cub', 4), type=str)
 parser.add_argument('--workers', default=2, type=int, dest = 'nb_workers')
 
 args = parser.parse_args()

@@ -1,6 +1,6 @@
 
 from .cars import Cars, Cars_hdf5
-from .cub import CUBirds, CUBirds_hdf5, CUBirds_class, CUBirds_hdf5_alt, CUBirds_hdf5_bb
+from .cub import CUBirds, CUBirds_hdf5, CUBirds_class, CUBirds_hdf5_alt, CUBirds_hdf5_bb, CUBirdsRemoval
 from .sop import SOProducts, SOProducts_hdf5, SOProductsMod
 from .inshop import InShop, InShop_hdf5
 from .logo2k import Logo2k, Logo2k_class
@@ -20,6 +20,7 @@ _type = {
     'cars+111_179': Cars,
     'cars+139_137': Cars,
     'cub': CUBirds,
+    'cub_removal': CUBirdsRemoval,
     'cub+143_140': CUBirds,
     'cub+178_172': CUBirds,
     'cub+116_118': CUBirds,

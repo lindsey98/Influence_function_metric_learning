@@ -1,5 +1,15 @@
-python train.py --dataset sop+12659_12660 --seed 3 --config config/sop.json
-python train.py --dataset sop+11419_15016 --seed 3 --config config/sop.json
-python train.py --dataset sop+11855_11756 --seed 3 --config config/sop.json
-python train.py --dataset sop+11835_11842 --seed 3 --config config/sop.json
-python train.py --dataset sop+21626_15606 --seed 3 --config config/sop.json
+python train_sample_reweight.py --loss-type ProxyNCA_pfix_confusion_sample500_196_192 \
+--helpful Influential_data/cub_ProxyNCA_pfix_helpful_confusion_testcls5.npy \
+--harmful Influential_data/cub_ProxyNCA_pfix_harmful_confusion_testcls5.npy --model_dir models/dvi_data_cub_4_lossProxyNCA_pfix/ResNet_512_Model
+python train_sample_reweight.py --loss-type ProxyNCA_pfix_confusion_sample500_130_112 \
+--helpful Influential_data/cub_ProxyNCA_pfix_helpful_confusion_testcls6.npy \
+--harmful Influential_data/cub_ProxyNCA_pfix_harmful_confusion_testcls6.npy --model_dir models/dvi_data_cub_4_lossProxyNCA_pfix/ResNet_512_Model
+python train_sample_reweight.py --loss-type ProxyNCA_pfix_confusion_sample500_124_128 \
+--helpful Influential_data/cub_ProxyNCA_pfix_helpful_confusion_testcls7.npy \
+--harmful Influential_data/cub_ProxyNCA_pfix_harmful_confusion_testcls7.npy --model_dir models/dvi_data_cub_4_lossProxyNCA_pfix/ResNet_512_Model
+python train_sample_reweight.py --loss-type ProxyNCA_pfix_confusion_sample500_111_110 \
+--helpful Influential_data/cub_ProxyNCA_pfix_helpful_confusion_testcls8.npy \
+--harmful Influential_data/cub_ProxyNCA_pfix_harmful_confusion_testcls8.npy --model_dir models/dvi_data_cub_4_lossProxyNCA_pfix/ResNet_512_Model
+python train_sample_reweight.py --loss-type ProxyNCA_pfix_confusion_sample500_144_142 \
+--helpful Influential_data/cub_ProxyNCA_pfix_helpful_confusion_testcls9.npy \
+--harmful Influential_data/cub_ProxyNCA_pfix_harmful_confusion_testcls9.npy --model_dir models/dvi_data_cub_4_lossProxyNCA_pfix/ResNet_512_Model
