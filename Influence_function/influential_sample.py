@@ -14,11 +14,12 @@ from torchvision.io.image import read_image
 from Influence_function.influence_function import *
 import pickle
 from utils import predict_batchwise
+from collections import OrderedDict
 os.environ['CUDA_VISIBLE_DEVICES'] = "1"
 
 class InfluentialSample():
     def __init__(self, dataset_name, seed, loss_type, config_name,
-                 measure, test_resize=True, sz_embedding=512, epoch=40):
+                 measure, test_crop=True, sz_embedding=512, epoch=40):
 
         self.folder = 'models/dvi_data_{}_{}_loss{}/'.format(dataset_name, seed, loss_type)
         self.model_dir = '{}/ResNet_{}_Model'.format(self.folder, sz_embedding)
@@ -32,7 +33,7 @@ class InfluentialSample():
                                               config_name=self.config_name,
                                               root=self.folder,
                                               save=False, batch_size=1,
-                                              test_resize=test_resize)
+                                              test_crop=test_crop)
         self.dataset_name = dataset_name
         self.seed = seed
         self.loss_type = loss_type
@@ -45,9 +46,14 @@ class InfluentialSample():
         feat = Feat_resnet50_max_n()
         emb = torch.nn.Linear(2048, self.sz_embedding)
         model = torch.nn.Sequential(feat, emb)
-        model = nn.DataParallel(model)
+        # model = nn.DataParallel(model)
         model.cuda()
-        model.load_state_dict(torch.load('{}/Epoch_{}/{}_{}_trainval_{}_{}.pth'.format(self.model_dir, self.epoch, self.dataset_name, self.dataset_name, self.sz_embedding, self.seed)))
+        weights = torch.load('{}/Epoch_{}/{}_{}_trainval_{}_{}.pth'.format(self.model_dir, self.epoch, self.dataset_name,
+                                                                 self.dataset_name, self.sz_embedding, self.seed))
+        weights_detach = OrderedDict()
+        for k, v in weights.items():
+            weights_detach[k.split('module.')[1]] = v
+        model.load_state_dict(weights_detach)
         return model
 
     def _load_criterion(self):
@@ -144,7 +150,6 @@ class InfluentialSample():
     #     print("Furtherest 5 training class", nn_train_classes[-5:])
     #
     #     return nn_train_classes
-
 
     def cache_grad_loss_train_all(self, theta, theta_hat, pair_idx):
         l_prev, l_cur = loss_change_train(self.model, self.criterion, self.dl_tr, theta, theta_hat)
@@ -288,13 +293,14 @@ class InfluentialSample():
         influence_values = calc_influential_func_sample(grad4train)
         influence_values = np.asarray(influence_values)
         training_sample_by_influence = influence_values.argsort()  # ascending
-        theta1_helpful = np.load("Influential_data/{}_{}_helpful_{}_testcls{}".format(self.dataset_name, self.loss_type, self.measure, pair_idx)) # help to deconfuse -> helpful
-        theta1_harmful = np.load("Influential_data/{}_{}_harmful_{}_testcls{}".format(self.dataset_name, self.loss_type, self.measure, pair_idx))
+        theta1_helpful = np.load("Influential_data/{}_{}_helpful_{}_testcls{}.npy".format(self.dataset_name, self.loss_type, self.measure, pair_idx)) # help to deconfuse -> helpful
+        theta1_harmful = np.load("Influential_data/{}_{}_harmful_{}_testcls{}.npy".format(self.dataset_name, self.loss_type, self.measure, pair_idx))
         theta2_harmful = training_sample_by_influence[:500]  # help to confuse -> harmful
         theta2_helpful = training_sample_by_influence[-500:]
         theta12_helpful = list(set(theta1_helpful).intersection(set(theta2_helpful)))
         theta12_harmful = list(set(theta1_harmful).intersection(set(theta2_harmful)))
-
+        print("Helpful intersection: ", len(theta12_helpful))
+        print("Harmful intersection: ", len(theta12_harmful))
         np.save("Influential_data/{}_{}_helpfulintersection_{}_testcls{}".format(self.dataset_name, self.loss_type, self.measure, pair_idx),
                 theta12_helpful)
         np.save("Influential_data/{}_{}_harmfulintersection_{}_testcls{}".format(self.dataset_name, self.loss_type, self.measure, pair_idx),
@@ -350,13 +356,13 @@ if __name__ == '__main__':
     IS = InfluentialSample(dataset_name, seed, loss_type, config_name, measure, True, sz_embedding, epoch)
 
     '''Step 1: Cache all confusion gradient to parameters'''
-    confusion_class_pairs = IS.get_confusion_class_pairs()
+    # confusion_class_pairs = IS.get_confusion_class_pairs()
     # For theta1
     # IS.theta_grad_descent(confusion_class_pairs)
     # exit()
     # For theta2
-    IS.theta_grad_ascent(confusion_class_pairs)
-    exit()
+    # IS.theta_grad_ascent(confusion_class_pairs)
+    # exit()
 
     # scatter_classes = IS.get_scatter_class()
     # IS.theta_grad_descent(scatter_classes)
@@ -373,13 +379,13 @@ if __name__ == '__main__':
     # exit()
 
     # For theta2
-    pair_idx = 0 # iterate over all pairs
-    i = confusion_class_pairs[pair_idx][0]; j = confusion_class_pairs[pair_idx][1]
-    theta_dict = torch.load("Influential_data/{}_{}_confusion_theta_test_{}_{}_worse.pth".format(IS.dataset_name, IS.loss_type, i, j))
-    theta = theta_dict['theta']
-    theta_hat = theta_dict['theta_hat']
-    IS.cache_grad_loss_train_all_worse(theta, theta_hat, pair_idx)
-    exit()
+    # pair_idx = 9 # iterate over all pairs
+    # i = confusion_class_pairs[pair_idx][0]; j = confusion_class_pairs[pair_idx][1]
+    # theta_dict = torch.load("Influential_data/{}_{}_confusion_theta_test_{}_{}_worse.pth".format(IS.dataset_name, IS.loss_type, i, j))
+    # theta = theta_dict['theta']
+    # theta_hat = theta_dict['theta_hat']
+    # IS.cache_grad_loss_train_all_worse(theta, theta_hat, pair_idx)
+    # exit()
 
     # cls_idx = 3
     # i = scatter_classes[cls_idx]
@@ -393,16 +399,11 @@ if __name__ == '__main__':
     # For theta1
     # IS.run_sample(9)
     # exit()
-    # For theta2
-    # IS.run_sample(9)
-    # exit()
 
-    '''Others: get theta1, theta2 intersection'''
-    # helpful1, harmful1 = IS.run_sample(3)
-    # helpful2, harmful2 = IS.run_sample_worse(3)
-    # print(len(set(helpful1).intersection(set(harmful2))))
-    # print(len(set(helpful2).intersection(set(harmful1))))
-    # exit()
+    # For theta2
+    IS.run_sample_worse(9)
+    exit()
+
 
     '''Other: get t statistic for two specific classes'''
     i = 144; j = 142

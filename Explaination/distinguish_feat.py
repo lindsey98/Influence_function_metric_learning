@@ -8,6 +8,11 @@ from PIL import Image
 from Influence_function.influential_sample import InfluentialSample
 from Explaination.CAM_methods import *
 from Influence_function.influence_function import *
+from Explaination.background_removal import remove_background
+import utils
+import dataset
+from torchvision import transforms
+from dataset.utils import RGBAToRGB
 os.environ['CUDA_VISIBLE_DEVICES'] = "1"
 
 def overlay_mask(img: Image.Image, mask: Image.Image, colormap: str = 'jet', alpha: float = 0.7) -> Image.Image:
@@ -55,18 +60,32 @@ def overlay_mask(img: Image.Image, mask: Image.Image, colormap: str = 'jet', alp
 
     return overlayed_img
 
+
 class DistinguishFeat(InfluentialSample):
     def __init__(self, dataset_name, seed, loss_type, config_name,
-                 measure, test_resize=True, sz_embedding=512, epoch=40):
-        super().__init__(dataset_name, seed, loss_type, config_name,
-                 measure, test_resize, sz_embedding, epoch)
+                 measure, test_crop=False, sz_embedding=512, epoch=40):
 
-    def get_dist_between_samples(self, cls1, cls2):
-        feat_cls1 = self.testing_embedding[self.testing_label == cls1]
-        feat_cls2 = self.testing_embedding[self.testing_label == cls2]
+        super().__init__(dataset_name, seed, loss_type, config_name,
+                         measure, test_crop, sz_embedding, epoch)
+        # FIXME: For analysis purpose, I disable centercrop data augmentation
+        dataset_config = utils.load_config('dataset/config.json')
+        self.data_transforms = transforms.Compose([
+                    RGBAToRGB(),
+                    transforms.Resize(dataset_config['transform_parameters']["sz_crop"]),
+                    transforms.ToTensor(),
+                    transforms.Normalize(
+                        mean=[0.485, 0.456, 0.406],
+                        std=[0.229, 0.224, 0.225],
+                    )
+        ])
+        pass
+
+    def get_dist_between_classes(self, cls1, cls2):
+        testing_embedding, testing_label, _ = utils.predict_batchwise(self.model, self.dl_ev)
+        feat_cls1 = testing_embedding[testing_label == cls1]
+        feat_cls2 = testing_embedding[testing_label == cls2]
         indices_cls1 = torch.arange(len(self.testing_embedding))[self.testing_label == cls1]
         indices_cls2 = torch.arange(len(self.testing_embedding))[self.testing_label == cls2]
-
         D = torch.cdist(feat_cls1, feat_cls2, p=2)
 
         # most confusing samples
@@ -170,7 +189,6 @@ class DistinguishFeat(InfluentialSample):
         # plt.show()
         plt.savefig('./{}/{}/{}_{}_dominant_feat/{}.png'.format(base_dir, self.dataset_name, self.measure, interested_cls, 'original'))
 
-
     def CAM(self, interested_cls, coeff, dl, base_dir='CAM'):
         assert len(interested_cls) == 2
         cam_extractor = GradCAMCustomize(self.model, target_layer=self.model.module[0].base.layer1)
@@ -261,8 +279,9 @@ class DistinguishFeat(InfluentialSample):
                                                              'harmful',
                                                              os.path.basename(dl.dataset.im_paths[indices[0]])))
 
-    def CAM_sample(self, interested_cls,
-                   ind1, ind2, dl, base_dir='CAM_sample'): # Only for confusion analysis
+    def background_removal(self, interested_cls,
+                           ind1, ind2, dl, base_dir='CAM_sample'): # Only for confusion analysis
+
         assert len(interested_cls) == 2
         cam_extractor = GradCAMCustomize(self.model, target_layer=self.model.module[0].base.layer1)
         os.makedirs('./{}/{}'.format(base_dir, self.dataset_name), exist_ok=True)
@@ -280,6 +299,7 @@ class DistinguishFeat(InfluentialSample):
 
         emb1_detach = emb1.detach().squeeze(0)
         emb2_detach = emb2.detach().squeeze(0)
+        before_distance = (emb1_detach - emb2_detach).square().sum().sqrt()
         activation_map1 = cam_extractor(emb1, emb2_detach)
         img1 = to_pil_image(read_image(dl.dataset.im_paths[ind1]))
         result1 = overlay_mask(img1, to_pil_image(activation_map1[0].detach().cpu(), mode='F'), alpha=0.5)
@@ -289,17 +309,41 @@ class DistinguishFeat(InfluentialSample):
         result2 = overlay_mask(img2, to_pil_image(activation_map2[0].detach().cpu(), mode='F'), alpha=0.5)
 
         # Display it
-        plt.subplot(1, 2, 1)
-        plt.imshow(result1)
+        fig = plt.figure()
+        ax=fig.add_subplot(2,2,1)
+        ax.imshow(result1)
         plt.axis('off'); plt.tight_layout()
-        plt.subplot(1, 2, 2)
-        plt.imshow(result2)
+
+        ax=fig.add_subplot(2,2,2)
+        ax.imshow(result2)
         plt.axis('off'); plt.tight_layout()
-        # plt.show()
-        plt.savefig('./{}/{}/{}_{}_{}/{}_{}.png'.format(base_dir, self.dataset_name, self.measure,
-                                                          interested_cls[0], interested_cls[1],
-                                                          ind1,
-                                                          ind2))
+
+        # Remove background
+        img1_after = remove_background(dl.dataset.im_paths[ind1])
+        img2_after = remove_background(dl.dataset.im_paths[ind2])
+
+        img1_after_trans = self.data_transforms(img1_after)
+        img2_after_trans = self.data_transforms(img2_after)
+        print(img1_after_trans.shape)
+        print(img2_after_trans.shape)
+
+        emb1_after = self.model(img1_after_trans.unsqueeze(0).cuda()).detach().squeeze(0)
+        emb2_after = self.model(img2_after_trans.unsqueeze(0).cuda()).detach().squeeze(0)
+        after_distance = (emb1_after - emb2_after).square().sum().sqrt()
+
+        ax=fig.add_subplot(2,2,3)
+        ax.imshow(img1_after)
+        plt.axis('off'); plt.tight_layout()
+
+        ax=fig.add_subplot(2,2,4)
+        ax.imshow(img2_after)
+        plt.axis('off'); plt.tight_layout()
+        plt.suptitle('Before D = {:.4f}, After D = {:.4f}'.format(before_distance, after_distance), fontsize=10)
+        plt.show()
+        # plt.savefig('./{}/{}/{}_{}_{}/{}_{}.png'.format(base_dir, self.dataset_name, self.measure,
+        #                                                   interested_cls[0], interested_cls[1],
+        #                                                   ind1,
+        #                                                   ind2))
 
 
 if __name__ == '__main__':
@@ -309,11 +353,11 @@ if __name__ == '__main__':
     sz_embedding = 512
     seed = 4
     measure = 'confusion'
-    test_resize = False
+    test_crop = False
     i = 143; j = 140
     # i = 160
 
-    DF = DistinguishFeat(dataset_name, seed, loss_type, config_name, measure, test_resize)
+    DF = DistinguishFeat(dataset_name, seed, loss_type, config_name, measure, test_crop)
 
     '''###### For Confusion Analysis #####'''
     '''Analyze confusing features'''
@@ -344,16 +388,16 @@ if __name__ == '__main__':
     #        dl=DF.dl_ev, base_dir='CAM_distinguish')
 
     '''Analyze two confusing samples in specific'''
-    # minimal_D, minimal_idx_pair = DF.get_dist_between_samples(i, j)
-    # for pair_idx in range(10):
-    #     ind1, ind2 = minimal_idx_pair[pair_idx]
+    minimal_D, minimal_idx_pair = DF.get_dist_between_classes(i, j)
+    for pair_idx in range(10):
+        ind1, ind2 = minimal_idx_pair[pair_idx]
         # os.makedirs(os.path.join('Background_erase', '{}_{}_{}_{}').format(dataset_name, DF.measure, i, j), exist_ok=True)
         # shutil.copyfile(DF.dl_ev.dataset.im_paths[ind1],
         #                 os.path.join('Background_erase', '{}_{}_{}_{}', '{}.png').format(dataset_name, DF.measure, i, j, ind1))
         # shutil.copyfile(DF.dl_ev.dataset.im_paths[ind2],
         #                 os.path.join('Background_erase', '{}_{}_{}_{}', '{}.png').format(dataset_name, DF.measure, i, j, ind2))
 
-        # DF.CAM_sample(interested_cls=(i, j), ind1=ind1, ind2=ind2, dl=DF.dl_ev)
+        DF.background_removal(interested_cls=(i, j), ind1=ind1, ind2=ind2, dl=DF.dl_ev)
 
 
     '''###### For Intra Class Variance Analysis #####'''
@@ -372,13 +416,13 @@ if __name__ == '__main__':
     # DF.dominant_samples(i, eigenvec, DF.dl_ev)
 
 
-    '''###### Background removal experiment #####'''
-    from evaluation.pumap import load_single_sample
-    ind1, ind2 = 2568, 2404
-    x1 = load_single_sample(config_name, img_path='Background_erase/{}_confusion_{}_{}/{}_e.png'.format(dataset_name, i, j, ind1), test_resize=True)
-    x2 = load_single_sample(config_name, img_path='Background_erase/{}_confusion_{}_{}/{}_e.png'.format(dataset_name, i, j, ind2), test_resize=True)
-    with torch.no_grad():
-        emb1 = DF.model(x1.unsqueeze(0).cuda()).detach().cpu()
-        emb2 = DF.model(x2.unsqueeze(0).cuda()).detach().cpu()
-    print('Previous distance', (DF.testing_embedding[ind1] - DF.testing_embedding[ind2]).square().sum().sqrt().item())
-    print('After distance', (emb1 - emb2).square().sum().sqrt().item())
+    # '''###### Background removal experiment #####'''
+    # from evaluation.pumap import load_single_sample
+    # ind1, ind2 = 2568, 2404
+    # x1 = load_single_sample(config_name, img_path='Background_erase/{}_confusion_{}_{}/{}_e.png'.format(dataset_name, i, j, ind1), test_resize=True)
+    # x2 = load_single_sample(config_name, img_path='Background_erase/{}_confusion_{}_{}/{}_e.png'.format(dataset_name, i, j, ind2), test_resize=True)
+    # with torch.no_grad():
+    #     emb1 = DF.model(x1.unsqueeze(0).cuda()).detach().cpu()
+    #     emb2 = DF.model(x2.unsqueeze(0).cuda()).detach().cpu()
+    # print('Previous distance', (DF.testing_embedding[ind1] - DF.testing_embedding[ind2]).square().sum().sqrt().item())
+    # print('After distance', (emb1 - emb2).square().sum().sqrt().item())

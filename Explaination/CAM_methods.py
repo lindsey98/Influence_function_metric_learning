@@ -34,7 +34,7 @@ class GradCAMCustomize(GradCAM):
         eigenvec.requires_grad = False
         loss = torch.dot(scores.squeeze(0), eigenvec) # alpha^T embedding
         self.model.zero_grad()
-        loss.backward(retain_graph=True)
+        loss.backward(retain_graph=False)
 
     def compute_cams(self, scores: torch.Tensor, eigenvec: torch.Tensor, normalized: bool = True) -> List[torch.Tensor]:
 
