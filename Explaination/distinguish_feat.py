@@ -78,7 +78,6 @@ class DistinguishFeat(InfluentialSample):
                         std=[0.229, 0.224, 0.225],
                     )
         ])
-        pass
 
     def get_dist_between_classes(self, cls1, cls2):
         testing_embedding, testing_label, _ = utils.predict_batchwise(self.model, self.dl_ev)
@@ -191,16 +190,20 @@ class DistinguishFeat(InfluentialSample):
 
     def CAM(self, interested_cls, coeff, dl, base_dir='CAM'):
         assert len(interested_cls) == 2
-        cam_extractor = GradCAMCustomize(self.model, target_layer=self.model.module[0].base.layer1)
+        cam_extractor = GradCAMCustomize(self.model, target_layer=self.model[0].base.conv1)
         for ct, (x, y, indices) in tqdm(enumerate(dl)):
             os.makedirs('./{}/{}'.format(base_dir, self.dataset_name), exist_ok=True)
             os.makedirs('./{}/{}/{}_{}_{}'.format(base_dir, self.dataset_name, self.measure, interested_cls[0], interested_cls[1]), exist_ok=True)
             if y.item() in interested_cls:
                 os.makedirs('./{}/{}/{}_{}_{}/{}'.format(base_dir, self.dataset_name, self.measure, interested_cls[0], interested_cls[1], y.item()), exist_ok=True)
+                cam_extractor._hooks_enabled = True
+                self.model.zero_grad()
                 x, y = x.cuda(), y.cuda()
                 out = self.model(x) # (1, sz_embed)
                 # Retrieve the CAM by passing the class index and the model output
                 activation_map = cam_extractor(out, coeff)
+                cam_extractor.clear_hooks()
+                cam_extractor._hooks_enabled = False
                 # Resize the CAM and overlay it
                 img = to_pil_image(read_image(dl.dataset.im_paths[indices[0]]))
                 result = overlay_mask(img, to_pil_image(activation_map[0].detach().cpu(), mode='F'), alpha=0.5)
@@ -217,7 +220,7 @@ class DistinguishFeat(InfluentialSample):
     def CAM_helpful_harmful(self, interested_cls, helpful_ind, harmful_ind,
                             coeff, dl, base_dir='CAM'):
 
-        cam_extractor = GradCAMCustomize(self.model, target_layer=self.model.module[0].base.layer1)
+        cam_extractor = GradCAMCustomize(self.model, target_layer=self.model[0].base.conv1)
         os.makedirs('./{}/{}'.format(base_dir, self.dataset_name), exist_ok=True)
 
         for ct, (x, y, indices) in tqdm(enumerate(dl)):
@@ -230,10 +233,13 @@ class DistinguishFeat(InfluentialSample):
                     os.makedirs('./{}/{}/{}_{}/{}'.format(base_dir, self.dataset_name, self.measure,
                                                              interested_cls,
                                                              'helpful'), exist_ok=True)
+                cam_extractor._hooks_enabled = True
+                self.model.zero_grad()
                 x, y = x.cuda(), y.cuda()
                 out = self.model(x) # (1, sz_embed)
                 activation_map = cam_extractor(out, coeff)
-
+                cam_extractor.clear_hooks()
+                cam_extractor._hooks_enabled = False
                 img = to_pil_image(read_image(dl.dataset.im_paths[indices[0]]))
                 result = overlay_mask(img, to_pil_image(activation_map[0].detach().cpu(), mode='F'), alpha=0.5)
 
@@ -259,9 +265,13 @@ class DistinguishFeat(InfluentialSample):
                     os.makedirs('./{}/{}/{}_{}/{}'.format(base_dir, self.dataset_name, self.measure,
                                                           interested_cls,
                                                           'harmful'), exist_ok=True)
+                cam_extractor._hooks_enabled = True
+                self.model.zero_grad()
                 x, y = x.cuda(), y.cuda()
                 out = self.model(x) # (1, sz_embed)
                 activation_map = cam_extractor(out, coeff)
+                cam_extractor.clear_hooks()
+                cam_extractor._hooks_enabled = False
                 img = to_pil_image(read_image(dl.dataset.im_paths[indices[0]]))
                 result = overlay_mask(img, to_pil_image(activation_map[0].detach().cpu(), mode='F'), alpha=0.5)
 
@@ -279,44 +289,52 @@ class DistinguishFeat(InfluentialSample):
                                                              'harmful',
                                                              os.path.basename(dl.dataset.im_paths[indices[0]])))
 
+
     def background_removal(self, interested_cls,
                            ind1, ind2, dl, base_dir='CAM_sample'): # Only for confusion analysis
 
         assert len(interested_cls) == 2
-        cam_extractor = GradCAMCustomize(self.model, target_layer=self.model.module[0].base.layer1)
+        cam_extractor1 = GradCAMCustomize(self.model, target_layer=self.model[0].base.conv1)
+        cam_extractor2 = GradCAMCustomize(self.model, target_layer=self.model[0].base.conv1)
+
         os.makedirs('./{}/{}'.format(base_dir, self.dataset_name), exist_ok=True)
         os.makedirs('./{}/{}/{}_{}_{}/'.format(base_dir, self.dataset_name, self.measure, interested_cls[0], interested_cls[1]), exist_ok=True)
 
         # Get the two embeddings first
-        for _, (x, y, indices) in tqdm(enumerate(self.dl_ev)):
-            if indices.item() == ind1.item():
-                emb1 = self.model(x.cuda())
-            elif indices.item() == ind2.item():
-                emb2 = self.model(x.cuda())
-            else:
-                if 'emb1' in locals() and 'emb2' in locals():
-                    break
-
-        emb1_detach = emb1.detach().squeeze(0)
-        emb2_detach = emb2.detach().squeeze(0)
-        before_distance = (emb1_detach - emb2_detach).square().sum().sqrt()
-        activation_map1 = cam_extractor(emb1, emb2_detach)
+        cam_extractor1._hooks_enabled = True
+        self.model.zero_grad()
+        emb1 = self.model(dl.dataset.__getitem__(ind1)[0].unsqueeze(0).cuda())
+        emb2 = self.model(dl.dataset.__getitem__(ind2)[0].unsqueeze(0).cuda()).detach().squeeze(0)
+        activation_map1 = cam_extractor1(emb1, emb2)
         img1 = to_pil_image(read_image(dl.dataset.im_paths[ind1]))
         result1 = overlay_mask(img1, to_pil_image(activation_map1[0].detach().cpu(), mode='F'), alpha=0.5)
 
-        activation_map2 = cam_extractor(emb2, emb1_detach)
+        cam_extractor2._hooks_enabled = True
+        self.model.zero_grad()
+        emb2 = self.model(dl.dataset.__getitem__(ind2)[0].unsqueeze(0).cuda())
+        emb1 = self.model(dl.dataset.__getitem__(ind1)[0].unsqueeze(0).cuda()).detach().squeeze(0)
+        activation_map2 = cam_extractor2(emb2, emb1)
         img2 = to_pil_image(read_image(dl.dataset.im_paths[ind2]))
         result2 = overlay_mask(img2, to_pil_image(activation_map2[0].detach().cpu(), mode='F'), alpha=0.5)
 
+        before_distance = (emb1 - emb2.detach().squeeze(0)).square().sum().sqrt()
+
+        # Clean data
+        cam_extractor1.clear_hooks()
+        cam_extractor1._hooks_enabled = False
+        cam_extractor2.clear_hooks()
+        cam_extractor2._hooks_enabled = False
+
         # Display it
         fig = plt.figure()
+        fig.subplots_adjust(top=0.8)
         ax=fig.add_subplot(2,2,1)
         ax.imshow(result1)
-        plt.axis('off'); plt.tight_layout()
+        plt.axis('off')
 
         ax=fig.add_subplot(2,2,2)
         ax.imshow(result2)
-        plt.axis('off'); plt.tight_layout()
+        plt.axis('off')
 
         # Remove background
         img1_after = remove_background(dl.dataset.im_paths[ind1])
@@ -324,8 +342,8 @@ class DistinguishFeat(InfluentialSample):
 
         img1_after_trans = self.data_transforms(img1_after)
         img2_after_trans = self.data_transforms(img2_after)
-        print(img1_after_trans.shape)
-        print(img2_after_trans.shape)
+        # print(img1_after_trans.shape)
+        # print(img2_after_trans.shape)
 
         emb1_after = self.model(img1_after_trans.unsqueeze(0).cuda()).detach().squeeze(0)
         emb2_after = self.model(img2_after_trans.unsqueeze(0).cuda()).detach().squeeze(0)
@@ -333,17 +351,16 @@ class DistinguishFeat(InfluentialSample):
 
         ax=fig.add_subplot(2,2,3)
         ax.imshow(img1_after)
-        plt.axis('off'); plt.tight_layout()
+        plt.axis('off')
 
         ax=fig.add_subplot(2,2,4)
         ax.imshow(img2_after)
-        plt.axis('off'); plt.tight_layout()
+        plt.axis('off')
         plt.suptitle('Before D = {:.4f}, After D = {:.4f}'.format(before_distance, after_distance), fontsize=10)
-        plt.show()
-        # plt.savefig('./{}/{}/{}_{}_{}/{}_{}.png'.format(base_dir, self.dataset_name, self.measure,
-        #                                                   interested_cls[0], interested_cls[1],
-        #                                                   ind1,
-        #                                                   ind2))
+        plt.savefig('./{}/{}/{}_{}_{}/{}_{}.png'.format(base_dir, self.dataset_name, self.measure,
+                                                      interested_cls[0], interested_cls[1],
+                                                      ind1,
+                                                      ind2))
 
 
 if __name__ == '__main__':

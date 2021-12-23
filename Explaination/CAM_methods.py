@@ -20,26 +20,27 @@ class GradCAMCustomize(GradCAM):
             target_layer,
             input_shape,
             **kwargs)
+        self.model.eval()
 
-    def _get_weights(self, scores: torch.Tensor, eigenvector: torch.Tensor) -> List[torch.Tensor]:  # type: ignore[override]
+    def get_weights(self, scores: torch.Tensor, eigenvector: torch.Tensor) -> List[torch.Tensor]:  # type: ignore[override]
         """Computes the weight coefficients of the hooked activation maps"""
         # Backpropagate
-        self._backprop(scores, eigenvector)
+        self.backprop(scores, eigenvector)
         # Global average pool the gradients over spatial dimensions
         return [grad.squeeze(0).flatten(1).mean(-1) for grad in self.hook_g]
 
-    def _backprop(self, scores: torch.Tensor, eigenvec: torch.Tensor) -> None:
+    def backprop(self, scores: torch.Tensor, eigenvec: torch.Tensor) -> None:
         # Backpropagate to get the gradients on the hooked layer
         eigenvec = eigenvec.to(scores.device)
-        eigenvec.requires_grad = False
-        loss = torch.dot(scores.squeeze(0), eigenvec) # alpha^T embedding
+        loss = (scores @ eigenvec.detach()).sum()
         self.model.zero_grad()
-        loss.backward(retain_graph=False)
+        loss.backward(retain_graph=True)
+        pass
 
     def compute_cams(self, scores: torch.Tensor, eigenvec: torch.Tensor, normalized: bool = True) -> List[torch.Tensor]:
 
         # Get map weight & unsqueeze it
-        weights = self._get_weights(scores, eigenvec)
+        weights = self.get_weights(scores, eigenvec)
         cams: List[torch.Tensor] = []
 
         for weight, activation in zip(weights, self.hook_a):
