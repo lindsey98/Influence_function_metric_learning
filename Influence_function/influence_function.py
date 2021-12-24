@@ -86,6 +86,11 @@ def calc_intravar(feat):
     intra_var = ((feat - feat.mean(0)) ** 2).sum() / (n - 1)
     return intra_var
 
+def t_test_df(s1_sq, s2_sq, n1, n2):
+    a = (s1_sq / n1 + s2_sq / n2)**2
+    b = (s1_sq / n1)**2/(n1-1) + (s2_sq / n2)**2/(n2-1)
+    return a/b
+
 def calc_confusion(feat_cls1, feat_cls2, sqrt=False):
     '''
         Calculate class confusion
@@ -103,9 +108,10 @@ def calc_confusion(feat_cls1, feat_cls2, sqrt=False):
     confusion = inter_dis / (intra_dist1 / n1 + intra_dist2 / n2) # t^2 statistic
     if sqrt:
         confusion = confusion.sqrt() # t
-    return confusion
+    df = t_test_df(intra_dist1, intra_dist2, n1, n2)
+    return confusion, df
 
-def grad_confusion(model, dl_ev, cls1, cls2):
+def grad_confusion(model, dl_ev, cls1, cls2, limit=50):
     '''
         Calculate class confusion or gradient of class confusion to model parameters
         Arguments:
@@ -121,24 +127,26 @@ def grad_confusion(model, dl_ev, cls1, cls2):
     feat_cls2 = torch.tensor([]).cuda()  # (N2, sz_embed)
     model.eval(); model.zero_grad()
     for ct, (x, t, _) in tqdm(enumerate(dl_ev)): # need to recalculate the feature embeddings since we need the gradient
-        if len(feat_cls1) >= 50 and len(feat_cls2) >= 50:
+        if len(feat_cls1) >= limit and len(feat_cls2) >= limit:
             break
         if t.item() == cls1: # belong to class 1
-            if len(feat_cls1) >= 50: # FIXME: feeding in all instances will be out of memory
+            if len(feat_cls1) >= limit: # FIXME: feeding in all instances will be out of memory
                 continue
+            # print(x.shape)
             x = x.cuda()
             m = model(x)
             feat_cls1 = torch.cat((feat_cls1, m), dim=0)
         elif t.item() == cls2: # belong to class 2
-            if len(feat_cls2) >= 50:
+            if len(feat_cls2) >= limit:
                 continue
+            # print(x.shape)
             x = x.cuda()
             m = model(x)
             feat_cls2 = torch.cat((feat_cls2, m), dim=0)
         else: # skip irrelevant test samples
             pass
 
-    confusion = calc_confusion(feat_cls1, feat_cls2, sqrt=False) # d(t^2)/d(theta)
+    confusion, df = calc_confusion(feat_cls1, feat_cls2, sqrt=False) # d(t^2)/d(theta)
     params = model.module[-1].weight # last linear layer
     grad_confusion2params = list(grad(confusion, params))
     return confusion.sqrt(), grad_confusion2params

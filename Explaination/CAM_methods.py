@@ -27,7 +27,9 @@ class GradCAMCustomize(GradCAM):
         # Backpropagate
         self.backprop(scores, eigenvector)
         # Global average pool the gradients over spatial dimensions
-        return [grad.squeeze(0).flatten(1).mean(-1) for grad in self.hook_g]
+        # return [grad.squeeze(0).flatten(1).mean(-1) for grad in self.hook_g]
+        # FIXME do not do average over spatial dimensions
+        return [grad.squeeze(0) for grad in self.hook_g]
 
     def backprop(self, scores: torch.Tensor, eigenvec: torch.Tensor) -> None:
         # Backpropagate to get the gradients on the hooked layer
@@ -35,7 +37,6 @@ class GradCAMCustomize(GradCAM):
         loss = (scores @ eigenvec.detach()).sum()
         self.model.zero_grad()
         loss.backward(retain_graph=True)
-        pass
 
     def compute_cams(self, scores: torch.Tensor, eigenvec: torch.Tensor, normalized: bool = True) -> List[torch.Tensor]:
 
@@ -44,11 +45,13 @@ class GradCAMCustomize(GradCAM):
         cams: List[torch.Tensor] = []
 
         for weight, activation in zip(weights, self.hook_a):
-            missing_dims = activation.ndim - weight.ndim - 1  # type: ignore[union-attr]
-            weight = weight[(...,) + (None,) * missing_dims]
+            # missing_dims = activation.ndim - weight.ndim - 1  # type: ignore[union-attr]
+            # weight = weight[(...,) + (None,) * missing_dims]
 
             # Perform the weighted combination to get the CAM
-            cam = torch.nansum(weight * activation.squeeze(0), dim=0)  # type: ignore[union-attr]
+            # cam = torch.nansum(weight * activation.squeeze(0), dim=0)  # type: ignore[union-attr]
+            # cam = torch.nansum(weight * activation, dim=0)
+            cam = torch.nansum(weight, dim=0) # combine over channel dimension
 
             if self._relu:
                 cam = F.relu(cam, inplace=True)

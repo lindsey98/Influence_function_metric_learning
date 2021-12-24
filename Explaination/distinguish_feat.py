@@ -71,7 +71,7 @@ class DistinguishFeat(InfluentialSample):
         dataset_config = utils.load_config('dataset/config.json')
         self.data_transforms = transforms.Compose([
                     RGBAToRGB(),
-                    transforms.Resize(dataset_config['transform_parameters']["sz_crop"]),
+                    transforms.Resize(dataset_config['transform_parameters']["sz_crop"]-1, max_size=dataset_config['transform_parameters']["sz_crop"]),
                     transforms.ToTensor(),
                     transforms.Normalize(
                         mean=[0.485, 0.456, 0.406],
@@ -294,8 +294,8 @@ class DistinguishFeat(InfluentialSample):
                            ind1, ind2, dl, base_dir='CAM_sample'): # Only for confusion analysis
 
         assert len(interested_cls) == 2
-        cam_extractor1 = GradCAMCustomize(self.model, target_layer=self.model[0].base.conv1)
-        cam_extractor2 = GradCAMCustomize(self.model, target_layer=self.model[0].base.conv1)
+        cam_extractor1 = GradCAMCustomize(self.model, target_layer=self.model[0].base.layer4)
+        cam_extractor2 = GradCAMCustomize(self.model, target_layer=self.model[0].base.layer4)
 
         os.makedirs('./{}/{}'.format(base_dir, self.dataset_name), exist_ok=True)
         os.makedirs('./{}/{}/{}_{}_{}/'.format(base_dir, self.dataset_name, self.measure, interested_cls[0], interested_cls[1]), exist_ok=True)
@@ -342,8 +342,6 @@ class DistinguishFeat(InfluentialSample):
 
         img1_after_trans = self.data_transforms(img1_after)
         img2_after_trans = self.data_transforms(img2_after)
-        # print(img1_after_trans.shape)
-        # print(img2_after_trans.shape)
 
         emb1_after = self.model(img1_after_trans.unsqueeze(0).cuda()).detach().squeeze(0)
         emb2_after = self.model(img2_after_trans.unsqueeze(0).cuda()).detach().squeeze(0)
@@ -357,10 +355,10 @@ class DistinguishFeat(InfluentialSample):
         ax.imshow(img2_after)
         plt.axis('off')
         plt.suptitle('Before D = {:.4f}, After D = {:.4f}'.format(before_distance, after_distance), fontsize=10)
+        # plt.show()
         plt.savefig('./{}/{}/{}_{}_{}/{}_{}.png'.format(base_dir, self.dataset_name, self.measure,
-                                                      interested_cls[0], interested_cls[1],
-                                                      ind1,
-                                                      ind2))
+                                                        interested_cls[0], interested_cls[1],
+                                                        ind1, ind2))
 
 
 if __name__ == '__main__':
@@ -371,7 +369,7 @@ if __name__ == '__main__':
     seed = 4
     measure = 'confusion'
     test_crop = False
-    i = 143; j = 140
+    i = 116; j = 118
     # i = 160
 
     DF = DistinguishFeat(dataset_name, seed, loss_type, config_name, measure, test_crop)
@@ -414,7 +412,7 @@ if __name__ == '__main__':
         # shutil.copyfile(DF.dl_ev.dataset.im_paths[ind2],
         #                 os.path.join('Background_erase', '{}_{}_{}_{}', '{}.png').format(dataset_name, DF.measure, i, j, ind2))
 
-        DF.background_removal(interested_cls=(i, j), ind1=ind1, ind2=ind2, dl=DF.dl_ev)
+        DF.background_removal(interested_cls=(i, j), ind1=ind1, ind2=ind2, dl=DF.dl_ev, base_dir='CAM_sample_last_layer_gradient')
 
 
     '''###### For Intra Class Variance Analysis #####'''

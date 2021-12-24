@@ -1,15 +1,15 @@
-python train_sample_reweight.py --loss-type ProxyNCA_pfix_confusion_theta12_143_140 \
---helpful Influential_data/cub_ProxyNCA_pfix_helpfulintersection_confusion_testcls0.npy \
---harmful Influential_data/cub_ProxyNCA_pfix_harmfulintersection_confusion_testcls0.npy --model_dir models/dvi_data_cub_4_lossProxyNCA_pfix/ResNet_512_Model
-python train_sample_reweight.py --loss-type ProxyNCA_pfix_confusion_theta12_178_172 \
---helpful Influential_data/cub_ProxyNCA_pfix_helpfulintersection_confusion_testcls1.npy \
---harmful Influential_data/cub_ProxyNCA_pfix_harmfulintersection_confusion_testcls1.npy --model_dir models/dvi_data_cub_4_lossProxyNCA_pfix/ResNet_512_Model
-python train_sample_reweight.py --loss-type ProxyNCA_pfix_confusion_theta12_117_129 \
---helpful Influential_data/cub_ProxyNCA_pfix_helpfulintersection_confusion_testcls2.npy \
---harmful Influential_data/cub_ProxyNCA_pfix_harmfulintersection_confusion_testcls2.npy --model_dir models/dvi_data_cub_4_lossProxyNCA_pfix/ResNet_512_Model
-python train_sample_reweight.py --loss-type ProxyNCA_pfix_confusion_theta12_116_118 \
---helpful Influential_data/cub_ProxyNCA_pfix_helpfulintersection_confusion_testcls4.npy \
---harmful Influential_data/cub_ProxyNCA_pfix_harmfulintersection_confusion_testcls4.npy --model_dir models/dvi_data_cub_4_lossProxyNCA_pfix/ResNet_512_Model
-python train_sample_reweight.py --loss-type ProxyNCA_pfix_confusion_theta12_196_192 \
---helpful Influential_data/cub_ProxyNCA_pfix_helpfulintersection_confusion_testcls5.npy \
---harmful Influential_data/cub_ProxyNCA_pfix_harmfulintersection_confusion_testcls5.npy --model_dir models/dvi_data_cub_4_lossProxyNCA_pfix/ResNet_512_Model
+python train_sample_reweight.py --loss-type ProxyNCA_pfix_confusion_noaug_143_140 \
+--helpful Influential_data/cub_ProxyNCA_pfix_helpful_confusion_noaug_testcls0.npy \
+--harmful Influential_data/cub_ProxyNCA_pfix_harmful_confusion_noaug_testcls0.npy --model_dir models/dvi_data_cub_4_lossProxyNCA_pfix/ResNet_512_Model
+python train_sample_reweight.py --loss-type ProxyNCA_pfix_confusion_noaug_178_172 \
+--helpful Influential_data/cub_ProxyNCA_pfix_helpful_confusion_noaug_testcls1.npy \
+--harmful Influential_data/cub_ProxyNCA_pfix_harmful_confusion_noaug_testcls1.npy --model_dir models/dvi_data_cub_4_lossProxyNCA_pfix/ResNet_512_Model
+python train_sample_reweight.py --loss-type ProxyNCA_pfix_confusion_noaug_117_129 \
+--helpful Influential_data/cub_ProxyNCA_pfix_helpful_confusion_noaug_testcls2.npy \
+--harmful Influential_data/cub_ProxyNCA_pfix_harmful_confusion_noaug_testcls2.npy --model_dir models/dvi_data_cub_4_lossProxyNCA_pfix/ResNet_512_Model
+python train_sample_reweight.py --loss-type ProxyNCA_pfix_confusion_noaug_116_118 \
+--helpful Influential_data/cub_ProxyNCA_pfix_helpful_confusion_noaug_testcls4.npy \
+--harmful Influential_data/cub_ProxyNCA_pfix_harmful_confusion_noaug_testcls4.npy --model_dir models/dvi_data_cub_4_lossProxyNCA_pfix/ResNet_512_Model
+python train_sample_reweight.py --loss-type ProxyNCA_pfix_confusion_noaug_196_192 \
+--helpful Influential_data/cub_ProxyNCA_pfix_helpful_confusion_noaug_testcls5.npy \
+--harmful Influential_data/cub_ProxyNCA_pfix_harmful_confusion_noaug_testcls5.npy --model_dir models/dvi_data_cub_4_lossProxyNCA_pfix/ResNet_512_Model

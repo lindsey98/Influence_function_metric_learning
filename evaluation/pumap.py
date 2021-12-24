@@ -86,7 +86,7 @@ def prepare_data(data_name='cub',
                 classes=dataset_config['dataset'][data_name]['classes']['trainval'],
                 transform=transforms.Compose([
                     RGBAToRGB(),
-                    transforms.Resize(dataset_config[transform_key]["sz_crop"]),
+                    transforms.Resize(dataset_config[transform_key]["sz_crop"]-1, max_size=dataset_config[transform_key]["sz_crop"]),
                     transforms.ToTensor(),
                     transforms.Normalize(
                         mean=[0.485, 0.456, 0.406],
@@ -108,7 +108,7 @@ def prepare_data(data_name='cub',
                 classes=dataset_config['dataset'][data_name]['classes']['eval'],
                 transform=transforms.Compose([
                     RGBAToRGB(),
-                    transforms.Resize(dataset_config[transform_key]["sz_crop"]),
+                    transforms.Resize(dataset_config[transform_key]["sz_crop"]-1, max_size=dataset_config[transform_key]["sz_crop"]),
                     transforms.ToTensor(),
                     transforms.Normalize(
                         mean=[0.485, 0.456, 0.406],
