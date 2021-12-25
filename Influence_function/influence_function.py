@@ -54,11 +54,6 @@ def calc_inter_dist(feat_cls1, feat_cls2):
     '''
     n1, n2 = feat_cls1.size()[0], feat_cls2.size()[0]
     inter_dis = torch.cdist(feat_cls1, feat_cls2).square().sum() / (n1*n2)  # inter class distance
-    # intra_dist1 = calc_intravar(feat_cls1)  # unbiased estimate of intra-class variance
-    # intra_dist2 = calc_intravar(feat_cls2)
-    # confusion = inter_dis / ((intra_dist1 + intra_dist2)/2)
-    # if sqrt:
-    #     confusion = confusion.sqrt()
     return inter_dis
 
 
