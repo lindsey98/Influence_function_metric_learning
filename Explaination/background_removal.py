@@ -11,7 +11,7 @@ import os
 import scipy
 from utils import predict_batchwise
 from evaluation.pumap import prepare_data
-from Influence_function.influence_function import calc_confusion
+from Influence_function.influence_function import calc_inter_dist
 
 def remove_background(input_path):
 

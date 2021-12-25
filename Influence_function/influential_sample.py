@@ -100,8 +100,7 @@ class InfluentialSample():
         return train_embedding, train_label, testing_embedding, testing_label
 
     def get_confusion_test(self, top10_wrong_classes):
-        confusion_matrix = np.ones((len(top10_wrong_classes), len(self.dl_ev.dataset.classes))) * 100
-        pval_matrix = np.zeros((len(top10_wrong_classes), len(self.dl_ev.dataset.classes)))
+        confusion_matrix = np.zeros((len(top10_wrong_classes), len(self.dl_ev.dataset.classes)))
         for indi, i in enumerate(top10_wrong_classes):
             for indj, j in enumerate(self.dl_ev.dataset.classes):
                 if j == i: # same class
@@ -109,9 +108,7 @@ class InfluentialSample():
                 else:
                     feat_cls1 = self.testing_embedding[self.testing_label == i]
                     feat_cls2 = self.testing_embedding[self.testing_label == j]
-                    confusion= calc_confusion(feat_cls1, feat_cls2, sqrt=False)
-                    # p_val = scipy.stats.t.sf(abs(confusion.detach().cpu().item()), df=df.detach().cpu().item()) * 2 # two sided p-value
-                    # pval_matrix[indi][indj] = p_val
+                    confusion = calc_inter_dist(feat_cls1, feat_cls2)
                     confusion_matrix[indi][indj] = confusion.detach().cpu().item()
         return confusion_matrix
 
@@ -220,18 +217,18 @@ class InfluentialSample():
         if self.measure == 'confusion':
             torch.cuda.empty_cache()
             for pair in classes:
-                confusion_degree_orig, _ = grad_confusion(self.model, self.dl_ev, pair[0], pair[1])
-                confusion_degree_orig = confusion_degree_orig.detach()
+                inter_dist_orig, _ = grad_interdist(self.model, self.dl_ev, pair[0], pair[1])
+                inter_dist_orig = inter_dist_orig.detach()
                 self.model.module[-1].weight.data = theta_orig
                 theta = theta_orig.clone()
                 for _ in range(n):
-                    confusion_degree, v = grad_confusion(self.model, self.dl_ev, pair[0], pair[1]) # dt2/dtheta
-                    confusion_degree = confusion_degree.detach()
+                    inter_dist, v = grad_interdist(self.model, self.dl_ev, pair[0], pair[1]) # dt2/dtheta
+                    inter_dist = inter_dist.detach()
                     v = v[0].detach()
-                    print(confusion_degree.item())
-                    if confusion_degree.item() - confusion_degree_orig.item() >= 0.5: # FIXME: threshold selection
+                    print(inter_dist.item())
+                    if inter_dist.item() - inter_dist_orig.item() >= 30.: # FIXME: threshold selection
                         break
-                    theta_new = theta + lr * v # FIXME: gradient ascent
+                    theta_new = theta + lr * v # gradient ascent
                     theta = theta_new
                     self.model.module[-1].weight.data = theta
 
@@ -361,24 +358,24 @@ class InfluentialSample():
 if __name__ == '__main__':
 
     dataset_name = 'cub'
-    # loss_type = 'ProxyNCA_pfix'
-    loss_type = 'ProxyNCA_pfix_confusion_143_145_reverse'
+    loss_type = 'ProxyNCA_pfix'
+    # loss_type = 'ProxyNCA_pfix_confusion_144_142_reverse'
     config_name = 'cub'
     sz_embedding = 512
     seed = 4
     measure = 'confusion'
-    # epoch = 40
-    epoch = 10
+    epoch = 40
+    # epoch = 10
     test_crop = True
 
     IS = InfluentialSample(dataset_name, seed, loss_type, config_name, measure, test_crop, sz_embedding, epoch)
 
     '''Other: get t statistic for two specific classes'''
-    i = 143; j = 145
-    feat_cls1 = IS.testing_embedding[IS.testing_label == i]
-    feat_cls2 = IS.testing_embedding[IS.testing_label == j]
-    confusion = calc_confusion(feat_cls1, feat_cls2, sqrt=False)  # get t instead of t^2
-    print(confusion.item())
+    # i = 144; j = 142
+    # feat_cls1 = IS.testing_embedding[IS.testing_label == i]
+    # feat_cls2 = IS.testing_embedding[IS.testing_label == j]
+    # confusion = calc_inter_dist(feat_cls1, feat_cls2)  # get t instead of t^2
+    # print(confusion.item())
 
     # testing_embedding, testing_label, testing_indices = predict_batchwise(IS.model, IS.dl_ev)
     # feat_cls1 = testing_embedding[testing_label == i]
@@ -387,10 +384,10 @@ if __name__ == '__main__':
     # print(confusion.item())
 
     '''Step 1: Cache all confusion gradient to parameters'''
-    # confusion_class_pairs = IS.get_confusion_class_pairs()
+    confusion_class_pairs = IS.get_confusion_class_pairs()
     # For theta1
-    # IS.theta_grad_descent([confusion_class_pairs[k] for k in [0, 8, 9]])
-    # exit()
+    IS.theta_grad_descent([confusion_class_pairs[k] for k in [0, 8, 9]])
+    exit()
     # For theta2
     # IS.theta_grad_ascent(confusion_class_pairs)
     # exit()
