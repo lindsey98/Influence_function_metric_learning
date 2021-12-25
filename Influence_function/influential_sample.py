@@ -43,7 +43,7 @@ class InfluentialSample():
         self.criterion = self._load_criterion()
         self.train_embedding, self.train_label, self.testing_embedding, self.testing_label = self._load_data()
 
-    def _load_model(self, multi_gpu=False):
+    def _load_model(self, multi_gpu=True):
         feat = Feat_resnet50_max_n()
         emb = torch.nn.Linear(2048, self.sz_embedding)
         model = torch.nn.Sequential(feat, emb)
@@ -109,28 +109,44 @@ class InfluentialSample():
                 else:
                     feat_cls1 = self.testing_embedding[self.testing_label == i]
                     feat_cls2 = self.testing_embedding[self.testing_label == j]
-                    confusion, df = calc_confusion(feat_cls1, feat_cls2, sqrt=True) # get t instead of t^2
-                    p_val = scipy.stats.t.sf(abs(confusion.detach().cpu().item()), df=df.detach().cpu().item()) * 2 # two sided p-value
-                    pval_matrix[indi][indj] = p_val
+                    confusion= calc_confusion(feat_cls1, feat_cls2, sqrt=False)
+                    # p_val = scipy.stats.t.sf(abs(confusion.detach().cpu().item()), df=df.detach().cpu().item()) * 2 # two sided p-value
+                    # pval_matrix[indi][indj] = p_val
                     confusion_matrix[indi][indj] = confusion.detach().cpu().item()
-        return confusion_matrix, pval_matrix
+        return confusion_matrix
 
     def get_confusion_class_pairs(self):
-        wrong_ind, top10_wrong_classes = get_wrong_indices(self.testing_embedding, self.testing_label, 10)
-        confusion_matrix, pval_matrix = self.get_confusion_test(top10_wrong_classes)
-        np.save("Influential_data/{}_{}_top10_wrongtest_confusion.npy".format(self.dataset_name, self.loss_type), confusion_matrix)
-        confusion_matrix = np.load( "Influential_data/{}_{}_top10_wrongtest_confusion.npy".format(self.dataset_name, self.loss_type))
+        wrong_ind, top10_wrong_classes, wrong_labels, wrong_preds = get_wrong_indices(self.testing_embedding, self.testing_label, 10)
+        confusion_degree_matrix = self.get_confusion_test(top10_wrong_classes) # (10, C)
 
-        confusion_classes_ind = np.argsort(confusion_matrix, axis=-1)[:, 0]  # get classes that are confused with top10 wrong testing classes
-        confusion_class_pairs = [(x, y) for x, y in zip(top10_wrong_classes, np.asarray(self.dl_ev.dataset.classes)[confusion_classes_ind])]
-        confusion_degree = confusion_matrix[np.arange(len(confusion_matrix)), confusion_classes_ind]
-        pval_degree = pval_matrix[np.arange(len(confusion_matrix)), confusion_classes_ind]
+        wrong_freq_matrix = np.zeros((len(top10_wrong_classes), len(self.dl_ev.dataset.classes)))
+        for indi, i in enumerate(top10_wrong_classes):
+            ct_wrong = np.sum(wrong_labels.detach().cpu().numpy() == i)
+            for indj, j in enumerate(self.dl_ev.dataset.classes):
+                if i == j:
+                    continue
+                ct_wrong_as_clsj = np.sum((wrong_preds.squeeze().detach().cpu().numpy() == j) & (wrong_labels.detach().cpu().numpy() == i))
+                wrong_freq_matrix[indi][indj] = - ct_wrong_as_clsj / ct_wrong
 
-        print("Top 10 confusion pairs", confusion_class_pairs)
+        confusion_classes_ind = np.argsort(wrong_freq_matrix, axis=-1)[:, :10]  # get 10 classes that are neighboring with top 10 wrong testing classes, 10 x 10
+        confusion_class_pairs = [(top10_wrong_classes[i], np.asarray(self.dl_ev.dataset.classes)[confusion_classes_ind[i][j]]) \
+                                 for i in range(confusion_classes_ind.shape[0]) for j in range(confusion_classes_ind.shape[1])]
+
+        wrong_degree = np.zeros((confusion_classes_ind.shape[0], confusion_classes_ind.shape[1]))
+        for i in range(confusion_classes_ind.shape[0]):
+            for j in range(confusion_classes_ind.shape[1]):
+                wrong_degree[i][j] = -wrong_freq_matrix[i, confusion_classes_ind[i][j]]
+        wrong_degree_entropy = np.nansum(-wrong_degree * np.log2(wrong_degree), axis=-1)
+
+        confusion_pairs = [confusion_class_pairs[k] for k in np.arange(0, len(top10_wrong_classes)*10, 10)]
+        print("Top 10 wrong classes", top10_wrong_classes)
+        print("Confusion pair (top1 neighboring class only)", confusion_pairs)
+        print("Confusion degree entropy", wrong_degree_entropy)
+
+        confusion_degree = confusion_degree_matrix[np.arange(len(top10_wrong_classes)), confusion_classes_ind[:, 0]]
+
         print("Confusion degree", confusion_degree)
-        print("p-value degree", pval_degree)
-
-        return confusion_class_pairs
+        return confusion_pairs
 
     def get_intravar_test(self):
         intravar_vec = np.zeros(len(self.dl_ev.dataset.classes))
@@ -151,25 +167,11 @@ class InfluentialSample():
 
         return scattered_classes
 
-    # def get_nearest_train_class(self, embeddings):
-    #     dist = np.zeros(len(self.dl_tr.dataset.classes))
-    #     for ind, cls in enumerate(self.dl_tr.dataset.classes):
-    #         feat_cls = self.train_embedding[self.train_label == cls]
-    #         embeddings = F.normalize(embeddings, p=2, dim=-1)
-    #         feat_cls = F.normalize(feat_cls, p=2, dim=-1)
-    #         dist[ind] = torch.dot(embeddings.mean(0), feat_cls.mean(0)).item()
-    #     nn_train_cls_ind = np.argsort(dist)[::-1] # descending
-    #     nn_train_classes = [x for x in np.asarray(self.dl_tr.dataset.classes)[nn_train_cls_ind]]
-    #     print("Nearest 5 training classes", nn_train_classes[:5])
-    #     print("Furtherest 5 training class", nn_train_classes[-5:])
-    #
-    #     return nn_train_classes
-
     def cache_grad_loss_train_all(self, theta, theta_hat, pair_idx):
         l_prev, l_cur = loss_change_train(self.model, self.criterion, self.dl_tr, theta, theta_hat)
         if self.measure == 'confusion':
             grad_loss = {'l_prev': l_prev, 'l_cur': l_cur}
-            with open("Influential_data/{}_{}_confusion_grad4trainall_noaug_testpair{}.pkl".format(self.dataset_name, self.loss_type, pair_idx), "wb") as fp:  # Pickling
+            with open("Influential_data/{}_{}_confusion_grad4trainall_testpair{}.pkl".format(self.dataset_name, self.loss_type, pair_idx), "wb") as fp:  # Pickling
                 pickle.dump(grad_loss, fp)
 
         elif self.measure == 'intravar':
@@ -177,41 +179,41 @@ class InfluentialSample():
             with open("Influential_data/{}_{}_intravar_grad4trainall_testcls{}.pkl".format(self.dataset_name, self.loss_type, pair_idx), "wb") as fp:  # Pickling
                 pickle.dump(grad_loss, fp)
 
-    def cache_grad_loss_train_all_worse(self, theta, theta_hat, pair_idx):
-        l_prev, l_cur = loss_change_train(self.model, self.criterion, self.dl_tr, theta, theta_hat)
-        if self.measure == 'confusion':
-            grad_loss = {'l_prev': l_prev, 'l_cur': l_cur}
-            with open("Influential_data/{}_{}_confusion_grad4trainall_testpair{}_worse.pkl".format(self.dataset_name, self.loss_type, pair_idx), "wb") as fp:  # Pickling
-                pickle.dump(grad_loss, fp) # FIXME
+    # def cache_grad_loss_train_all_worse(self, theta, theta_hat, pair_idx):
+    #     l_prev, l_cur = loss_change_train(self.model, self.criterion, self.dl_tr, theta, theta_hat)
+    #     if self.measure == 'confusion':
+    #         grad_loss = {'l_prev': l_prev, 'l_cur': l_cur}
+    #         with open("Influential_data/{}_{}_confusion_grad4trainall_testpair{}_worse.pkl".format(self.dataset_name, self.loss_type, pair_idx), "wb") as fp:  # Pickling
+    #             pickle.dump(grad_loss, fp) # FIXME
+    #
+    #     elif self.measure == 'intravar':
+    #         grad_loss = {'l_prev': l_prev, 'l_cur': l_cur}
+    #         with open("Influential_data/{}_{}_intravar_grad4trainall_testcls{}_worse.pkl".format(self.dataset_name, self.loss_type, pair_idx), "wb") as fp:  # Pickling
+    #             pickle.dump(grad_loss, fp)
 
-        elif self.measure == 'intravar':
-            grad_loss = {'l_prev': l_prev, 'l_cur': l_cur}
-            with open("Influential_data/{}_{}_intravar_grad4trainall_testcls{}_worse.pkl".format(self.dataset_name, self.loss_type, pair_idx), "wb") as fp:  # Pickling
-                pickle.dump(grad_loss, fp)
-
-    def theta_grad_ascent(self, classes, n=50, lr=0.001):
-        theta_orig = self.model.module[-1].weight.data
-        if self.measure == 'confusion':
-            torch.cuda.empty_cache()
-            for pair in classes:
-                confusion_degree_orig, _ = grad_confusion(self.model, self.dl_ev, pair[0], pair[1])
-                confusion_degree_orig = confusion_degree_orig.detach()
-                self.model.module[-1].weight.data = theta_orig
-                theta = theta_orig.clone()
-                for _ in range(n):
-                    confusion_degree, v = grad_confusion(self.model, self.dl_ev, pair[0], pair[1]) # dt2/dtheta
-                    confusion_degree = confusion_degree.detach()
-                    v = v[0].detach()
-                    if confusion_degree_orig.item() - confusion_degree.item() >= 0.5: # FIXME: threshold selection
-                        break
-                    theta_new = theta - lr * v # gradient descent
-                    theta = theta_new
-                    self.model.module[-1].weight.data = theta
-
-                theta_dict = {'theta': theta_orig, 'theta_hat': theta}
-                torch.save(theta_dict, "Influential_data/{}_{}_confusion_theta_test_{}_{}_worse.pth".format(self.dataset_name, self.loss_type, pair[0], pair[1])) # FIXME
-
-        self.model.module[-1].weight.data = theta_orig
+    # def theta_grad_ascent(self, classes, n=50, lr=0.001):
+    #     theta_orig = self.model.module[-1].weight.data
+    #     if self.measure == 'confusion':
+    #         torch.cuda.empty_cache()
+    #         for pair in classes:
+    #             confusion_degree_orig, _ = grad_confusion(self.model, self.dl_ev, pair[0], pair[1])
+    #             confusion_degree_orig = confusion_degree_orig.detach()
+    #             self.model.module[-1].weight.data = theta_orig
+    #             theta = theta_orig.clone()
+    #             for _ in range(n):
+    #                 confusion_degree, v = grad_confusion(self.model, self.dl_ev, pair[0], pair[1]) # dt2/dtheta
+    #                 confusion_degree = confusion_degree.detach()
+    #                 v = v[0].detach()
+    #                 if confusion_degree_orig.item() - confusion_degree.item() >= 0.5: # FIXME: threshold selection
+    #                     break
+    #                 theta_new = theta - lr * v # gradient descent
+    #                 theta = theta_new
+    #                 self.model.module[-1].weight.data = theta
+    #
+    #             theta_dict = {'theta': theta_orig, 'theta_hat': theta}
+    #             torch.save(theta_dict, "Influential_data/{}_{}_confusion_theta_test_{}_{}_worse.pth".format(self.dataset_name, self.loss_type, pair[0], pair[1])) # FIXME
+    #
+    #     self.model.module[-1].weight.data = theta_orig
 
     def theta_grad_descent(self, classes, n=50, lr=0.001):
         theta_orig = self.model.module[-1].weight.data
@@ -226,6 +228,7 @@ class InfluentialSample():
                     confusion_degree, v = grad_confusion(self.model, self.dl_ev, pair[0], pair[1]) # dt2/dtheta
                     confusion_degree = confusion_degree.detach()
                     v = v[0].detach()
+                    print(confusion_degree.item())
                     if confusion_degree.item() - confusion_degree_orig.item() >= 0.5: # FIXME: threshold selection
                         break
                     theta_new = theta + lr * v # FIXME: gradient ascent
@@ -233,7 +236,7 @@ class InfluentialSample():
                     self.model.module[-1].weight.data = theta
 
                 theta_dict = {'theta': theta_orig, 'theta_hat': theta}
-                torch.save(theta_dict, "Influential_data/{}_{}_confusion_theta_noaug_test_{}_{}.pth".format(self.dataset_name, self.loss_type,
+                torch.save(theta_dict, "Influential_data/{}_{}_confusion_theta_test_{}_{}.pth".format(self.dataset_name, self.loss_type,
                                                                                                       pair[0], pair[1])) # FIXME
 
         if self.measure == 'intravar':
@@ -266,7 +269,7 @@ class InfluentialSample():
             pair = confusion_class_pairs[pair_idx]
             self.viz_2cls(5, self.dl_ev, self.testing_label, pair[0], pair[1])  # visualize confusion classes
 
-            with open("Influential_data/{}_{}_confusion_grad4trainall_noaug_testpair{}.pkl".format(self.dataset_name, self.loss_type, pair_idx), "rb") as fp:  # Pickling
+            with open("Influential_data/{}_{}_confusion_grad4trainall_testpair{}.pkl".format(self.dataset_name, self.loss_type, pair_idx), "rb") as fp:  # Pickling
                 grad4train = pickle.load(fp)
 
         elif self.measure == 'intravar':
@@ -287,9 +290,9 @@ class InfluentialSample():
         self.viz_sample(training_sample_by_influence[:10])  # helpful
         self.viz_sample(training_sample_by_influence[-10:])  # harmful
 
-        np.save("Influential_data/{}_{}_helpful_{}_noaug_testcls{}".format(self.dataset_name, self.loss_type, self.measure, pair_idx),
+        np.save("Influential_data/{}_{}_helpful_{}_testcls{}".format(self.dataset_name, self.loss_type, self.measure, pair_idx),
                 training_sample_by_influence[:500])
-        np.save("Influential_data/{}_{}_harmful_{}_noaug_testcls{}".format(self.dataset_name, self.loss_type, self.measure, pair_idx),
+        np.save("Influential_data/{}_{}_harmful_{}_testcls{}".format(self.dataset_name, self.loss_type, self.measure, pair_idx),
                 training_sample_by_influence[-500:])
 
 
@@ -359,36 +362,34 @@ if __name__ == '__main__':
 
     dataset_name = 'cub'
     # loss_type = 'ProxyNCA_pfix'
-    loss_type = 'ProxyNCA_pfix_confusion_noaug_130_112'
+    loss_type = 'ProxyNCA_pfix_confusion_143_145_reverse'
     config_name = 'cub'
     sz_embedding = 512
     seed = 4
     measure = 'confusion'
     # epoch = 40
     epoch = 10
-    test_crop = False
-    # test_crop = True
+    test_crop = True
 
-    #
     IS = InfluentialSample(dataset_name, seed, loss_type, config_name, measure, test_crop, sz_embedding, epoch)
 
     '''Other: get t statistic for two specific classes'''
-    i = 130; j = 112
-    # feat_cls1 = IS.testing_embedding[IS.testing_label == i]
-    # feat_cls2 = IS.testing_embedding[IS.testing_label == j]
-    # confusion, df = calc_confusion(feat_cls1, feat_cls2, sqrt=True)  # get t instead of t^2
-    # print(confusion.item())
-
-    testing_embedding, testing_label, testing_indices = predict_batchwise(IS.model, IS.dl_ev)
-    feat_cls1 = testing_embedding[testing_label == i]
-    feat_cls2 = testing_embedding[testing_label == j]
-    confusion, df = calc_confusion(feat_cls1, feat_cls2, sqrt=True)  # get t instead of t^2
+    i = 143; j = 145
+    feat_cls1 = IS.testing_embedding[IS.testing_label == i]
+    feat_cls2 = IS.testing_embedding[IS.testing_label == j]
+    confusion = calc_confusion(feat_cls1, feat_cls2, sqrt=False)  # get t instead of t^2
     print(confusion.item())
+
+    # testing_embedding, testing_label, testing_indices = predict_batchwise(IS.model, IS.dl_ev)
+    # feat_cls1 = testing_embedding[testing_label == i]
+    # feat_cls2 = testing_embedding[testing_label == j]
+    # confusion = calc_confusion(feat_cls1, feat_cls2, sqrt=True)  # get t instead of t^2
+    # print(confusion.item())
 
     '''Step 1: Cache all confusion gradient to parameters'''
     # confusion_class_pairs = IS.get_confusion_class_pairs()
     # For theta1
-    # IS.theta_grad_descent(confusion_class_pairs)
+    # IS.theta_grad_descent([confusion_class_pairs[k] for k in [0, 8, 9]])
     # exit()
     # For theta2
     # IS.theta_grad_ascent(confusion_class_pairs)
@@ -402,12 +403,12 @@ if __name__ == '__main__':
     # For theta1
     # pair_idx = 9 # iterate over all pairs
     # i = confusion_class_pairs[pair_idx][0]; j = confusion_class_pairs[pair_idx][1]
-    # theta_dict = torch.load("Influential_data/{}_{}_confusion_theta_noaug_test_{}_{}.pth".format(IS.dataset_name, IS.loss_type, i, j))
+    # theta_dict = torch.load("Influential_data/{}_{}_confusion_theta_test_{}_{}.pth".format(IS.dataset_name, IS.loss_type, i, j))
     # theta = theta_dict['theta']
     # theta_hat = theta_dict['theta_hat']
     # IS.cache_grad_loss_train_all(theta, theta_hat, pair_idx)
     # exit()
-
+    #
     # For theta2
     # pair_idx = 9 # iterate over all pairs
     # i = confusion_class_pairs[pair_idx][0]; j = confusion_class_pairs[pair_idx][1]
@@ -435,7 +436,7 @@ if __name__ == '__main__':
     # exit()
 
     '''Other: get intra-class variance for a specific class'''
-    # i = 160
+    # i = 124
     # feat_cls = IS.testing_embedding[IS.testing_label == i]
     # intra_var = calc_intravar(feat_cls)
     # print(intra_var.item())

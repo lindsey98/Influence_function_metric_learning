@@ -258,8 +258,10 @@ def get_wrong_indices(X, T, topk=None):
     Y = evaluation.assign_by_euclidian_at_k(X, T, k)
     Y = torch.from_numpy(Y)
     correct = [1 if t in y[:k] else 0 for t, y in zip(T, Y)]
-    wrong_ind = np.where(np.asarray(correct) == 0)[0]
+
+    wrong_ind = np.where(np.asarray(correct) == 0)[0] # wrong indices
     wrong_labels = T[wrong_ind]
+    wrong_preds = Y[wrong_ind]
 
     unique_labels, wrong_freq = torch.unique(wrong_labels, return_counts=True)
     if topk is None:
@@ -267,7 +269,7 @@ def get_wrong_indices(X, T, topk=None):
     else:
         top15_wrong_classes = unique_labels[torch.argsort(wrong_freq, descending=True)[:topk]].numpy()
 
-    return wrong_ind, top15_wrong_classes
+    return wrong_ind, top15_wrong_classes, wrong_labels, wrong_preds
 
 
 if __name__ == '__main__':

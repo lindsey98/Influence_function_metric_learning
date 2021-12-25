@@ -83,13 +83,13 @@ def calc_intravar(feat):
         Get intra-class variance (unbiased estimate)
     '''
     n = feat.size()[0]
-    intra_var = ((feat - feat.mean(0)) ** 2).sum() / (n - 1)
+    intra_var = ((feat - feat.mean(0)) ** 2).sum() / n
     return intra_var
 
-def t_test_df(s1_sq, s2_sq, n1, n2):
-    a = (s1_sq / n1 + s2_sq / n2)**2
-    b = (s1_sq / n1)**2/(n1-1) + (s2_sq / n2)**2/(n2-1)
-    return a/b
+# def t_test_df(s1_sq, s2_sq, n1, n2):
+#     a = (s1_sq / n1 + s2_sq / n2)**2
+#     b = (s1_sq / n1)**2/(n1-1) + (s2_sq / n2)**2/(n2-1)
+#     return a/b
 
 def calc_confusion(feat_cls1, feat_cls2, sqrt=False):
     '''
@@ -102,14 +102,13 @@ def calc_confusion(feat_cls1, feat_cls2, sqrt=False):
             confusion
     '''
     n1, n2 = feat_cls1.size()[0], feat_cls2.size()[0]
-    inter_dis = ((feat_cls1.mean(0) - feat_cls2.mean(0)) ** 2).sum()  # inter class distance
+    inter_dis = ((feat_cls1[:, None] - feat_cls2) ** 2).sum() /(n1*n2)  # inter class distance
     intra_dist1 = calc_intravar(feat_cls1)  # unbiased estimate of intra-class variance
     intra_dist2 = calc_intravar(feat_cls2)
-    confusion = inter_dis / (intra_dist1 / n1 + intra_dist2 / n2) # t^2 statistic
+    confusion = inter_dis / ((intra_dist1 + intra_dist2)/2)
     if sqrt:
-        confusion = confusion.sqrt() # t
-    df = t_test_df(intra_dist1, intra_dist2, n1, n2)
-    return confusion, df
+        confusion = confusion.sqrt()
+    return confusion
 
 def grad_confusion(model, dl_ev, cls1, cls2, limit=50):
     '''
@@ -146,7 +145,7 @@ def grad_confusion(model, dl_ev, cls1, cls2, limit=50):
         else: # skip irrelevant test samples
             pass
 
-    confusion, df = calc_confusion(feat_cls1, feat_cls2, sqrt=False) # d(t^2)/d(theta)
+    confusion = calc_confusion(feat_cls1, feat_cls2, sqrt=False) # d(t^2)/d(theta)
     params = model.module[-1].weight # last linear layer
     grad_confusion2params = list(grad(confusion, params))
     return confusion.sqrt(), grad_confusion2params
