@@ -43,7 +43,7 @@ class InfluentialSample():
         self.criterion = self._load_criterion()
         self.train_embedding, self.train_label, self.testing_embedding, self.testing_label = self._load_data()
 
-    def _load_model(self, multi_gpu=True):
+    def _load_model(self, multi_gpu=False):
         feat = Feat_resnet50_max_n()
         emb = torch.nn.Linear(2048, self.sz_embedding)
         model = torch.nn.Sequential(feat, emb)
@@ -358,35 +358,35 @@ class InfluentialSample():
 if __name__ == '__main__':
 
     dataset_name = 'cub'
-    loss_type = 'ProxyNCA_pfix'
-    # loss_type = 'ProxyNCA_pfix_confusion_theta12_144_142'
+    # loss_type = 'ProxyNCA_pfix'
+    loss_type = 'ProxyNCA_pfix_confusion_noaug_130_112'
     config_name = 'cub'
     sz_embedding = 512
     seed = 4
     measure = 'confusion'
-    epoch = 40
-    # epoch = 10
-    # test_crop = False
-    test_crop = True
+    # epoch = 40
+    epoch = 10
+    test_crop = False
+    # test_crop = True
 
     #
     IS = InfluentialSample(dataset_name, seed, loss_type, config_name, measure, test_crop, sz_embedding, epoch)
 
     '''Other: get t statistic for two specific classes'''
-    # i = 144; j = 142
+    i = 130; j = 112
     # feat_cls1 = IS.testing_embedding[IS.testing_label == i]
     # feat_cls2 = IS.testing_embedding[IS.testing_label == j]
-    # confusion = calc_confusion(feat_cls1, feat_cls2, sqrt=True)  # get t instead of t^2
+    # confusion, df = calc_confusion(feat_cls1, feat_cls2, sqrt=True)  # get t instead of t^2
     # print(confusion.item())
 
-    # testing_embedding, testing_label, testing_indices = predict_batchwise(IS.model, IS.dl_ev)
-    # feat_cls1 = testing_embedding[testing_label == i]
-    # feat_cls2 = testing_embedding[testing_label == j]
-    # confusion = calc_confusion(feat_cls1, feat_cls2, sqrt=True)  # get t instead of t^2
-    # print(confusion.item())
+    testing_embedding, testing_label, testing_indices = predict_batchwise(IS.model, IS.dl_ev)
+    feat_cls1 = testing_embedding[testing_label == i]
+    feat_cls2 = testing_embedding[testing_label == j]
+    confusion, df = calc_confusion(feat_cls1, feat_cls2, sqrt=True)  # get t instead of t^2
+    print(confusion.item())
 
     '''Step 1: Cache all confusion gradient to parameters'''
-    confusion_class_pairs = IS.get_confusion_class_pairs()
+    # confusion_class_pairs = IS.get_confusion_class_pairs()
     # For theta1
     # IS.theta_grad_descent(confusion_class_pairs)
     # exit()

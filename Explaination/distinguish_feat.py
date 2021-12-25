@@ -13,7 +13,7 @@ import utils
 import dataset
 from torchvision import transforms
 from dataset.utils import RGBAToRGB
-os.environ['CUDA_VISIBLE_DEVICES'] = "1"
+os.environ['CUDA_VISIBLE_DEVICES'] = "0"
 
 def overlay_mask(img: Image.Image, mask: Image.Image, colormap: str = 'jet', alpha: float = 0.7) -> Image.Image:
 
@@ -294,8 +294,10 @@ class DistinguishFeat(InfluentialSample):
                            ind1, ind2, dl, base_dir='CAM_sample'): # Only for confusion analysis
 
         assert len(interested_cls) == 2
-        cam_extractor1 = GradCAMCustomize(self.model, target_layer=self.model[0].base.layer4)
+        cam_extractor1 = GradCAMCustomize(self.model, target_layer=self.model[0].base.layer4) # to last layer
         cam_extractor2 = GradCAMCustomize(self.model, target_layer=self.model[0].base.layer4)
+        # cam_extractor1 = GradCAMCustomize(self.model, target_layer=self.model[0].base.conv1)
+        # cam_extractor2 = GradCAMCustomize(self.model, target_layer=self.model[0].base.conv1)
 
         os.makedirs('./{}/{}'.format(base_dir, self.dataset_name), exist_ok=True)
         os.makedirs('./{}/{}/{}_{}_{}/'.format(base_dir, self.dataset_name, self.measure, interested_cls[0], interested_cls[1]), exist_ok=True)
@@ -304,20 +306,20 @@ class DistinguishFeat(InfluentialSample):
         cam_extractor1._hooks_enabled = True
         self.model.zero_grad()
         emb1 = self.model(dl.dataset.__getitem__(ind1)[0].unsqueeze(0).cuda())
-        emb2 = self.model(dl.dataset.__getitem__(ind2)[0].unsqueeze(0).cuda()).detach().squeeze(0)
-        activation_map1 = cam_extractor1(emb1, emb2)
+        emb2 = self.model(dl.dataset.__getitem__(ind2)[0].unsqueeze(0).cuda())
+        activation_map1 = cam_extractor1((emb1 - emb2.detach()).square().sum())
         img1 = to_pil_image(read_image(dl.dataset.im_paths[ind1]))
         result1 = overlay_mask(img1, to_pil_image(activation_map1[0].detach().cpu(), mode='F'), alpha=0.5)
 
         cam_extractor2._hooks_enabled = True
         self.model.zero_grad()
         emb2 = self.model(dl.dataset.__getitem__(ind2)[0].unsqueeze(0).cuda())
-        emb1 = self.model(dl.dataset.__getitem__(ind1)[0].unsqueeze(0).cuda()).detach().squeeze(0)
-        activation_map2 = cam_extractor2(emb2, emb1)
+        emb1 = self.model(dl.dataset.__getitem__(ind1)[0].unsqueeze(0).cuda())
+        activation_map2 = cam_extractor2((emb1.detach() - emb2).square().sum())
         img2 = to_pil_image(read_image(dl.dataset.im_paths[ind2]))
         result2 = overlay_mask(img2, to_pil_image(activation_map2[0].detach().cpu(), mode='F'), alpha=0.5)
 
-        before_distance = (emb1 - emb2.detach().squeeze(0)).square().sum().sqrt()
+        before_distance = (emb1.detach() - emb2.detach()).square().sum().sqrt()
 
         # Clean data
         cam_extractor1.clear_hooks()
@@ -343,8 +345,8 @@ class DistinguishFeat(InfluentialSample):
         img1_after_trans = self.data_transforms(img1_after)
         img2_after_trans = self.data_transforms(img2_after)
 
-        emb1_after = self.model(img1_after_trans.unsqueeze(0).cuda()).detach().squeeze(0)
-        emb2_after = self.model(img2_after_trans.unsqueeze(0).cuda()).detach().squeeze(0)
+        emb1_after = self.model(img1_after_trans.unsqueeze(0).cuda()).detach()
+        emb2_after = self.model(img2_after_trans.unsqueeze(0).cuda()).detach()
         after_distance = (emb1_after - emb2_after).square().sum().sqrt()
 
         ax=fig.add_subplot(2,2,3)
@@ -369,7 +371,7 @@ if __name__ == '__main__':
     seed = 4
     measure = 'confusion'
     test_crop = False
-    i = 116; j = 118
+    i = 117; j = 129
     # i = 160
 
     DF = DistinguishFeat(dataset_name, seed, loss_type, config_name, measure, test_crop)
@@ -406,7 +408,7 @@ if __name__ == '__main__':
     minimal_D, minimal_idx_pair = DF.get_dist_between_classes(i, j)
     for pair_idx in range(10):
         ind1, ind2 = minimal_idx_pair[pair_idx]
-        # os.makedirs(os.path.join('Background_erase', '{}_{}_{}_{}').format(dataset_name, DF.measure, i, j), exist_ok=True)
+        os.makedirs(os.path.join('Background_erase', '{}_{}_{}_{}').format(dataset_name, DF.measure, i, j), exist_ok=True)
         # shutil.copyfile(DF.dl_ev.dataset.im_paths[ind1],
         #                 os.path.join('Background_erase', '{}_{}_{}_{}', '{}.png').format(dataset_name, DF.measure, i, j, ind1))
         # shutil.copyfile(DF.dl_ev.dataset.im_paths[ind2],
