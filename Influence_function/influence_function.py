@@ -43,6 +43,12 @@ def calc_intravar(feat):
     intra_var = ((feat - feat.mean(0)) ** 2).sum() / n
     return intra_var
 
+def calc_inter_dist_pair(feat_cls1, feat_cls2):
+    n1, n2 = feat_cls1.size()[0], feat_cls2.size()[0]
+    inter_dis = torch.cdist(feat_cls1, feat_cls2).square()  # inter class distance
+    inter_dis = inter_dis[0][0] # FIXME: random pair
+    return inter_dis
+
 def calc_inter_dist(feat_cls1, feat_cls2):
     '''
         Calculate inter class distance
@@ -53,7 +59,8 @@ def calc_inter_dist(feat_cls1, feat_cls2):
             inter dist
     '''
     n1, n2 = feat_cls1.size()[0], feat_cls2.size()[0]
-    inter_dis = torch.cdist(feat_cls1, feat_cls2).square().sum() / (n1*n2)  # inter class distance
+    inter_dis = torch.cdist(feat_cls1, feat_cls2).square()  # inter class distance
+    inter_dis = inter_dis.sum() / (n1*n2)
     return inter_dis
 
 
@@ -93,6 +100,7 @@ def grad_interdist(model, dl_ev, cls1, cls2, limit=50):
             pass
 
     confusion = calc_inter_dist(feat_cls1, feat_cls2) # d(t^2)/d(theta)
+    # confusion = calc_inter_dist_pair(feat_cls1, feat_cls2)  # FIXME d(t^2)/d(theta)
     params = model.module[-1].weight # last linear layer
     grad_confusion2params = list(grad(confusion, params))
     return confusion, grad_confusion2params

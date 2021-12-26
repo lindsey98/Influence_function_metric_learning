@@ -62,9 +62,9 @@ def find_samples_weights(helpful, harmful, indices):
     weights.requires_grad = False
     for i, ind in enumerate(indices):
         if ind.item() in helpful:
-            weights[i] = 2.
+            weights[i] = 5.
         elif ind.item() in harmful:
-            weights[i] = 0.
+            weights[i] = 0. # FIXME: reverse direction
         else:
             weights[i] = 1.
     return weights
@@ -337,7 +337,6 @@ if __name__ == '__main__':
     scores = []
     scores_tr = []
     t1 = time.time()
-
 
     if args.init_eval:
         logging.info("**Evaluating initial model...**")

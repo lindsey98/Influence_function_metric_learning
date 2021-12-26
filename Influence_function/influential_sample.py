@@ -203,8 +203,13 @@ class InfluentialSample():
         if self.measure == 'confusion':
             torch.cuda.empty_cache()
             for pair in classes:
+                # D = calc_inter_dist_pair(IS.testing_embedding[IS.testing_label == pair[0]],
+                #                          IS.testing_embedding[IS.testing_label == pair[1]])
+                # print("Original", D.item())
+
                 inter_dist_orig, _ = grad_interdist(self.model, self.dl_ev, pair[0], pair[1])
                 inter_dist_orig = inter_dist_orig.detach()
+
                 self.model.module[-1].weight.data = theta_orig
                 theta = theta_orig.clone()
                 for _ in range(n):
@@ -343,7 +348,7 @@ if __name__ == '__main__':
 
     dataset_name = 'cub'
     loss_type = 'ProxyNCA_pfix'
-    # loss_type = 'ProxyNCA_pfix_intravar_117'
+    # loss_type = 'ProxyNCA_pfix_confusion_111_110_reverse'
     config_name = 'cub'
     sz_embedding = 512
     seed = 4
@@ -355,11 +360,12 @@ if __name__ == '__main__':
     IS = InfluentialSample(dataset_name, seed, loss_type, config_name, measure, test_crop, sz_embedding, epoch)
 
     '''Other: get t statistic for two specific classes'''
-    # i = 144; j = 142
+    # i = 111; j = 110
     # feat_cls1 = IS.testing_embedding[IS.testing_label == i]
     # feat_cls2 = IS.testing_embedding[IS.testing_label == j]
     # confusion = calc_inter_dist(feat_cls1, feat_cls2)  # get t instead of t^2
     # print(confusion.item())
+    # exit()
 
     # testing_embedding, testing_label, testing_indices = predict_batchwise(IS.model, IS.dl_ev)
     # feat_cls1 = testing_embedding[testing_label == i]
@@ -368,7 +374,7 @@ if __name__ == '__main__':
     # print(confusion.item())
 
     '''Other: get intra-class variance for a specific class'''
-    # i = 117
+    # i = 116
     # feat_cls = IS.testing_embedding[IS.testing_label == i]
     # intra_var = calc_intravar(feat_cls)
     # print(intra_var.item())
@@ -416,8 +422,8 @@ if __name__ == '__main__':
 
     '''Step 3: Calc influence functions'''
     # For theta1
-    # IS.run_sample(7)
-    # exit()
+    IS.run_sample(0)
+    exit()
 
     # For theta2
     # IS.run_sample_worse(9)
