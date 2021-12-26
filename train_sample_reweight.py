@@ -298,53 +298,9 @@ if __name__ == '__main__':
     criterion.proxies.data = proxies
     criterion.cuda()
 
+    # FIXME: only train the projection layer
     opt = config['opt']['type'](
-        [
-            {
-                **{'params': list(feat.parameters()
-                    )
-                },
-                **config['opt']['args']['backbone']
-            },
-            {
-                **{'params': list(emb.parameters()
-                    )
-                },
-                **config['opt']['args']['embedding']
-            },
-
-            {
-                **{'params': criterion.proxies},
-                **config['opt']['args']['proxynca']
-            },
-        ],
-        **config['opt']['args']['base']
-    )
-
-    opt_warmup = config['opt']['type'](
-        [
-            {
-                **{'params': list(feat.parameters()
-                    )
-                },
-                'lr': 0
-            },
-            {
-                **{'params': list(emb.parameters()
-                    )
-                },
-                **config['opt']['args']['embedding']
-
-            },
-
-            {
-                **{'params': criterion.proxies}
-                ,
-                **config['opt']['args']['proxynca']
-
-            },
-        ],
-        **config['opt']['args']['base']
+        [{'params': list(emb.parameters())}], lr = 4e-3
     )
 
     if args.mode == 'test':
@@ -412,21 +368,6 @@ if __name__ == '__main__':
 
     logging.info('Number of training: {}'.format(len(dl_tr.dataset)))
     logging.info('Number of original training: {}'.format(len(dl_tr_noshuffle.dataset)))
-
-    '''Warmup training'''
-    if not args.no_warmup:
-        # warm up training for 5 epochs
-        logging.info("**warm up for %d epochs.**" % args.warmup_k)
-        for e in range(0, args.warmup_k):
-            for ct, (x, y, indices) in tqdm(enumerate(dl_tr)):
-                opt_warmup.zero_grad()
-                m = model(x.cuda())
-                weights = find_samples_weights(args.helpful, args.harmful, indices).cuda(); weights = weights.detach()
-                loss = criterion(m, indices, y, weights)
-                loss.backward()
-                torch.nn.utils.clip_grad_value_(model.parameters(), 10)
-                opt_warmup.step()
-            logging.info('warm up ends in %d epochs' % (args.warmup_k - e))
 
     '''training loop'''
     for e in range(0, args.nb_epochs):

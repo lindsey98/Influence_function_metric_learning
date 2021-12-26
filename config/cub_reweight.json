@@ -38,10 +38,6 @@
             "backbone": {
                 "weight_decay": "0"
             },
-            "proxynca": {
-                "weight_decay": "0", 
-                "lr": "4e2"
-            },
             "base": {
                 "lr": "4e-3",
                 "eps": "1.0"
