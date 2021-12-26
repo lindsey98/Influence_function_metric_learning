@@ -198,7 +198,7 @@ class InfluentialSample():
     #
     #     self.model.module[-1].weight.data = theta_orig
 
-    def theta_grad_descent(self, classes, n=50, lr=0.001):
+    def theta_grad_descent(self, classes, n=50, lr=4e-5):
         theta_orig = self.model.module[-1].weight.data
         if self.measure == 'confusion':
             torch.cuda.empty_cache()
@@ -212,7 +212,7 @@ class InfluentialSample():
                     inter_dist = inter_dist.detach()
                     v = v[0].detach()
                     print(inter_dist.item())
-                    if inter_dist.item() - inter_dist_orig.item() >= 30.: # FIXME: threshold selection
+                    if inter_dist.item() - inter_dist_orig.item() >= 5.: # FIXME: threshold selection
                         break
                     theta_new = theta + lr * v # gradient ascent
                     theta = theta_new
@@ -233,7 +233,7 @@ class InfluentialSample():
                     intravar = intravar.detach()
                     v = v[0].detach()
                     print(intravar.item())
-                    if intravar_orig.item() - intravar.item() >= 30.: # FIXME: threshold selection
+                    if intravar_orig.item() - intravar.item() >= 5.: # FIXME: threshold selection
                         break
                     theta_new = theta - lr * v # gradient descent
                     theta = theta_new
@@ -342,14 +342,14 @@ class InfluentialSample():
 if __name__ == '__main__':
 
     dataset_name = 'cub'
-    # loss_type = 'ProxyNCA_pfix'
-    loss_type = 'ProxyNCA_pfix_intravar_196_reverse'
+    loss_type = 'ProxyNCA_pfix'
+    # loss_type = 'ProxyNCA_pfix_intravar_117'
     config_name = 'cub'
     sz_embedding = 512
     seed = 4
     measure = 'intravar'
-    # epoch = 40
-    epoch = 10
+    epoch = 40
+    # epoch = 1
     test_crop = True
 
     IS = InfluentialSample(dataset_name, seed, loss_type, config_name, measure, test_crop, sz_embedding, epoch)
@@ -368,14 +368,14 @@ if __name__ == '__main__':
     # print(confusion.item())
 
     '''Other: get intra-class variance for a specific class'''
-    i = 196
-    feat_cls = IS.testing_embedding[IS.testing_label == i]
-    intra_var = calc_intravar(feat_cls)
-    print(intra_var.item())
+    # i = 117
+    # feat_cls = IS.testing_embedding[IS.testing_label == i]
+    # intra_var = calc_intravar(feat_cls)
+    # print(intra_var.item())
 
     '''Step 1: Cache all confusion gradient to parameters'''
-    # confusion_class_pairs = IS.get_confusion_class_pairs()
-    # scatter_classes = [x[0] for x in confusion_class_pairs]
+    confusion_class_pairs = IS.get_confusion_class_pairs()
+    scatter_classes = [x[0] for x in confusion_class_pairs]
 
     # For theta1
     # IS.theta_grad_descent([confusion_class_pairs[k] for k in [0, 8, 9]])
@@ -384,8 +384,8 @@ if __name__ == '__main__':
     # IS.theta_grad_ascent(confusion_class_pairs)
     # exit()
 
-    # IS.theta_grad_descent(scatter_classes)
-    # exit()
+    IS.theta_grad_descent(scatter_classes)
+    exit()
 
     '''Step 2: Cache training class loss changes'''
     # For theta1
