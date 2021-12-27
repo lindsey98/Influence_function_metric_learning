@@ -43,10 +43,10 @@ def calc_intravar(feat):
     intra_var = ((feat - feat.mean(0)) ** 2).sum() / n
     return intra_var
 
-def calc_inter_dist_pair(feat_cls1, feat_cls2):
+def calc_inter_dist_pair(feat_cls1, feat_cls2, i=0, j=0):
     n1, n2 = feat_cls1.size()[0], feat_cls2.size()[0]
     inter_dis = torch.cdist(feat_cls1, feat_cls2).square()  # inter class distance
-    inter_dis = inter_dis[0][0] # FIXME: random pair
+    inter_dis = inter_dis[i][j] # random pair
     return inter_dis
 
 def calc_inter_dist(feat_cls1, feat_cls2):
@@ -85,22 +85,20 @@ def grad_interdist(model, dl_ev, cls1, cls2, limit=50):
         if t.item() == cls1: # belong to class 1
             if len(feat_cls1) >= limit: # FIXME: feeding in all instances will be out of memory
                 continue
-            # print(x.shape)
             x = x.cuda()
             m = model(x)
             feat_cls1 = torch.cat((feat_cls1, m), dim=0)
         elif t.item() == cls2: # belong to class 2
             if len(feat_cls2) >= limit:
                 continue
-            # print(x.shape)
             x = x.cuda()
             m = model(x)
             feat_cls2 = torch.cat((feat_cls2, m), dim=0)
         else: # skip irrelevant test samples
             pass
 
-    confusion = calc_inter_dist(feat_cls1, feat_cls2) # d(t^2)/d(theta)
-    # confusion = calc_inter_dist_pair(feat_cls1, feat_cls2)  # FIXME d(t^2)/d(theta)
+    confusion = calc_inter_dist(feat_cls1, feat_cls2)
+    # confusion = calc_inter_dist_pair(feat_cls1, feat_cls2)
     params = model.module[-1].weight # last linear layer
     grad_confusion2params = list(grad(confusion, params))
     return confusion, grad_confusion2params
@@ -128,9 +126,9 @@ def grad_intravar(model, dl_ev, cls):
         else: # skip irrelevant test samples
             pass
 
-    intra_var = calc_intravar(feat_cls) # d(var)/d(theta)
+    intra_var = calc_intravar(feat_cls)
     params = model.module[-1].weight # last linear layer
-    grad_intravar2params = list(grad(intra_var, params))
+    grad_intravar2params = list(grad(intra_var, params)) # d(var)/d(theta)
     return intra_var, grad_intravar2params
 
 
