@@ -16,7 +16,7 @@ import pickle
 from utils import predict_batchwise
 from collections import OrderedDict
 import scipy.stats
-os.environ['CUDA_VISIBLE_DEVICES'] = "0"
+os.environ['CUDA_VISIBLE_DEVICES'] = "1"
 
 class InfluentialSample():
     def __init__(self, dataset_name, seed, loss_type, config_name,
@@ -285,7 +285,7 @@ if __name__ == '__main__':
 
     dataset_name = 'cub'
     # loss_type = 'ProxyNCA_pfix'
-    loss_type = 'ProxyNCA_pfix_confusion_143_145_5_-1'
+    loss_type = 'ProxyNCA_pfix_confusion_144_142_5_-1'
     config_name = 'cub'
     sz_embedding = 512
     seed = 4
@@ -297,7 +297,7 @@ if __name__ == '__main__':
     IS = InfluentialSample(dataset_name, seed, loss_type, config_name, measure, test_crop, sz_embedding, epoch)
 
     '''Other: get t statistic for two specific classes'''
-    i = 143; j = 145
+    i = 144; j = 142
     feat_cls1 = IS.testing_embedding[IS.testing_label == i]
     feat_cls2 = IS.testing_embedding[IS.testing_label == j]
     confusion = calc_inter_dist(feat_cls1, feat_cls2)  # get t instead of t^2
