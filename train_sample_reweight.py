@@ -40,6 +40,8 @@ parser.add_argument('--loss-type', default='ProxyNCA_pfix_intravar_178', type=st
 parser.add_argument('--helpful', default='Influential_data/{}_{}_helpful_{}_testcls{}.npy'.format('cub', 'ProxyNCA_pfix', 'intravar', '1'), type=str)
 parser.add_argument('--harmful', default='Influential_data/{}_{}_harmful_{}_testcls{}.npy'.format('cub', 'ProxyNCA_pfix', 'intravar', '1'), type=str)
 parser.add_argument('--model_dir', default='models/dvi_data_{}_{}_lossProxyNCA_pfix/ResNet_512_Model'.format('cub', 4), type=str)
+parser.add_argument('--helpful_weight', required=True, type=float)
+parser.add_argument('--harmful_weight', required=True, type=float)
 parser.add_argument('--workers', default=2, type=int, dest = 'nb_workers')
 
 args = parser.parse_args()
@@ -57,14 +59,14 @@ def load_best_checkpoint(model):
     model = model.cuda()
     return model
 
-def find_samples_weights(helpful, harmful, indices):
+def find_samples_weights(y, helpful, harmful, indices):
     weights = torch.ones_like(y)
     weights.requires_grad = False
     for i, ind in enumerate(indices):
         if ind.item() in helpful:
-            weights[i] = 5.
+            weights[i] = float(args.helpful_weight)
         elif ind.item() in harmful:
-            weights[i] = 0. # FIXME: reverse direction
+            weights[i] = float(args.harmful_weight)
         else:
             weights[i] = 1.
     return weights
@@ -106,15 +108,17 @@ if __name__ == '__main__':
         transform_key = config['transform_key']
     print('Transformation: ', transform_key)
 
-    out_results_fn = "log/%s_%s_%s_%d_%d_loss%s.json" % (args.dataset, curr_fn,
+    out_results_fn = "log/%s_%s_%s_%d_%d_loss%s_%d_%d.json" % (args.dataset, curr_fn,
                                                          args.mode, args.sz_embedding,
                                                         args.seed,
-                                                        args.loss_type)
+                                                        args.loss_type,
+                                                        int(args.helpful_weight), int(args.harmful_weight))
 
-    args.log_filename = '%s_%s_%s_%d_%d_loss%s' % (args.dataset, curr_fn,
+    args.log_filename = '%s_%s_%s_%d_%d_loss%s_%d_%d' % (args.dataset, curr_fn,
                                                    args.mode, args.sz_embedding,
                                                    args.seed,
-                                                   args.loss_type)
+                                                   args.loss_type,
+                                                  int(args.helpful_weight), int(args.harmful_weight))
 
     if args.mode == 'test':
         args.log_filename = args.log_filename.replace('test', 'trainval')
@@ -126,10 +130,11 @@ if __name__ == '__main__':
 
     '''Dataloader'''
     if args.mode == 'trainval':
-        train_results_fn = "log/%s_%s_%s_%d_%d_loss%s.json" % (args.dataset, curr_fn,
+        train_results_fn = "log/%s_%s_%s_%d_%d_loss%s_%d_%d.json" % (args.dataset, curr_fn,
                                                                args.mode, args.sz_embedding,
                                                                args.seed,
-                                                               args.loss_type)
+                                                               args.loss_type,
+                                                               int(args.helpful_weight), int(args.harmful_weight))
 
         if os.path.exists(train_results_fn):
             with open(train_results_fn, 'r') as f:
@@ -389,7 +394,7 @@ if __name__ == '__main__':
             it += 1
             x, y = x.cuda(), y.cuda()
             m = model(x)
-            weights = find_samples_weights(args.helpful, args.harmful, indices).cuda(); weights = weights.detach()
+            weights = find_samples_weights(y, args.helpful, args.harmful, indices).cuda(); weights = weights.detach()
             loss = criterion(m, indices, y, weights)
             opt.zero_grad()
             loss.backward() # backprop
@@ -464,8 +469,10 @@ if __name__ == '__main__':
             logging.info('Best val MAP@R: %s', str(best_val_mapr))
 
         if e == args.nb_epochs-1:
-            save_dir = 'models/dvi_data_{}_{}_loss{}/ResNet_{}_Model'.format(args.dataset, args.seed,
-                                                                      args.loss_type, str(args.sz_embedding))
+            save_dir = 'models/dvi_data_{}_{}_loss{}_{}_{}/ResNet_{}_Model'.format(args.dataset, args.seed,
+                                                                      args.loss_type, int(args.helpful_weight), int(args.harmful_weight),
+                                                                       str(args.sz_embedding),
+                                                                      )
             os.makedirs('{}'.format(save_dir), exist_ok=True)
             os.makedirs('{}/Epoch_{}'.format(save_dir, e+1), exist_ok=True)
             with open('{}/Epoch_{}/index.json'.format(save_dir, e + 1), 'wt') as handle:
