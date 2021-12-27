@@ -16,7 +16,7 @@ from torch.utils.data import Dataset, DataLoader
 os.environ["CUDA_VISIBLE_DEVICES"]="1, 0"
 
 parser = argparse.ArgumentParser(description='Training ProxyNCA++')
-parser.add_argument('--epochs', default = 40, type=int, dest = 'nb_epochs')
+# parser.add_argument('--epochs', default = 40, type=int, dest = 'nb_epochs')
 parser.add_argument('--log-filename', default = 'example')
 parser.add_argument('--lr_steps', default=[1000], nargs='+', type=int)
 parser.add_argument('--source_dir', default='', type=str)
@@ -143,13 +143,12 @@ if __name__ == '__main__':
             best_epoch = train_results['best_epoch']
 
     train_transform = dataset.utils.make_transform(
-                **dataset_config[transform_key]
-            )
+                **dataset_config[transform_key])
     print('best_epoch', best_epoch)
 
     results = {}
 
-    if ('inshop' not in args.dataset ):
+    if ('inshop' not in args.dataset):
         dl_ev = torch.utils.data.DataLoader(
             dataset.load(
                 name = args.dataset,
@@ -219,17 +218,16 @@ if __name__ == '__main__':
                 source = dataset_config['dataset'][args.dataset]['source'],
                 classes = dataset_config['dataset'][args.dataset]['classes']['train'],
                 transform = train_transform
-            )
+        )
 
-    elif args.mode == 'trainval' or args.mode == 'test' \
-            or args.mode == 'testontrain' or args.mode == 'testontrain_super':
+    elif args.mode == 'trainval' or args.mode == 'test' or args.mode == 'testontrain':
         tr_dataset = dataset.load(
                 name = args.dataset,
                 root = dataset_config['dataset'][args.dataset]['root'],
                 source = dataset_config['dataset'][args.dataset]['source'],
                 classes = dataset_config['dataset'][args.dataset]['classes']['trainval'],
                 transform = train_transform
-            )
+        )
 
     num_class_per_batch = config['num_class_per_batch']
     num_gradcum = config['num_gradcum']
@@ -372,6 +370,12 @@ if __name__ == '__main__':
 
     logging.info('Number of training: {}'.format(len(dl_tr.dataset)))
     logging.info('Number of original training: {}'.format(len(dl_tr_noshuffle.dataset)))
+    if 'inshop' not in args.dataset:
+        logging.info('Number of testing: {}'.format(len(dl_ev.dataset)))
+    else:
+        logging.info('Number of gallery: {}'.format(len(dl_gallery.dataset)))
+        logging.info('Number of query: {}'.format(len(dl_query.dataset)))
+
 
     '''training loop'''
     for e in range(0, args.nb_epochs):
@@ -470,13 +474,11 @@ if __name__ == '__main__':
 
         if e == args.nb_epochs-1:
             save_dir = 'models/dvi_data_{}_{}_loss{}_{}_{}/ResNet_{}_Model'.format(args.dataset, args.seed,
-                                                                      args.loss_type, int(args.helpful_weight), int(args.harmful_weight),
-                                                                       str(args.sz_embedding),
-                                                                      )
+                                                                                  args.loss_type,
+                                                                                  int(args.helpful_weight), int(args.harmful_weight),
+                                                                                  str(args.sz_embedding) )
             os.makedirs('{}'.format(save_dir), exist_ok=True)
             os.makedirs('{}/Epoch_{}'.format(save_dir, e+1), exist_ok=True)
-            with open('{}/Epoch_{}/index.json'.format(save_dir, e + 1), 'wt') as handle:
-                handle.write(json.dumps(list(range(len(dl_tr_noshuffle.dataset)))))
             torch.save(model.state_dict(), '{}/Epoch_{}/{}_{}_{}_{}_{}.pth'.format(save_dir, e+1, args.dataset,
                                                                                    args.dataset, args.mode,
                                                                                    str(args.sz_embedding), str(args.seed)))
@@ -498,6 +500,7 @@ if __name__ == '__main__':
             else:
                 best_test_nmi, (best_test_r1, best_test_r2, best_test_r4, best_test_r8), best_mapr = utils.evaluate(model, dl_ev, args.eval_nmi, args.recall)
             #logging.info('Best test r8: %s', str(best_test_r8))
+
         if 'inshop' in args.dataset:
             results['NMI'] = best_test_nmi
             results['R1']  = best_test_r1
