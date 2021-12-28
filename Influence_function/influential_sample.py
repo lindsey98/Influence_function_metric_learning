@@ -143,17 +143,9 @@ class InfluentialSample():
         confusion_class_pairs = [(top10_wrong_classes[i], np.asarray(self.dl_ev.dataset.classes)[confusion_classes_ind[i][j]]) \
                                  for i in range(confusion_classes_ind.shape[0]) for j in range(confusion_classes_ind.shape[1])]
 
-        # Compute wrong frequency entropy
-        # wrong_degree = np.zeros((confusion_classes_ind.shape[0], confusion_classes_ind.shape[1]))
-        # for i in range(confusion_classes_ind.shape[0]):
-        #     for j in range(confusion_classes_ind.shape[1]):
-        #         wrong_degree[i][j] = -wrong_freq_matrix[i, confusion_classes_ind[i][j]]
-        # wrong_degree_entropy = np.nansum(-wrong_degree * np.log2(wrong_degree), axis=-1)
-
         confusion_pairs = [confusion_class_pairs[k: k+5] for k in np.arange(0, len(top10_wrong_classes)*5, 5)]
         print("Top 10 wrong classes", top10_wrong_classes)
         print("Confusion pairs", confusion_pairs)
-        # print("Confusion degree entropy", wrong_degree_entropy)
 
         return confusion_pairs
 
@@ -271,7 +263,7 @@ if __name__ == '__main__':
     # FIXME: confusion class pairs is computed with original weights, then we do weight reload
     features = IS.get_features()
     confusion_class_pairs = IS.get_confusion_class_pairs()
-    pair_idx = 3
+    pair_idx = 5
     class_idx = confusion_class_pairs[pair_idx][0][0]
     inter_dist_orig, _ = grad_confusion(IS.model, features, confusion_class_pairs[pair_idx][0][0], [x[1] for x in confusion_class_pairs[pair_idx]],
                                         IS.testing_nn_label, IS.testing_label, IS.testing_nn_indices)  # dD/dtheta
@@ -284,7 +276,6 @@ if __name__ == '__main__':
                                                                                                      2, 0,
                                                                                                      1, dataset_name,
                                                                                                      dataset_name, 512, seed)))
-    confusion_class_pairs = IS.get_confusion_class_pairs()
     inter_dist_after, _ = grad_confusion(IS.model, features, confusion_class_pairs[pair_idx][0][0], [x[1] for x in confusion_class_pairs[pair_idx]],
                                         IS.testing_nn_label, IS.testing_label, IS.testing_nn_indices)  # dD/dtheta
     print("After inter-class distance: ", inter_dist_after)
