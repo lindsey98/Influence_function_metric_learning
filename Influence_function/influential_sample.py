@@ -271,21 +271,21 @@ if __name__ == '__main__':
         print('Pair index', pair_idx)
         wrong_cls = confusion_class_pairs[pair_idx][0][0]
         confuse_classes = [x[1] for x in confusion_class_pairs[pair_idx]]
-        IS.model = IS._load_model() # reload the original ights
+        IS.model = IS._load_model() # reload the original weights
 
         inter_dist_orig, _ = grad_confusion(IS.model, features, wrong_cls, confuse_classes,
-                                            IS.testing_nn_label, IS.testing_label, IS.testing_nn_indices)  # dD/dtheta
+                                            IS.testing_nn_label, IS.testing_label, IS.testing_nn_indices)
         print("Original inter-class distance: ", inter_dist_orig)
 
         # reload weights as new
         IS.model.load_state_dict(torch.load(
                 'models/dvi_data_{}_{}_loss{}_{}_{}/ResNet_512_Model/Epoch_{}/{}_{}_trainval_{}_{}.pth'.format(dataset_name, seed,
-                                                                                     'ProxyNCA_pfix_confusion_{}_threshold50_10epochs'.format(wrong_cls),
+                                                                                     'ProxyNCA_pfix_confusion_{}_threshold50_40epochs'.format(wrong_cls),
                                                                                      2, 0,
-                                                                                     10, dataset_name,
+                                                                                     40, dataset_name,
                                                                                      dataset_name, 512, seed)))
         inter_dist_after, _ = grad_confusion(IS.model, features, wrong_cls, confuse_classes,
-                                             IS.testing_nn_label, IS.testing_label, IS.testing_nn_indices)  # dD/dtheta
+                                             IS.testing_nn_label, IS.testing_label, IS.testing_nn_indices)
         print("After inter-class distance: ", inter_dist_after)
     exit()
 
