@@ -63,10 +63,10 @@ def overlay_mask(img: Image.Image, mask: Image.Image, colormap: str = 'jet', alp
 
 class DistinguishFeat(InfluentialSample):
     def __init__(self, dataset_name, seed, loss_type, config_name,
-                 measure, test_crop=False, sz_embedding=512, epoch=40):
+                 test_crop=False, sz_embedding=512, epoch=40):
 
         super().__init__(dataset_name, seed, loss_type, config_name,
-                         measure, test_crop, sz_embedding, epoch)
+                          test_crop, sz_embedding, epoch)
         # FIXME: For analysis purpose, I disable centercrop data augmentation
         dataset_config = utils.load_config('dataset/config.json')
         self.data_transforms = transforms.Compose([
@@ -369,12 +369,11 @@ if __name__ == '__main__':
     config_name = 'cub'
     sz_embedding = 512
     seed = 4
-    measure = 'confusion'
     test_crop = False
     i = 117; j = 129
     # i = 160
 
-    DF = DistinguishFeat(dataset_name, seed, loss_type, config_name, measure, test_crop)
+    DF = DistinguishFeat(dataset_name, seed, loss_type, config_name, test_crop)
 
     '''###### For Confusion Analysis #####'''
     '''Analyze confusing features'''
