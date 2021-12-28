@@ -1,11 +1,8 @@
 #! /usr/bin/env python3
-# Code is modified from https://github.com/kohpangwei/influence-release and https://github.com/nimarb/pytorch_influence_functions
 import torch
 from torch.autograd import grad
 from tqdm import tqdm
 import numpy as np
-from utils import predict_batchwise
-from evaluation import assign_by_euclidian_at_k_indices
 
 def calc_loss_train(model, dl, criterion, indices=None):
     l = []
@@ -44,8 +41,7 @@ def calc_inter_dist_pair(feat_cls1, feat_cls2):
 def grad_confusion(model, all_features, cls, confusion_classes,
                    pred, label, nn_indices):
 
-    pred = pred.detach().cpu().numpy()
-    label = label.detach().cpu().numpy()
+    pred = pred.detach().cpu().numpy(); label = label.detach().cpu().numpy()
     nn_indices = nn_indices.flatten()
 
     # Get cls samples indices and confusion_classes samples indices
@@ -62,14 +58,15 @@ def grad_confusion(model, all_features, cls, confusion_classes,
     accum_grads = [torch.zeros_like(model.module[-1].weight).detach().cpu()]
     accum_confusion = 0.
     for kk in range(len(confusion_classes)):
-        wrong_as_confusion_cls_samples = all_features[interest_indices[kk]]
-        nn_confusion_cls_samples = all_features[closest_cls_indices[kk]]
-        wrong_as_confusion_cls_samples = wrong_as_confusion_cls_samples.cuda()
-        nn_confusion_cls_samples = nn_confusion_cls_samples.cuda()
+        cls_features = all_features[interest_indices[kk]]
+        confuse_cls_features = all_features[closest_cls_indices[kk]]
+        cls_features = cls_features.cuda()
+        confuse_cls_features = confuse_cls_features.cuda()
 
-        feature1 = model.module[-1](wrong_as_confusion_cls_samples)
-        feature2 = model.module[-1](nn_confusion_cls_samples)
+        feature1 = model.module[-1](cls_features)
+        feature2 = model.module[-1](confuse_cls_features)
         confusion = calc_inter_dist_pair(feature1, feature2)
+
         params = model.module[-1].weight
         grad_confusion2params = list(grad(confusion, params))
         accum_grads = [x + y.detach().cpu() for x, y in zip(accum_grads, grad_confusion2params)] # accumulate gradients
