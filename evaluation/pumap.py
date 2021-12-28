@@ -22,7 +22,7 @@ from torchvision.io.image import read_image
 from torchvision.transforms.functional import normalize, resize, to_pil_image
 import scipy
 from torchvision import transforms
-from dataset.utils import RGBAToRGB
+from dataset.utils import RGBAToRGB, ScaleIntensities
 from PIL import Image
 os.environ['CUDA_VISIBLE_DEVICES'] = "0"
 
@@ -86,11 +86,12 @@ def prepare_data(data_name='cub',
                 classes=dataset_config['dataset'][data_name]['classes']['trainval'],
                 transform=transforms.Compose([
                     RGBAToRGB(),
-                    transforms.Resize(dataset_config[transform_key]["sz_crop"]-1, max_size=dataset_config[transform_key]["sz_crop"]),
+                    transforms.Resize(dataset_config[transform_key]["sz_crop"]),
                     transforms.ToTensor(),
+                    ScaleIntensities(*dataset_config[transform_key]["intensity_scale"]),
                     transforms.Normalize(
-                        mean=[0.485, 0.456, 0.406],
-                        std=[0.229, 0.224, 0.225],
+                        mean=dataset_config[transform_key]["mean"],
+                        std=dataset_config[transform_key]["std"],
                     )
                 ])
             ),
@@ -108,11 +109,12 @@ def prepare_data(data_name='cub',
                 classes=dataset_config['dataset'][data_name]['classes']['eval'],
                 transform=transforms.Compose([
                     RGBAToRGB(),
-                    transforms.Resize(dataset_config[transform_key]["sz_crop"]-1, max_size=dataset_config[transform_key]["sz_crop"]),
+                    transforms.Resize(dataset_config[transform_key]["sz_crop"]),
                     transforms.ToTensor(),
+                    ScaleIntensities(*dataset_config[transform_key]["intensity_scale"]),
                     transforms.Normalize(
-                        mean=[0.485, 0.456, 0.406],
-                        std=[0.229, 0.224, 0.225],
+                        mean=dataset_config[transform_key]["mean"],
+                        std=dataset_config[transform_key]["std"],
                     )
                 ])
             ),
@@ -254,22 +256,22 @@ def pumap_training(model, model_dir, e,
            (low_dim_emb_test, testing_label, testing_indices)
 
 def get_wrong_indices(X, T, topk=None):
-    k = 1
-    Y = evaluation.assign_by_euclidian_at_k(X, T, k)
+    nn_k = 1
+    Y = evaluation.assign_by_euclidian_at_k(X, T, nn_k)
     Y = torch.from_numpy(Y)
-    correct = [1 if t in y[:k] else 0 for t, y in zip(T, Y)]
+    correct = [1 if t in y[:nn_k] else 0 for t, y in zip(T, Y)]
 
     wrong_ind = np.where(np.asarray(correct) == 0)[0] # wrong indices
-    wrong_labels = T[wrong_ind]
-    wrong_preds = Y[wrong_ind]
+    wrong_labels = T[wrong_ind] # labels at those wrong indices
+    wrong_preds = Y[wrong_ind] # predictions at those wrong indices
 
-    unique_labels, wrong_freq = torch.unique(wrong_labels, return_counts=True)
+    unique_labels, wrong_freq = torch.unique(wrong_labels, return_counts=True) # count times of being wrong
     if topk is None:
-        top15_wrong_classes = unique_labels[torch.argsort(wrong_freq, descending=True)].numpy() # FIXME: return all test
+        top_wrong_classes = unique_labels[torch.argsort(wrong_freq, descending=True)].numpy() # FIXME: return all test
     else:
-        top15_wrong_classes = unique_labels[torch.argsort(wrong_freq, descending=True)[:topk]].numpy()
+        top_wrong_classes = unique_labels[torch.argsort(wrong_freq, descending=True)[:topk]].numpy()
 
-    return wrong_ind, top15_wrong_classes, wrong_labels, wrong_preds
+    return wrong_ind, top_wrong_classes, wrong_labels, wrong_preds
 
 
 if __name__ == '__main__':

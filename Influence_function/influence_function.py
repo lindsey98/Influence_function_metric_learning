@@ -35,36 +35,40 @@ def loss_change_train(model, criterion, dl_tr, params_prev, params_cur):
 
 def calc_inter_dist_pair(feat_cls1, feat_cls2):
     inter_dis = torch.cdist(feat_cls1, feat_cls2).square()  # inter class distance
-    inter_dis = inter_dis.diagonal().sum() # aligned pairs
+    inter_dis = inter_dis.diagonal().sum() # only sum aligned pairs
     return inter_dis
 
 def grad_confusion(model, all_features, cls, confusion_classes,
                    pred, label, nn_indices):
 
-    pred = pred.detach().cpu().numpy(); label = label.detach().cpu().numpy()
+    pred = pred.detach().cpu().numpy()
+    label = label.detach().cpu().numpy()
     nn_indices = nn_indices.flatten()
+    assert len(pred) == len(label)
+    assert len(pred) == len(nn_indices)
 
     # Get cls samples indices and confusion_classes samples indices
-    interest_indices = [[] for _ in range(len(confusion_classes))] # belong to cls and wrongly predicted
-    closest_cls_indices = [[] for _ in range(len(confusion_classes))] # belong to confusion classes and are neighbors of interest_indices
-    pair_counts = 0 # count how many confusion pairs
+    wrong_indices = [[] for _ in range(len(confusion_classes))] # belong to cls and wrongly predicted
+    confuse_indices = [[] for _ in range(len(confusion_classes))] # belong to confusion classes and are neighbors of interest_indices
+    pair_counts = 0 # count how many confusion pairs in total
     for kk, confusion_cls in enumerate(confusion_classes):
         wrong_as_confusion_cls_indices = np.where((pred == confusion_cls) & (label == cls))[0]
-        interest_indices[kk] = wrong_as_confusion_cls_indices
-        closest_cls_indices[kk] = nn_indices[wrong_as_confusion_cls_indices]
+        wrong_indices[kk] = wrong_as_confusion_cls_indices
+        confuse_indices[kk] = nn_indices[wrong_as_confusion_cls_indices]
         pair_counts += len(wrong_as_confusion_cls_indices)
 
     # Compute pairwise confusion and record gradients to projection layer's weights
     accum_grads = [torch.zeros_like(model.module[-1].weight).detach().cpu()]
     accum_confusion = 0.
     for kk in range(len(confusion_classes)):
-        cls_features = all_features[interest_indices[kk]]
-        confuse_cls_features = all_features[closest_cls_indices[kk]]
+        cls_features = all_features[wrong_indices[kk]]
+        confuse_cls_features = all_features[confuse_indices[kk]]
+
         cls_features = cls_features.cuda()
         confuse_cls_features = confuse_cls_features.cuda()
 
-        feature1 = model.module[-1](cls_features)
-        feature2 = model.module[-1](confuse_cls_features)
+        feature1 = model.module[-1](cls_features) # (N', 512)
+        feature2 = model.module[-1](confuse_cls_features) # (N', 512)
         confusion = calc_inter_dist_pair(feature1, feature2)
 
         params = model.module[-1].weight
@@ -79,7 +83,7 @@ def grad_confusion(model, all_features, cls, confusion_classes,
 def calc_influential_func_sample(grad_alltrain):
     l_prev = grad_alltrain['l_prev']
     l_cur = grad_alltrain['l_cur']
-    l_diff = np.stack(l_cur) - np.stack(l_prev) # l'-l0, if l_diff < 0, helpful
+    l_diff = np.stack(l_cur) - np.stack(l_prev) # l_diff = l'-l0, if l_diff < 0, helpful, otherwise harmful
     return l_diff
 
 # def calc_inter_dist(feat_cls1, feat_cls2):

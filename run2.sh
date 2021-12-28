@@ -1,29 +1,40 @@
-python train_sample_reweight.py --loss-type ProxyNCA_pfix_intravar_178_threshold10 \
---helpful Influential_data/cub_ProxyNCA_pfix_helpful_intravar_threshold10_testcls1.npy \
---harmful Influential_data/cub_ProxyNCA_pfix_harmful_intravar_threshold10_testcls1.npy --model_dir models/dvi_data_cub_4_lossProxyNCA_pfix/ResNet_512_Model \
---helpful_weight 1 --harmful_weight -1
-python train_sample_reweight.py --loss-type ProxyNCA_pfix_intravar_117_threshold10 \
---helpful Influential_data/cub_ProxyNCA_pfix_helpful_intravar_threshold10_testcls2.npy \
---harmful Influential_data/cub_ProxyNCA_pfix_harmful_intravar_threshold10_testcls2.npy --model_dir models/dvi_data_cub_4_lossProxyNCA_pfix/ResNet_512_Model \
---helpful_weight 1 --harmful_weight -1
-python train_sample_reweight.py --loss-type ProxyNCA_pfix_intravar_172_threshold10 \
---helpful Influential_data/cub_ProxyNCA_pfix_helpful_intravar_threshold10_testcls3.npy \
---harmful Influential_data/cub_ProxyNCA_pfix_harmful_intravar_threshold10_testcls3.npy --model_dir models/dvi_data_cub_4_lossProxyNCA_pfix/ResNet_512_Model \
---helpful_weight 1 --harmful_weight -1
-python train_sample_reweight.py --loss-type ProxyNCA_pfix_intravar_116_threshold10 \
---helpful Influential_data/cub_ProxyNCA_pfix_helpful_intravar_threshold10_testcls4.npy \
---harmful Influential_data/cub_ProxyNCA_pfix_harmful_intravar_threshold10_testcls4.npy --model_dir models/dvi_data_cub_4_lossProxyNCA_pfix/ResNet_512_Model \
---helpful_weight 1 --harmful_weight -1
-python train_sample_reweight.py --loss-type ProxyNCA_pfix_intravar_196_threshold10 \
---helpful Influential_data/cub_ProxyNCA_pfix_helpful_intravar_threshold10_testcls5.npy \
---harmful Influential_data/cub_ProxyNCA_pfix_harmful_intravar_threshold10_testcls5.npy --model_dir models/dvi_data_cub_4_lossProxyNCA_pfix/ResNet_512_Model \
---helpful_weight 1 --harmful_weight -1
-python train_sample_reweight.py --loss-type ProxyNCA_pfix_intravar_130_threshold10 \
---helpful Influential_data/cub_ProxyNCA_pfix_helpful_intravar_threshold10_testcls6.npy \
---harmful Influential_data/cub_ProxyNCA_pfix_harmful_intravar_threshold10_testcls6.npy --model_dir models/dvi_data_cub_4_lossProxyNCA_pfix/ResNet_512_Model \
---helpful_weight 1 --harmful_weight -1
-python train_sample_reweight.py --loss-type ProxyNCA_pfix_intravar_124_threshold10 \
---helpful Influential_data/cub_ProxyNCA_pfix_helpful_intravar_threshold10_testcls7.npy \
---harmful Influential_data/cub_ProxyNCA_pfix_harmful_intravar_threshold10_testcls7.npy --model_dir models/dvi_data_cub_4_lossProxyNCA_pfix/ResNet_512_Model \
---helpful_weight 1 --harmful_weight -1
-
+python train_sample_reweight.py --loss-type ProxyNCA_pfix_confusion_143_threshold50 \
+--helpful Influential_data/cub_ProxyNCA_pfix_helpful_testcls0_threshold50.npy \
+--harmful Influential_data/cub_ProxyNCA_pfix_harmful_testcls0_threshold50.npy --model_dir models/dvi_data_cub_4_lossProxyNCA_pfix/ResNet_512_Model \
+--helpful_weight 2 --harmful_weight -1
+python train_sample_reweight.py --loss-type ProxyNCA_pfix_confusion_178_threshold50 \
+--helpful Influential_data/cub_ProxyNCA_pfix_helpful_testcls1_threshold50.npy \
+--harmful Influential_data/cub_ProxyNCA_pfix_harmful_testcls1_threshold50.npy --model_dir models/dvi_data_cub_4_lossProxyNCA_pfix/ResNet_512_Model \
+--helpful_weight 2 --harmful_weight -1
+python train_sample_reweight.py --loss-type ProxyNCA_pfix_confusion_117_threshold50 \
+--helpful Influential_data/cub_ProxyNCA_pfix_helpful_testcls2_threshold50.npy \
+--harmful Influential_data/cub_ProxyNCA_pfix_harmful_testcls2_threshold50.npy --model_dir models/dvi_data_cub_4_lossProxyNCA_pfix/ResNet_512_Model \
+--helpful_weight 2 --harmful_weight -1
+python train_sample_reweight.py --loss-type ProxyNCA_pfix_confusion_172_threshold50 \
+--helpful Influential_data/cub_ProxyNCA_pfix_helpful_testcls3_threshold50.npy \
+--harmful Influential_data/cub_ProxyNCA_pfix_harmful_testcls3_threshold50.npy --model_dir models/dvi_data_cub_4_lossProxyNCA_pfix/ResNet_512_Model \
+--helpful_weight 2 --harmful_weight -1
+python train_sample_reweight.py --loss-type ProxyNCA_pfix_confusion_116_threshold50 \
+--helpful Influential_data/cub_ProxyNCA_pfix_helpful_testcls4_threshold50.npy \
+--harmful Influential_data/cub_ProxyNCA_pfix_harmful_testcls4_threshold50.npy --model_dir models/dvi_data_cub_4_lossProxyNCA_pfix/ResNet_512_Model \
+--helpful_weight 2 --harmful_weight -1
+python train_sample_reweight.py --loss-type ProxyNCA_pfix_confusion_196_threshold50 \
+--helpful Influential_data/cub_ProxyNCA_pfix_helpful_testcls5_threshold50.npy \
+--harmful Influential_data/cub_ProxyNCA_pfix_harmful_testcls5_threshold50.npy --model_dir models/dvi_data_cub_4_lossProxyNCA_pfix/ResNet_512_Model \
+--helpful_weight 2 --harmful_weight -1
+python train_sample_reweight.py --loss-type ProxyNCA_pfix_confusion_130_threshold50 \
+--helpful Influential_data/cub_ProxyNCA_pfix_helpful_testcls6_threshold50.npy \
+--harmful Influential_data/cub_ProxyNCA_pfix_harmful_testcls6_threshold50.npy --model_dir models/dvi_data_cub_4_lossProxyNCA_pfix/ResNet_512_Model \
+--helpful_weight 2 --harmful_weight -1
+python train_sample_reweight.py --loss-type ProxyNCA_pfix_confusion_124_threshold50 \
+--helpful Influential_data/cub_ProxyNCA_pfix_helpful_testcls7_threshold50.npy \
+--harmful Influential_data/cub_ProxyNCA_pfix_harmful_testcls7_threshold50.npy --model_dir models/dvi_data_cub_4_lossProxyNCA_pfix/ResNet_512_Model \
+--helpful_weight 2 --harmful_weight -1
+python train_sample_reweight.py --loss-type ProxyNCA_pfix_confusion_111_threshold50 \
+--helpful Influential_data/cub_ProxyNCA_pfix_helpful_testcls8_threshold50.npy \
+--harmful Influential_data/cub_ProxyNCA_pfix_harmful_testcls8_threshold50.npy --model_dir models/dvi_data_cub_4_lossProxyNCA_pfix/ResNet_512_Model \
+--helpful_weight 2 --harmful_weight -1
+python train_sample_reweight.py --loss-type ProxyNCA_pfix_confusion_144_threshold50 \
+--helpful Influential_data/cub_ProxyNCA_pfix_helpful_testcls9_threshold50.npy \
+--harmful Influential_data/cub_ProxyNCA_pfix_harmful_testcls9_threshold50.npy --model_dir models/dvi_data_cub_4_lossProxyNCA_pfix/ResNet_512_Model \
+--helpful_weight 2 --harmful_weight -1
