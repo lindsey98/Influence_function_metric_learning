@@ -60,7 +60,6 @@ def overlay_mask(img: Image.Image, mask: Image.Image, colormap: str = 'jet', alp
 
     return overlayed_img
 
-
 class DistinguishFeat(InfluentialSample):
     def __init__(self, dataset_name, seed, loss_type, config_name,
                  test_crop=False, sz_embedding=512, epoch=40):

@@ -138,15 +138,26 @@ class InfluentialSample():
         _, top10_wrong_classes, wrong_labels, wrong_preds = get_wrong_indices(self.testing_embedding, self.testing_label, topk=10)
 
         wrong_freq_matrix = self.get_wrong_freq_matrix(top10_wrong_classes, wrong_labels, wrong_preds)
-        confusion_classes_ind = np.argsort(wrong_freq_matrix, axis=-1)[:, :5]  # get 5 classes that are frequently confused with top 10 wrong testing classes
-        confusion_class_pairs = [(top10_wrong_classes[i], np.asarray(self.dl_ev.dataset.classes)[confusion_classes_ind[i][j]]) \
-                                 for i in range(confusion_classes_ind.shape[0]) for j in range(confusion_classes_ind.shape[1])]
+        confusion_classes_ind = np.argsort(wrong_freq_matrix, axis=-1)[:, :10]  # get top 10 classes that are frequently confused with top 10 wrong testing classes
 
-        confusion_pairs = [confusion_class_pairs[k: k+5] for k in np.arange(0, len(top10_wrong_classes)*5, 5)]
+        # Find the first index which explains >half of the wrong cases (cumulatively)
+        confusion_class_degree = -1 * wrong_freq_matrix[np.repeat(np.arange(len(confusion_classes_ind)), 10),
+                                                        confusion_classes_ind.flatten()].reshape(len(confusion_classes_ind), -1)
+        result = np.cumsum(confusion_class_degree, -1)
+        row, col = np.where(result > 0.5)
+        first_index = [np.where(row == i)[0][0] if len(np.where(row == i)[0]) > 0 else 9 \
+                       for i in range(len(confusion_classes_ind))]
+        first_index = col[first_index]
+
+        # Filter out those confusion class pairs
+        confusion_class_pairs = [[(top10_wrong_classes[i], np.asarray(self.dl_ev.dataset.classes)[confusion_classes_ind[i][j]]) \
+                                  for j in range(first_index[i] + 1)] \
+                                  for i in range(confusion_classes_ind.shape[0])]
+
         print("Top 10 wrong classes", top10_wrong_classes)
-        print("Confusion pairs", confusion_pairs)
+        print("Confusion pairs", confusion_class_pairs)
 
-        return confusion_pairs
+        return confusion_class_pairs
 
     def cache_grad_loss_train_all(self, theta, theta_hat, pair_idx):
         l_prev, l_cur = loss_change_train(self.model, self.criterion, self.dl_tr, theta, theta_hat)
@@ -165,7 +176,8 @@ class InfluentialSample():
             wrong_cls = pair[0][0]
             confused_classes = [x[1] for x in pair]
 
-            self.model.module[-1].weight.data = theta_orig  # revise back the weights
+            # revise back the weights
+            self.model.module[-1].weight.data = theta_orig
             theta = theta_orig.clone()
 
             # Record original inter-class distance
