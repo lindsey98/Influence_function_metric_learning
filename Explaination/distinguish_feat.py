@@ -12,7 +12,7 @@ from Explaination.background_removal import remove_background
 import utils
 import dataset
 from torchvision import transforms
-from dataset.utils import RGBAToRGB
+from dataset.utils import RGBAToRGB, ScaleIntensities
 os.environ['CUDA_VISIBLE_DEVICES'] = "0"
 
 def overlay_mask(img: Image.Image, mask: Image.Image, colormap: str = 'jet', alpha: float = 0.7) -> Image.Image:
@@ -71,13 +71,15 @@ class DistinguishFeat(InfluentialSample):
         dataset_config = utils.load_config('dataset/config.json')
         self.data_transforms = transforms.Compose([
                     RGBAToRGB(),
-                    transforms.Resize(dataset_config['transform_parameters']["sz_crop"]-1, max_size=dataset_config['transform_parameters']["sz_crop"]),
+                    transforms.Resize(dataset_config['transform_parameters']["sz_crop"]),
                     transforms.ToTensor(),
+                    ScaleIntensities(*dataset_config['transform_parameters']["intensity_scale"]),
                     transforms.Normalize(
-                        mean=[0.485, 0.456, 0.406],
-                        std=[0.229, 0.224, 0.225],
+                        mean=dataset_config['transform_parameters']["mean"],
+                        std=dataset_config['transform_parameters']["std"],
                     )
         ])
+
 
     def get_dist_between_classes(self, cls1, cls2):
         testing_embedding, testing_label, _ = utils.predict_batchwise(self.model, self.dl_ev)
@@ -142,10 +144,10 @@ class DistinguishFeat(InfluentialSample):
 
     def dominant_samples(self, interested_cls, coeff, dl, base_dir='CAM'):
         torch.cuda.empty_cache()
-        cam_extractor = GradCAMCustomize(self.model, target_layer=self.model.module[0].base.layer1)
+        cam_extractor = GradCustomize(self.model, target_layer=self.model.module[0].base.layer1)
 
         os.makedirs('./{}/{}'.format(base_dir, self.dataset_name), exist_ok=True)
-        os.makedirs('./{}/{}/{}_{}_dominant_feat'.format(base_dir, self.dataset_name, self.measure, interested_cls),
+        os.makedirs('./{}/{}/{}_dominant_feat'.format(base_dir, self.dataset_name, interested_cls),
                     exist_ok=True)
 
         feat_cls = self.testing_embedding[self.testing_label == interested_cls] # (N, sz_embed)
@@ -178,7 +180,7 @@ class DistinguishFeat(InfluentialSample):
             plt.axis('off')
         plt.tight_layout()
         # plt.show()
-        plt.savefig('./{}/{}/{}_{}_dominant_feat/{}.png'.format(base_dir, self.dataset_name, self.measure, interested_cls, 'cam'))
+        plt.savefig('./{}/{}/{}_dominant_feat/{}.png'.format(base_dir, self.dataset_name, interested_cls, 'cam'))
 
         for i in range(10):
             plt.subplot(2, 5, i + 1)
@@ -186,16 +188,16 @@ class DistinguishFeat(InfluentialSample):
             plt.axis('off')
         plt.tight_layout()
         # plt.show()
-        plt.savefig('./{}/{}/{}_{}_dominant_feat/{}.png'.format(base_dir, self.dataset_name, self.measure, interested_cls, 'original'))
+        plt.savefig('./{}/{}/{}_dominant_feat/{}.png'.format(base_dir, self.dataset_name,  interested_cls, 'original'))
 
     def CAM(self, interested_cls, coeff, dl, base_dir='CAM'):
         assert len(interested_cls) == 2
-        cam_extractor = GradCAMCustomize(self.model, target_layer=self.model[0].base.conv1)
+        cam_extractor = GradCustomize(self.model, target_layer=self.model[0].base.conv1)
         for ct, (x, y, indices) in tqdm(enumerate(dl)):
             os.makedirs('./{}/{}'.format(base_dir, self.dataset_name), exist_ok=True)
-            os.makedirs('./{}/{}/{}_{}_{}'.format(base_dir, self.dataset_name, self.measure, interested_cls[0], interested_cls[1]), exist_ok=True)
+            os.makedirs('./{}/{}/{}_{}'.format(base_dir, self.dataset_name, interested_cls[0], interested_cls[1]), exist_ok=True)
             if y.item() in interested_cls:
-                os.makedirs('./{}/{}/{}_{}_{}/{}'.format(base_dir, self.dataset_name, self.measure, interested_cls[0], interested_cls[1], y.item()), exist_ok=True)
+                os.makedirs('./{}/{}/{}_{}/{}'.format(base_dir, self.dataset_name, interested_cls[0], interested_cls[1], y.item()), exist_ok=True)
                 cam_extractor._hooks_enabled = True
                 self.model.zero_grad()
                 x, y = x.cuda(), y.cuda()
@@ -211,8 +213,7 @@ class DistinguishFeat(InfluentialSample):
                 # Display it
                 plt.imshow(result); plt.axis('off'); plt.tight_layout()
                 # plt.show()
-                plt.savefig('./{}/{}/{}_{}_{}/{}/{}'.format(base_dir, self.dataset_name,
-                                                            self.measure,
+                plt.savefig('./{}/{}/{}_{}/{}/{}'.format(base_dir, self.dataset_name,
                                                             interested_cls[0], interested_cls[1],
                                                             y.item(),
                                                             os.path.basename(dl.dataset.im_paths[indices[0]])))
@@ -220,19 +221,15 @@ class DistinguishFeat(InfluentialSample):
     def CAM_helpful_harmful(self, interested_cls, helpful_ind, harmful_ind,
                             coeff, dl, base_dir='CAM'):
 
-        cam_extractor = GradCAMCustomize(self.model, target_layer=self.model[0].base.conv1)
+        cam_extractor = GradCustomize(self.model, target_layer=self.model[0].base.conv1)
         os.makedirs('./{}/{}'.format(base_dir, self.dataset_name), exist_ok=True)
 
         for ct, (x, y, indices) in tqdm(enumerate(dl)):
             if indices.item() in helpful_ind:
-                if self.measure == 'confusion':
-                    os.makedirs('./{}/{}/{}_{}_{}/{}'.format(base_dir, self.dataset_name, self.measure,
+                os.makedirs('./{}/{}/{}_{}/{}'.format(base_dir, self.dataset_name,
                                                                     interested_cls[0], interested_cls[1],
                                                                     'helpful'), exist_ok=True)
-                else:
-                    os.makedirs('./{}/{}/{}_{}/{}'.format(base_dir, self.dataset_name, self.measure,
-                                                             interested_cls,
-                                                             'helpful'), exist_ok=True)
+
                 cam_extractor._hooks_enabled = True
                 self.model.zero_grad()
                 x, y = x.cuda(), y.cuda()
@@ -246,25 +243,16 @@ class DistinguishFeat(InfluentialSample):
                 # Display it
                 plt.imshow(result); plt.axis('off'); plt.tight_layout()
                 # plt.show()
-                if self.measure == 'confusion':
-                    plt.savefig('./{}/{}/{}_{}_{}/{}/{}'.format(base_dir, self.dataset_name, self.measure,
-                                                                      interested_cls[0], interested_cls[1],
-                                                                      'helpful',
-                                                                      os.path.basename(dl.dataset.im_paths[indices[0]])))
-                else:
-                    plt.savefig('./{}/{}/{}_{}/{}/{}'.format(base_dir, self.dataset_name, self.measure,
-                                                                interested_cls,
-                                                                'helpful',
-                                                                os.path.basename(dl.dataset.im_paths[indices[0]])))
+                plt.savefig('./{}/{}/{}_{}/{}/{}'.format(base_dir, self.dataset_name,
+                                                          interested_cls[0], interested_cls[1],
+                                                          'helpful',
+                                                          os.path.basename(dl.dataset.im_paths[indices[0]])))
+
             elif indices.item() in harmful_ind:
-                if self.measure == 'confusion':
-                    os.makedirs('./{}/{}/{}_{}_{}/{}'.format(base_dir, self.dataset_name, self.measure,
+                os.makedirs('./{}/{}/{}_{}/{}'.format(base_dir, self.dataset_name,
                                                              interested_cls[0], interested_cls[1],
                                                              'harmful'), exist_ok=True)
-                else:
-                    os.makedirs('./{}/{}/{}_{}/{}'.format(base_dir, self.dataset_name, self.measure,
-                                                          interested_cls,
-                                                          'harmful'), exist_ok=True)
+
                 cam_extractor._hooks_enabled = True
                 self.model.zero_grad()
                 x, y = x.cuda(), y.cuda()
@@ -278,29 +266,20 @@ class DistinguishFeat(InfluentialSample):
                 # Display it
                 plt.imshow(result); plt.axis('off'); plt.tight_layout()
                 # plt.show()
-                if self.measure == 'confusion':
-                    plt.savefig('./{}/{}/{}_{}_{}/{}/{}'.format(base_dir, self.dataset_name, self.measure,
+                plt.savefig('./{}/{}/{}_{}/{}/{}'.format(base_dir, self.dataset_name,
                                                                 interested_cls[0], interested_cls[1],
                                                                 'harmful',
                                                                 os.path.basename(dl.dataset.im_paths[indices[0]])))
-                else:
-                    plt.savefig('./{}/{}/{}_{}/{}/{}'.format(base_dir, self.dataset_name, self.measure,
-                                                             interested_cls,
-                                                             'harmful',
-                                                             os.path.basename(dl.dataset.im_paths[indices[0]])))
-
 
     def background_removal(self, interested_cls,
                            ind1, ind2, dl, base_dir='CAM_sample'): # Only for confusion analysis
 
         assert len(interested_cls) == 2
-        cam_extractor1 = GradCAMCustomize(self.model, target_layer=self.model[0].base.layer4) # to last layer
-        cam_extractor2 = GradCAMCustomize(self.model, target_layer=self.model[0].base.layer4)
-        # cam_extractor1 = GradCAMCustomize(self.model, target_layer=self.model[0].base.conv1)
-        # cam_extractor2 = GradCAMCustomize(self.model, target_layer=self.model[0].base.conv1)
+        cam_extractor1 = GradCustomize(self.model, target_layer=self.model[0].base.layer4) # to last layer
+        cam_extractor2 = GradCustomize(self.model, target_layer=self.model[0].base.layer4)
 
         os.makedirs('./{}/{}'.format(base_dir, self.dataset_name), exist_ok=True)
-        os.makedirs('./{}/{}/{}_{}_{}/'.format(base_dir, self.dataset_name, self.measure, interested_cls[0], interested_cls[1]), exist_ok=True)
+        os.makedirs('./{}/{}/{}_{}/'.format(base_dir, self.dataset_name,  interested_cls[0], interested_cls[1]), exist_ok=True)
 
         # Get the two embeddings first
         cam_extractor1._hooks_enabled = True
@@ -358,7 +337,7 @@ class DistinguishFeat(InfluentialSample):
         plt.axis('off')
         plt.suptitle('Before D = {:.4f}, After D = {:.4f}'.format(before_distance, after_distance), fontsize=10)
         # plt.show()
-        plt.savefig('./{}/{}/{}_{}_{}/{}_{}.png'.format(base_dir, self.dataset_name, self.measure,
+        plt.savefig('./{}/{}/{}_{}/{}_{}.png'.format(base_dir, self.dataset_name,
                                                         interested_cls[0], interested_cls[1],
                                                         ind1, ind2))
 

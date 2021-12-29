@@ -69,23 +69,6 @@ class Feat_resnet50_avg_n(Feature):
      def __init__(self):
         Feature.__init__(self, model='resnet50', pool='avg', use_lnorm=True)
 
-class Full_Model(nn.Module):
-    def __init__(self, feat_model=Feat_resnet50_max_n, emb_size=512, num_classes=100):
-        nn.Module.__init__(self)
-        self.feat = feat_model()
-        self.emb = nn.Linear(2048, emb_size)
-        self.model = nn.Sequential(self.feat, self.emb)
-        # self.proj = nn.Linear(emb_size, num_classes)
-
-    def forward(self, x):
-        x = self.model(x)
-        return x
-        # norm = x.norm(p=2, dim=-1, keepdim=True)
-        # x_normalized = x.div(norm)
-        # logits = self.proj(x_normalized)
-        # return logits
-
-
 # modify from
 # https://github.com/Cadene/pretrained-models.pytorch/blob/master/pretrainedmodels/models/bninception.py
 
