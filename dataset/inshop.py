@@ -147,7 +147,8 @@ class InShop(BaseDatasetMod):
                     self.ys.append(y)
                     self.I.append(ii)
                     self.super_ys.append(s_y)
-        else:
+
+        elif dset_type in ['query', 'gallery']:
             for ix in range(len(self.or_ys[dset_type])):
                 y = self.or_ys[dset_type][ix]
                 im_path = self.or_im_paths[dset_type][ix]
@@ -159,6 +160,32 @@ class InShop(BaseDatasetMod):
                     self.im_paths.append(im_path)
                     self.ys.append(y)
                     self.I.append(ii)
+
+        elif dset_type == 'all':
+            for ix in range(len(self.or_ys['query'])):
+                y = self.or_ys['query'][ix]
+                im_path = self.or_im_paths['query'][ix]
+                ii = self.or_I['query'][ix]
+                s_y = self.or_super_ys['query'][ix]
+                if y not in self.super2ys.keys():
+                    self.super2ys[y] = s_y
+                if y in classes:
+                    self.im_paths.append(im_path)
+                    self.ys.append(y)
+                    self.I.append(ii)
+
+            for ix in range(len(self.or_ys['gallery'])):
+                y = self.or_ys['gallery'][ix]
+                im_path = self.or_im_paths['gallery'][ix]
+                ii = self.or_I['gallery'][ix]
+                s_y = self.or_super_ys['gallery'][ix]
+                if y not in self.super2ys.keys():
+                    self.super2ys[y] = s_y
+                if y in classes:
+                    self.im_paths.append(im_path)
+                    self.ys.append(y)
+                    self.I.append(ii)
+
 
 
 class InShop_hdf5(BaseDataset_hdf5):

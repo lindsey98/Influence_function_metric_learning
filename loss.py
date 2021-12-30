@@ -349,6 +349,24 @@ class ProxyNCA_pfix(torch.nn.Module):
             #                                                                            super_cls))
             #     pass
 
+    def forward_score(self, X, T):
+        P = self.proxies; P.requires_grad = False
+        P = self.scale * F.normalize(P, p=2, dim=-1)
+        X = self.scale * F.normalize(X, p=2, dim=-1)
+
+        D = pairwise_distance(
+            torch.cat(
+                [X, P]
+            ),
+            squared=True
+        )[0][:X.size()[0], X.size()[0]:]
+
+        T.requires_grad = False
+
+        scores = F.softmax(-D, -1) # (N, C)
+        classification_score = scores[torch.arange(len(T)), T.long()]
+        return classification_score
+
     def forward(self, X, indices, T):
         P = self.proxies
         P = self.scale * F.normalize(P, p=2, dim=-1)

@@ -15,11 +15,11 @@ from utils import predict_batchwise
 from collections import OrderedDict
 import scipy.stats
 from evaluation import assign_by_euclidian_at_k_indices
-os.environ['CUDA_VISIBLE_DEVICES'] = "0"
+os.environ['CUDA_VISIBLE_DEVICES'] = "1"
 
 class InfluentialSample():
     def __init__(self, dataset_name, seed, loss_type, config_name,
-                 test_crop=True, sz_embedding=512, epoch=40):
+                 test_crop=False, sz_embedding=512, epoch=40):
 
         self.folder = 'models/dvi_data_{}_{}_loss{}/'.format(dataset_name, seed, loss_type)
         self.model_dir = '{}/ResNet_{}_Model'.format(self.folder, sz_embedding)
@@ -29,8 +29,7 @@ class InfluentialSample():
         # load data
         self.dl_tr, self.dl_ev = prepare_data(data_name=dataset_name,
                                               config_name=self.config_name,
-                                              root=self.folder,
-                                              save=False, batch_size=1,
+                                              batch_size=1,
                                               test_crop=test_crop)
         self.dataset_name = dataset_name
         self.seed = seed
@@ -264,7 +263,8 @@ if __name__ == '__main__':
     # sz_embedding = 512
     # seed = 4
     # epoch = 40
-    # test_crop = True
+    # test_crop = False
+
     dataset_name = 'sop'
     loss_type = 'ProxyNCA_pfix_var'
     config_name = 'sop'
@@ -272,6 +272,14 @@ if __name__ == '__main__':
     seed = 2
     epoch = 40
     test_crop = True
+
+    # dataset_name = 'inshop'
+    # loss_type = 'ProxyNCA_pfix_var_complicate'
+    # config_name = 'inshop'
+    # sz_embedding = 512
+    # seed = 0
+    # epoch = 40
+    # test_crop = True
 
     IS = InfluentialSample(dataset_name, seed, loss_type, config_name, test_crop, sz_embedding, epoch)
 

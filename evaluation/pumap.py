@@ -56,10 +56,9 @@ def load_single_sample(config_name, img_path, test_resize=False):
 
 def prepare_data(data_name='cub',
                  config_name='',
-                 root='dvi_data_cub200/',
-                 batch_size=64,
-                 test_crop=True,
-                 save=False):
+                 batch_size=1,
+                 test_crop=False,
+                 ):
     '''
         Prepare dataloader
         :param data_name: dataset used
@@ -74,10 +73,8 @@ def prepare_data(data_name='cub',
         transform_key = config['transform_key']
     print('Transformation: ', transform_key)
 
-    if 'inshop' in data_name:
-        data_name = 'inshop_all'
-
     if not test_crop:
+
         dl_tr_noshuffle = torch.utils.data.DataLoader(
             dataset=dataset.load(
                 name=data_name,
@@ -100,28 +97,52 @@ def prepare_data(data_name='cub',
             batch_size=batch_size,
         )
 
-        # use this dataloader if you want to visualize (without resizing and cropping)
-        dl_ev = torch.utils.data.DataLoader(
-            dataset.load(
-                name=data_name,
-                root=dataset_config['dataset'][data_name]['root'],
-                source=dataset_config['dataset'][data_name]['source'],
-                classes=dataset_config['dataset'][data_name]['classes']['eval'],
-                transform=transforms.Compose([
-                    RGBAToRGB(),
-                    transforms.Resize(dataset_config[transform_key]["sz_crop"]),
-                    transforms.ToTensor(),
-                    ScaleIntensities(*dataset_config[transform_key]["intensity_scale"]),
-                    transforms.Normalize(
-                        mean=dataset_config[transform_key]["mean"],
-                        std=dataset_config[transform_key]["std"],
-                    )
-                ])
-            ),
-            batch_size=batch_size,
-            shuffle=False,
-            num_workers=0,
-        )
+        if not 'inshop' in data_name:
+            # use this dataloader if you want to visualize (without resizing and cropping)
+            dl_ev = torch.utils.data.DataLoader(
+                dataset.load(
+                    name=data_name,
+                    root=dataset_config['dataset'][data_name]['root'],
+                    source=dataset_config['dataset'][data_name]['source'],
+                    classes=dataset_config['dataset'][data_name]['classes']['eval'],
+                    transform=transforms.Compose([
+                        RGBAToRGB(),
+                        transforms.Resize(dataset_config[transform_key]["sz_crop"]),
+                        transforms.ToTensor(),
+                        ScaleIntensities(*dataset_config[transform_key]["intensity_scale"]),
+                        transforms.Normalize(
+                            mean=dataset_config[transform_key]["mean"],
+                            std=dataset_config[transform_key]["std"],
+                        )
+                    ])
+                ),
+                batch_size=batch_size,
+                shuffle=False,
+                num_workers=0,
+            )
+        else: # inshop
+            dl_ev = torch.utils.data.DataLoader(
+                dataset.load_inshop(
+                    name=data_name,
+                    root=dataset_config['dataset'][data_name]['root'],
+                    source=dataset_config['dataset'][data_name]['source'],
+                    classes=dataset_config['dataset'][data_name]['classes']['eval'],
+                    transform=transforms.Compose([
+                        RGBAToRGB(),
+                        transforms.Resize(dataset_config[transform_key]["sz_crop"]),
+                        transforms.ToTensor(),
+                        ScaleIntensities(*dataset_config[transform_key]["intensity_scale"]),
+                        transforms.Normalize(
+                            mean=dataset_config[transform_key]["mean"],
+                            std=dataset_config[transform_key]["std"],
+                        )
+                    ]),
+                    dset_type='all'
+                ),
+                batch_size=batch_size,
+                shuffle=False,
+                num_workers=0,
+            )
 
     else:
         dl_tr_noshuffle = torch.utils.data.DataLoader(
@@ -140,36 +161,39 @@ def prepare_data(data_name='cub',
             batch_size=batch_size,
         )
 
-        dl_ev = torch.utils.data.DataLoader(
-            dataset.load(
-                name=data_name,
-                root=dataset_config['dataset'][data_name]['root'],
-                source=dataset_config['dataset'][data_name]['source'],
-                classes=dataset_config['dataset'][data_name]['classes']['eval'],
-                transform=dataset.utils.make_transform(
-                    **dataset_config[transform_key],
-                    is_train=False
-                )
-            ),
-            batch_size=batch_size,
-            shuffle=False,
-            num_workers=0,
-        )
-
-    if save:
-        training_x, training_y = torch.tensor([]), torch.tensor([])
-        for ct, (x, y, _) in tqdm(enumerate(dl_tr_noshuffle)):  # FIXME: memory error
-            training_x = torch.cat((training_x, x), dim=0)
-            training_y = torch.cat((training_y, y), dim=0)
-        torch.save(training_x, os.path.join(root, 'Training_data', 'training_dataset_data.pth'))
-        torch.save(training_y, os.path.join(root, 'Training_data', 'training_dataset_label.pth'))
-
-        test_x, test_y = torch.tensor([]), torch.tensor([])
-        for ct, (x, y, _) in tqdm(enumerate(dl_ev)):
-            test_x = torch.cat((test_x, x), dim=0)
-            test_y = torch.cat((test_y, y), dim=0)
-        torch.save(test_x, os.path.join(root, 'Testing_data', 'testing_dataset_data.pth'))
-        torch.save(test_y, os.path.join(root, 'Testing_data', 'testing_dataset_label.pth'))
+        if not 'inshop' in data_name:
+            dl_ev = torch.utils.data.DataLoader(
+                dataset.load(
+                    name=data_name,
+                    root=dataset_config['dataset'][data_name]['root'],
+                    source=dataset_config['dataset'][data_name]['source'],
+                    classes=dataset_config['dataset'][data_name]['classes']['eval'],
+                    transform=dataset.utils.make_transform(
+                        **dataset_config[transform_key],
+                        is_train=False
+                    )
+                ),
+                batch_size=batch_size,
+                shuffle=False,
+                num_workers=0,
+            )
+        else:
+            dl_ev = torch.utils.data.DataLoader(
+                dataset.load_inshop(
+                    name=data_name,
+                    root=dataset_config['dataset'][data_name]['root'],
+                    source=dataset_config['dataset'][data_name]['source'],
+                    classes=dataset_config['dataset'][data_name]['classes']['eval'],
+                    transform=dataset.utils.make_transform(
+                        **dataset_config[transform_key],
+                        is_train=False
+                    ),
+                    dset_type='all'
+                ),
+                batch_size=batch_size,
+                shuffle=False,
+                num_workers=0,
+            )
 
     return dl_tr_noshuffle, dl_ev
 

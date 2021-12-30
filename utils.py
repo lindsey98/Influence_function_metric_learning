@@ -18,6 +18,9 @@ from evaluation.map import *
 from similarity import pairwise_distance
 from scipy.optimize import linear_sum_assignment
 from scipy.spatial import distance
+from PIL import Image
+from matplotlib import cm
+
 # __repr__ may contain `\n`, json replaces it by `\\n` + indent
 json_dumps = lambda **kwargs: json.dumps(
     **kwargs
@@ -386,116 +389,51 @@ def get_wrong_indices(X, T, N=15):
     return wrong_ind, topN_wrong_classes
 
 
-@torch.no_grad()
-def inner_product_sim(X: torch.Tensor,
-                      P: torch.nn.Parameter,
-                      T: torch.Tensor):
 
-    X_copy, P_copy, T_copy = X.clone(), P.clone(), T.clone()
+def overlay_mask(img: Image.Image, mask: Image.Image, colormap: str = 'jet', alpha: float = 0.7) -> Image.Image:
 
-    X_copy = F.normalize(X_copy, dim=-1, p=2).to(P_copy.device)
-    P_copy = F.normalize(P_copy, dim=-1, p=2)
-    IP = torch.mm(X_copy, P_copy.T)  # inner product between X and P
+    """Overlay a colormapped mask on a background image
 
-    IP_gt = IP[torch.arange(X_copy.shape[0]), T_copy.long()]  # get similarities to gt-class's proxies
+    Example::
+        >>> from PIL import Image
+        >>> import matplotlib.pyplot as plt
+        >>> from torchcam.utils import overlay_mask
+        >>> img = ...
+        >>> cam = ...
+        >>> overlay = overlay_mask(img, cam)
 
-    return IP_gt
+    Args:
+        img: background image
+        mask: mask to be overlayed in grayscale
+        colormap: colormap to be applied on the mask
+        alpha: transparency of the background image
 
-import scipy
-def get_rho(X):
-    # X = F.normalize(X, p=2, dim=-1)
-    u, s, v = torch.linalg.svd(X)  # compute singular value, lower value implies lower data variance
-    s = s[1:].detach().cpu().numpy()  # remove first singular value cause it is over-dominant
-    s_norm = s / s.sum() # TODO: use the definition in "Revisiting Training Strategies and Generalization Performance in Deep Metric"
-    uniform = np.ones(len(s)) / (len(s))
-    kl = scipy.stats.entropy(uniform, s_norm)
-    return kl
+    Returns:
+        overlayed image
 
-def get_intra_inter_dist(X, T):
-    '''
-        Get intra class distance/inter class distance
-    '''
-    X = F.normalize(X, p=2, dim=-1).detach().cpu().numpy() # L2-normalized embeddings
-    unique_classes = torch.unique(T).sort()[0].detach().cpu().numpy() # get unique classes for all T
-    dist_mat = np.zeros((len(unique_classes), len(unique_classes))) # distance matrix
+    Raises:
+        TypeError: when the arguments have invalid types
+        ValueError: when the alpha argument has an incorrect value
+    """
 
-    # Get class-specific embedding
-    X_arrange_byT = []
-    for cls in range(len(unique_classes)):
-        indices = T == unique_classes[cls] # indices that belong to this class
-        X_cls = X[indices, :]
-        X_arrange_byT.append(X_cls)
+    if not isinstance(img, Image.Image) or not isinstance(mask, Image.Image):
+        raise TypeError('img and mask arguments need to be PIL.Image')
 
-    # O(C^2) to calculate inter, intra distance
-    for i in range(len(unique_classes)):
-        for j in range(i, len(unique_classes)):
-            pairwise_dists = distance.cdist(X_arrange_byT[i], X_arrange_byT[j], 'cosine')
-            avg_pairwise_dist = np.sum(pairwise_dists) / (np.prod(pairwise_dists.shape) - len(pairwise_dists.diagonal())) # take mean (ignore diagonal)
-            dist_mat[i, j] = dist_mat[j, i] = avg_pairwise_dist
+    if not isinstance(alpha, float) or alpha < 0 or alpha >= 1:
+        raise ValueError('alpha argument is expected to be of type float between 0 and 1')
 
-    # average intra-class distance
-    avg_intra = dist_mat.diagonal().mean()
-    # average inter-class distance
-    non_diag = np.where(~np.eye(dist_mat.shape[0],dtype=bool))
-    reduced_dist_mat = dist_mat[non_diag[0], non_diag[1]] # mask diagonal
-    avg_inter = reduced_dist_mat.mean()
-    # intra/inter ratio
-    ratio = avg_intra / avg_inter
-    return ratio, reduced_dist_mat, unique_classes, dist_mat
+    cmap = cm.get_cmap(colormap)
+    # Resize mask and apply colormap
+    overlay = mask.resize(img.size, resample=Image.BICUBIC)
+    overlay = (255 * cmap(np.asarray(overlay) ** 2)[:, :, :3]).astype(np.uint8)
 
+    # Overlay the image with the mask
+    img = np.asarray(img)
+    if len(img.shape) < 3: # create a dummy axis if img is single channel
+        img = img[:, :, np.newaxis]
+    overlayed_img = Image.fromarray((alpha * img + (1 - alpha) * overlay).astype(np.uint8))
 
-def random_fourier_features_gpu(x, w=None, b=None, num_f=None, sum=True, sigma=None, seed=None):
-    '''
-        RFF with functions randomly drawn from \sqrt(2)cos(wx+\phi), w ~ N(0,1), \phi ~ Unif(0, 2pi)
-    '''
-    if num_f is None:
-        num_f = 1
-    n = x.size(0)
-    r = x.size(1)
-    x = x.view(n, r, 1)
-    c = x.size(2)
-    if sigma is None or sigma == 0:
-        sigma = 1
-    if w is None:
-        w = 1 / sigma * (torch.randn(size=(num_f, c)))
-        b = 2 * np.pi * torch.rand(size=(r, num_f))
-        b = b.repeat((n, 1, 1))
+    return overlayed_img
 
-    Z = torch.sqrt(torch.tensor(2.0 / num_f))
-
-    mid = torch.matmul(x, w.t())
-
-    mid = mid + b
-    mid -= mid.min(dim=1, keepdim=True)[0]
-    mid /= mid.max(dim=1, keepdim=True)[0]
-    mid *= np.pi / 2.0
-
-    if sum:
-        Z = Z * (torch.cos(mid) + torch.sin(mid))
-    else:
-        Z = Z * torch.cat((torch.cos(mid), torch.sin(mid)), dim=-1)
-
-    return Z # return the function values evaluated at x
-
-def cov(x):
-    '''
-        Empirical covariance matrix of x
-    '''
-    n = x.shape[0]
-    cov = torch.matmul(x.t(), x) / n # (sz_embed, sz_embed)
-    e = torch.mean(x, dim=0).view(-1, 1)
-    res = cov - torch.matmul(e, e.t())
-
-    return res
-
-def get_RFF_cov(X, num_functions=5):
-    cfeaturecs = random_fourier_features_gpu(X, num_f=num_functions, sum=True)
-    loss = torch.FloatTensor([0])
-    for i in range(cfeaturecs.size()[-1]):
-        cfeaturec = cfeaturecs[:, :, i] # take one function
-        cov1 = cov(cfeaturec) # (sz_embed, sz_embed)
-        cov_matrix = cov1 * cov1
-        loss += torch.sum(cov_matrix) - torch.trace(cov_matrix) # the Frobenius norm is on different features, deduct diagonal
-    return loss
 
 

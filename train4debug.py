@@ -19,7 +19,6 @@ import random
 from tqdm import tqdm
 # from apex import amp
 from utils import JSONEncoder, json_dumps
-from utils import predict_batchwise, inner_product_sim
 from dataset.base import SubSampler
 from torch.utils.data import Dataset, DataLoader
 

@@ -14,32 +14,9 @@ resource.setrlimit(resource.RLIMIT_NOFILE, (rlimit[1], rlimit[1]))
 
 _type = {
     'cars': Cars,
-    'cars+179_178': Cars,
-    'cars+103_102': Cars,
-    'cars+183_182': Cars,
-    'cars+111_179': Cars,
-    'cars+139_137': Cars,
     'cub': CUBirds,
-    'cub_removal': CUBirdsRemoval,
-    'cub+143_140': CUBirds,
-    'cub+178_172': CUBirds,
-    'cub+116_118': CUBirds,
-    'cub+117_129': CUBirds,
-    'cub+116_114': CUBirds,
-    'cub_class' : CUBirds_class,
     'sop': SOProducts,
-    'sop+12659_12660': SOProductsMod,
-    'sop+11419_15016': SOProductsMod,
-    'sop+11855_11756': SOProductsMod,
-    'sop+11835_11842': SOProductsMod,
-    'sop+21626_15606': SOProductsMod,
     'inshop': InShop,
-    'inshop+6070_7581': InShop,
-    'inshop+5077_5589': InShop,
-    'inshop+4880_5589': InShop,
-    'inshop+7841_5589': InShop,
-    'inshop+7403_5589': InShop,
-    # 'inshop_all': InShopAll
 }
 
 
