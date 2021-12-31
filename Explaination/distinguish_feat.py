@@ -1,6 +1,7 @@
 
 import os
 import matplotlib.pyplot as plt
+import numpy as np
 from torchvision.transforms.functional import to_pil_image
 from torchvision.io.image import read_image
 from PIL import Image
@@ -85,24 +86,25 @@ class DistinguishFeat(InfluentialSample):
 
         os.makedirs('./{}/{}'.format(base_dir, self.dataset_name), exist_ok=True)
         os.makedirs('./{}/{}/{}_{}/'.format(base_dir, self.dataset_name,  wrong_cls, confuse_cls), exist_ok=True)
+        model_copy = self._load_model()
 
         for ind1, ind2 in zip(wrong_indices, confuse_indices):
-            cam_extractor1 = GradCustomize(self.model, target_layer=self.model.module[0].base.layer4)  # to last layer
-            cam_extractor2 = GradCustomize(self.model, target_layer=self.model.module[0].base.layer4)  # to last layer
+            cam_extractor1 = GradCustomize(model_copy, target_layer=model_copy.module[0].base.layer4)  # to last layer
+            cam_extractor2 = GradCustomize(model_copy, target_layer=model_copy.module[0].base.layer4)  # to last layer
 
             # Get the two embeddings first
             cam_extractor1._hooks_enabled = True
-            self.model.zero_grad()
-            emb1 = self.model(dl.dataset.__getitem__(ind1)[0].unsqueeze(0).cuda())
-            emb2 = self.model(dl.dataset.__getitem__(ind2)[0].unsqueeze(0).cuda())
+            model_copy.zero_grad()
+            emb1 = model_copy(dl.dataset.__getitem__(ind1)[0].unsqueeze(0).cuda())
+            emb2 = model_copy(dl.dataset.__getitem__(ind2)[0].unsqueeze(0).cuda())
             activation_map1 = cam_extractor1(torch.dot(emb1.squeeze(0), emb2.detach().squeeze(0)))
             img1 = to_pil_image(read_image(dl.dataset.im_paths[ind1]))
             result1 = overlay_mask(img1, to_pil_image(activation_map1[0].detach().cpu(), mode='F'), alpha=0.5)
 
             cam_extractor2._hooks_enabled = True
-            self.model.zero_grad()
-            emb1 = self.model(dl.dataset.__getitem__(ind1)[0].unsqueeze(0).cuda())
-            emb2 = self.model(dl.dataset.__getitem__(ind2)[0].unsqueeze(0).cuda())
+            model_copy.zero_grad()
+            emb1 = model_copy(dl.dataset.__getitem__(ind1)[0].unsqueeze(0).cuda())
+            emb2 = model_copy(dl.dataset.__getitem__(ind2)[0].unsqueeze(0).cuda())
             activation_map2 = cam_extractor2(torch.dot(emb1.detach().squeeze(0), emb2.squeeze(0)))
             img2 = to_pil_image(read_image(dl.dataset.im_paths[ind2]))
             result2 = overlay_mask(img2, to_pil_image(activation_map2[0].detach().cpu(), mode='F'), alpha=0.5)
@@ -155,20 +157,17 @@ class DistinguishFeat(InfluentialSample):
     def GradAnalysis4Train(self, wrong_cls, confuse_cls,
                            dl, base_dir='Confuse_Vis_Train'):
 
-        training_sample_by_influence = self.temporal_influence_func(wrong_cls, [confuse_cls])
-        helpful_indices = training_sample_by_influence[:50]
-        harmful_indices = training_sample_by_influence[-50:]
-
-        os.makedirs('./{}/{}'.format(base_dir, self.dataset_name), exist_ok=True)
-        os.makedirs('./{}/{}/{}_{}/'.format(base_dir, self.dataset_name, wrong_cls, confuse_cls), exist_ok=True)
+        helpful_indices = np.load('./{}/{}/{}_{}/helpful_indices.npy'.format(base_dir, self.dataset_name, wrong_cls, confuse_cls))
+        harmful_indices = np.load('./{}/{}/{}_{}/harmful_indices.npy'.format(base_dir, self.dataset_name, wrong_cls, confuse_cls))
+        model_copy = self._load_model()
 
         for ind in helpful_indices:
-            cam_extractor = GradCustomize(self.model, target_layer=self.model.module[0].base.layer4)  # to last layer
+            cam_extractor = GradCustomize(model_copy, target_layer=model_copy.module[0].base.layer4)  # to last layer
 
             # Get the two embeddings first
             cam_extractor._hooks_enabled = True
-            self.model.zero_grad()
-            out = self.model(dl.dataset.__getitem__(ind)[0].unsqueeze(0).cuda())
+            model_copy.zero_grad()
+            out = model_copy(dl.dataset.__getitem__(ind)[0].unsqueeze(0).cuda())
             cls_label = torch.tensor([dl.dataset.__getitem__(ind)[1]]).cuda()
             score = self.criterion.forward_score(out, cls_label)
             activation_map = cam_extractor(score)
@@ -186,12 +185,12 @@ class DistinguishFeat(InfluentialSample):
             plt.close()
 
         for ind in harmful_indices:
-            cam_extractor = GradCustomize(self.model, target_layer=self.model.module[0].base.layer4)  # to last layer
+            cam_extractor = GradCustomize(model_copy, target_layer=model_copy.module[0].base.layer4)  # to last layer
 
             # Get the two embeddings first
             cam_extractor._hooks_enabled = True
-            self.model.zero_grad()
-            out = self.model(dl.dataset.__getitem__(ind)[0].unsqueeze(0).cuda())
+            model_copy.zero_grad()
+            out = model_copy(dl.dataset.__getitem__(ind)[0].unsqueeze(0).cuda())
             cls_label = torch.tensor([dl.dataset.__getitem__(ind)[1]]).cuda()
             score = self.criterion.forward_score(out, cls_label)
             activation_map = cam_extractor(score)
@@ -213,9 +212,9 @@ class DistinguishFeat(InfluentialSample):
 
 if __name__ == '__main__':
 
-    dataset_name = 'cub'
+    dataset_name = 'cars'
     loss_type = 'ProxyNCA_pfix'
-    config_name = 'cub'
+    config_name = 'cars'
     sz_embedding = 512
     seed = 4
     test_crop = False
@@ -236,10 +235,22 @@ if __name__ == '__main__':
             wrong_indices = wrong_as_confusion_cls_indices
             confuse_indices = nn_indices[wrong_as_confusion_cls_indices]
 
-            # DF.GradAnalysis(
-            #              wrong_cls, confusion_cls,
-            #              wrong_indices, confuse_indices,
-            #              DF.dl_ev, base_dir='Confuse_Vis')
+            DF.GradAnalysis(
+                         wrong_cls, confusion_cls,
+                         wrong_indices, confuse_indices,
+                         DF.dl_ev, base_dir='Confuse_Vis')
 
+            base_dir = 'Confuse_Vis_Train'
+            os.makedirs('./{}/{}'.format(base_dir, DF.dataset_name), exist_ok=True)
+            os.makedirs('./{}/{}/{}_{}/'.format(base_dir, DF.dataset_name, wrong_cls, confusion_cls), exist_ok=True)
+            training_sample_by_influence = DF.temporal_influence_func(wrong_cls, [confusion_cls])
+            helpful_indices = training_sample_by_influence[:50]
+            harmful_indices = training_sample_by_influence[-50:]
+            np.save(
+                './{}/{}/{}_{}/helpful_indices'.format(base_dir, DF.dataset_name, wrong_cls, confusion_cls),
+                helpful_indices)
+            np.save(
+                './{}/{}/{}_{}/harmful_indices'.format(base_dir, DF.dataset_name, wrong_cls, confusion_cls),
+                harmful_indices)
             DF.GradAnalysis4Train(wrong_cls, confusion_cls, DF.dl_tr)
 
