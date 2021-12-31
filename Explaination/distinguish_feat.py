@@ -89,8 +89,8 @@ class DistinguishFeat(InfluentialSample):
         model_copy = self._load_model()
 
         for ind1, ind2 in zip(wrong_indices, confuse_indices):
-            cam_extractor1 = GradCustomize(model_copy, target_layer=model_copy.module[0].base.layer4)  # to last layer
-            cam_extractor2 = GradCustomize(model_copy, target_layer=model_copy.module[0].base.layer4)  # to last layer
+            cam_extractor1 = GradCAMCustomize(model_copy, target_layer=model_copy.module[0].base.layer4)  # to last layer
+            cam_extractor2 = GradCAMCustomize(model_copy, target_layer=model_copy.module[0].base.layer4)  # to last layer
 
             # Get the two embeddings first
             cam_extractor1._hooks_enabled = True
@@ -99,7 +99,8 @@ class DistinguishFeat(InfluentialSample):
             emb2 = model_copy(dl.dataset.__getitem__(ind2)[0].unsqueeze(0).cuda())
             activation_map1 = cam_extractor1(torch.dot(emb1.squeeze(0), emb2.detach().squeeze(0)))
             img1 = to_pil_image(read_image(dl.dataset.im_paths[ind1]))
-            result1 = overlay_mask(img1, to_pil_image(activation_map1[0].detach().cpu(), mode='F'), alpha=0.5)
+            result1, _ = overlay_mask(img1, to_pil_image(activation_map1[0].detach().cpu(), mode='F'), alpha=0.5)
+            _, mask1 = overlay_mask(img1, to_pil_image(activation_map1[0].detach().cpu(), mode='F'), alpha=0.5, colormap='Greys')
 
             cam_extractor2._hooks_enabled = True
             model_copy.zero_grad()
@@ -107,10 +108,12 @@ class DistinguishFeat(InfluentialSample):
             emb2 = model_copy(dl.dataset.__getitem__(ind2)[0].unsqueeze(0).cuda())
             activation_map2 = cam_extractor2(torch.dot(emb1.detach().squeeze(0), emb2.squeeze(0)))
             img2 = to_pil_image(read_image(dl.dataset.im_paths[ind2]))
-            result2 = overlay_mask(img2, to_pil_image(activation_map2[0].detach().cpu(), mode='F'), alpha=0.5)
+            result2, _ = overlay_mask(img2, to_pil_image(activation_map2[0].detach().cpu(), mode='F'), alpha=0.5)
+            _, mask2 = overlay_mask(img2, to_pil_image(activation_map2[0].detach().cpu(), mode='F'), alpha=0.5, colormap='Greys')
 
-            # Get euclidean distance
-            before_distance = (emb1.detach() - emb2.detach()).square().sum().sqrt()
+            # Get inner product
+            before_ip = torch.dot(emb1.detach().squeeze(0),
+                                  emb2.detach().squeeze(0))
 
             # Display it
             fig = plt.figure()
@@ -122,36 +125,43 @@ class DistinguishFeat(InfluentialSample):
             ax=fig.add_subplot(1,2,2)
             ax.imshow(result2)
             plt.axis('off')
-
-            plt.suptitle('D = {:.4f}'.format(before_distance), fontsize=10)
-            # plt.show()
+            plt.suptitle('Before inner product (un-normalized) = {:.4f}'.format(before_ip), fontsize=10)
             plt.savefig('./{}/{}/{}_{}/{}_{}.png'.format(base_dir, self.dataset_name,
                                                          wrong_cls, confuse_cls,
                                                          ind1, ind2))
             plt.close()
 
-        # # Remove background
-        # img1_after = remove_background(dl.dataset.im_paths[ind1])
-        # img2_after = remove_background(dl.dataset.im_paths[ind2])
-        #
-        # img1_after_trans = self.data_transforms(img1_after)
-        # img2_after_trans = self.data_transforms(img2_after)
-        #
-        # emb1_after = self.model(img1_after_trans.unsqueeze(0).cuda()).detach()
-        # emb2_after = self.model(img2_after_trans.unsqueeze(0).cuda()).detach()
-        # after_distance = (emb1_after - emb2_after).square().sum().sqrt()
-        #
-        # ax=fig.add_subplot(2,2,3)
-        # ax.imshow(img1_after)
-        # plt.axis('off')
-        #
-        # ax=fig.add_subplot(2,2,4)
-        # ax.imshow(img2_after)
-        # plt.axis('off')
-        # plt.suptitle('Before D = {:.4f}, After D = {:.4f}'.format(before_distance, after_distance), fontsize=10)
-        # plt.savefig('./{}/{}/{}_{}/{}_{}.png'.format(base_dir, self.dataset_name,
-        #                                                 interested_cls[0], interested_cls[1],
-        #                                                 ind1, ind2))
+            # Remove background
+            # img1_after = np.asarray(img1)
+            # if len(img1_after.shape) < 3:  # create a dummy axis if img is single channel
+            #     img1_after = img1_after[:, :, np.newaxis]
+            # highlight_x, highlight_y = np.where(mask1[:, :, 0] < 100)
+            # img1_after[highlight_x, highlight_y, :] = 255.
+            # img1_after = Image.fromarray(img1_after)
+            #
+            # img2_after = np.asarray(img2)
+            # if len(img2_after.shape) < 3:  # create a dummy axis if img is single channel
+            #     img2_after = img2_after[:, :, np.newaxis]
+            # highlight_x, highlight_y = np.where(mask2[:, :, 0] < 100)
+            # img2_after[highlight_x, highlight_y, :] = 255.
+            # img2_after = Image.fromarray(img2_after)
+            #
+            # img1_after_trans = self.data_transforms(img1_after)
+            # img2_after_trans = self.data_transforms(img2_after)
+            #
+            # emb1_after = model_copy(img1_after_trans.unsqueeze(0).cuda()).detach()
+            # emb2_after = model_copy(img2_after_trans.unsqueeze(0).cuda()).detach()
+            # after_ip = torch.dot(emb1_after.squeeze(0), emb2_after.squeeze(0))
+            #
+            # ax=fig.add_subplot(2,2,3)
+            # ax.imshow(img1_after)
+            # plt.axis('off')
+            #
+            # ax=fig.add_subplot(2,2,4)
+            # ax.imshow(img2_after)
+            # plt.axis('off')
+            # plt.suptitle('Before inner product (un-normalized) = {:.4f}, After inner product (un-normalized) = {:.4f}'.format(before_ip, after_ip), fontsize=10)
+            # plt.show()
 
 
     def GradAnalysis4Train(self, wrong_cls, confuse_cls,
@@ -162,7 +172,7 @@ class DistinguishFeat(InfluentialSample):
         model_copy = self._load_model()
 
         for ind in helpful_indices:
-            cam_extractor = GradCustomize(model_copy, target_layer=model_copy.module[0].base.layer4)  # to last layer
+            cam_extractor = GradCAMCustomize(model_copy, target_layer=model_copy.module[0].base.layer4)  # to last layer
 
             # Get the two embeddings first
             cam_extractor._hooks_enabled = True
@@ -172,7 +182,7 @@ class DistinguishFeat(InfluentialSample):
             score = self.criterion.forward_score(out, cls_label)
             activation_map = cam_extractor(score)
             img = to_pil_image(read_image(dl.dataset.im_paths[ind]))
-            result = overlay_mask(img, to_pil_image(activation_map[0].detach().cpu(), mode='F'), alpha=0.5)
+            result, _ = overlay_mask(img, to_pil_image(activation_map[0].detach().cpu(), mode='F'), alpha=0.5)
 
             fig = plt.figure()
             fig.subplots_adjust(top=0.8)
@@ -195,7 +205,7 @@ class DistinguishFeat(InfluentialSample):
             score = self.criterion.forward_score(out, cls_label)
             activation_map = cam_extractor(score)
             img = to_pil_image(read_image(dl.dataset.im_paths[ind]))
-            result = overlay_mask(img, to_pil_image(activation_map[0].detach().cpu(), mode='F'), alpha=0.5)
+            result, _ = overlay_mask(img, to_pil_image(activation_map[0].detach().cpu(), mode='F'), alpha=0.5)
 
             fig = plt.figure()
             fig.subplots_adjust(top=0.8)
@@ -212,9 +222,9 @@ class DistinguishFeat(InfluentialSample):
 
 if __name__ == '__main__':
 
-    dataset_name = 'cars'
+    dataset_name = 'cub'
     loss_type = 'ProxyNCA_pfix'
-    config_name = 'cars'
+    config_name = 'cub'
     sz_embedding = 512
     seed = 4
     test_crop = False
@@ -224,33 +234,34 @@ if __name__ == '__main__':
     '''Analyze confusing features'''
     confusion_class_pairs = DF.get_confusion_class_pairs()
     for cls_idx in range(len(confusion_class_pairs)):
-        for pair_idx in range(len(confusion_class_pairs[cls_idx])):
-            wrong_cls = confusion_class_pairs[cls_idx][pair_idx][0]
-            confusion_cls = confusion_class_pairs[cls_idx][pair_idx][1]
-            print(wrong_cls, confusion_cls)
-            pred = DF.testing_nn_label.flatten(); label = DF.testing_label.flatten()
-            nn_indices = DF.testing_nn_indices.flatten()
+        # for pair_idx in range(len(confusion_class_pairs[cls_idx])):
+        pair_idx = 0
+        wrong_cls = confusion_class_pairs[cls_idx][pair_idx][0]
+        confusion_cls = confusion_class_pairs[cls_idx][pair_idx][1]
+        print(wrong_cls, confusion_cls)
+        pred = DF.testing_nn_label.flatten(); label = DF.testing_label.flatten()
+        nn_indices = DF.testing_nn_indices.flatten()
 
-            wrong_as_confusion_cls_indices = np.where((pred == confusion_cls) & (label == wrong_cls))[0]
-            wrong_indices = wrong_as_confusion_cls_indices
-            confuse_indices = nn_indices[wrong_as_confusion_cls_indices]
+        wrong_as_confusion_cls_indices = np.where((pred == confusion_cls) & (label == wrong_cls))[0]
+        wrong_indices = wrong_as_confusion_cls_indices
+        confuse_indices = nn_indices[wrong_as_confusion_cls_indices]
 
-            DF.GradAnalysis(
-                         wrong_cls, confusion_cls,
-                         wrong_indices, confuse_indices,
-                         DF.dl_ev, base_dir='Confuse_Vis')
+        DF.GradAnalysis(
+                     wrong_cls, confusion_cls,
+                     wrong_indices, confuse_indices,
+                     DF.dl_ev, base_dir='Confuse_Vis')
 
-            base_dir = 'Confuse_Vis_Train'
-            os.makedirs('./{}/{}'.format(base_dir, DF.dataset_name), exist_ok=True)
-            os.makedirs('./{}/{}/{}_{}/'.format(base_dir, DF.dataset_name, wrong_cls, confusion_cls), exist_ok=True)
-            training_sample_by_influence = DF.temporal_influence_func(wrong_cls, [confusion_cls])
-            helpful_indices = training_sample_by_influence[:50]
-            harmful_indices = training_sample_by_influence[-50:]
-            np.save(
-                './{}/{}/{}_{}/helpful_indices'.format(base_dir, DF.dataset_name, wrong_cls, confusion_cls),
-                helpful_indices)
-            np.save(
-                './{}/{}/{}_{}/harmful_indices'.format(base_dir, DF.dataset_name, wrong_cls, confusion_cls),
-                harmful_indices)
-            DF.GradAnalysis4Train(wrong_cls, confusion_cls, DF.dl_tr)
+        base_dir = 'Confuse_Vis_Train'
+        os.makedirs('./{}/{}'.format(base_dir, DF.dataset_name), exist_ok=True)
+        os.makedirs('./{}/{}/{}_{}/'.format(base_dir, DF.dataset_name, wrong_cls, confusion_cls), exist_ok=True)
+        training_sample_by_influence = DF.temporal_influence_func(wrong_cls, [confusion_cls])
+        helpful_indices = training_sample_by_influence[:50]
+        harmful_indices = training_sample_by_influence[-50:]
+        np.save(
+            './{}/{}/{}_{}/helpful_indices'.format(base_dir, DF.dataset_name, wrong_cls, confusion_cls),
+            helpful_indices)
+        np.save(
+            './{}/{}/{}_{}/harmful_indices'.format(base_dir, DF.dataset_name, wrong_cls, confusion_cls),
+            harmful_indices)
+        DF.GradAnalysis4Train(wrong_cls, confusion_cls, DF.dl_tr)
 

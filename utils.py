@@ -390,7 +390,7 @@ def get_wrong_indices(X, T, N=15):
 
 
 
-def overlay_mask(img: Image.Image, mask: Image.Image, colormap: str = 'jet', alpha: float = 0.7) -> Image.Image:
+def overlay_mask(img: Image.Image, mask: Image.Image, colormap: str = 'jet', alpha: float = 0.7) -> (Image.Image, np.ndarray):
 
     """Overlay a colormapped mask on a background image
 
@@ -433,7 +433,7 @@ def overlay_mask(img: Image.Image, mask: Image.Image, colormap: str = 'jet', alp
         img = img[:, :, np.newaxis]
     overlayed_img = Image.fromarray((alpha * img + (1 - alpha) * overlay).astype(np.uint8))
 
-    return overlayed_img
+    return overlayed_img, overlay
 
 
 
