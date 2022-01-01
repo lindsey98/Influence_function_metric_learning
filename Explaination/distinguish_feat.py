@@ -2,6 +2,7 @@
 import os
 import matplotlib.pyplot as plt
 import numpy as np
+import torch
 from torchvision.transforms.functional import to_pil_image
 from torchvision.io.image import read_image
 from PIL import Image
@@ -16,7 +17,8 @@ from dataset.utils import RGBAToRGB, ScaleIntensities
 from utils import overlay_mask
 from utils import predict_batchwise
 from evaluation import assign_by_euclidian_at_k_indices
-os.environ['CUDA_VISIBLE_DEVICES'] = "0"
+import sklearn
+os.environ['CUDA_VISIBLE_DEVICES'] = "1"
 
 
 class DistinguishFeat(InfluentialSample):
@@ -38,7 +40,7 @@ class DistinguishFeat(InfluentialSample):
                     )
         ])
 
-    def temporal_influence_func(self, wrong_cls, confuse_cls):
+    def temporal_influence_func(self, wrong_indices, confuse_indices):
 
         '''Step 1: All confusion gradient to parameters'''
         theta_orig = self.model.module[-1].weight.data
@@ -49,16 +51,12 @@ class DistinguishFeat(InfluentialSample):
         theta = theta_orig.clone()
 
         # Record original inter-class distance
-        inter_dist_orig, _ = grad_confusion(self.model, all_features, wrong_cls, confuse_cls,
-                                            self.testing_nn_label, self.testing_label,
-                                            self.testing_nn_indices)  # dD/dtheta
+        inter_dist_orig, _ = grad_confusion_pair(self.model, all_features, wrong_indices, confuse_indices)  # dD/dtheta
         print("Original confusion: ", inter_dist_orig)
 
         # Optimization
         for _ in range(50):
-            inter_dist, v = grad_confusion(self.model, all_features, wrong_cls, confuse_cls,
-                                           self.testing_nn_label, self.testing_label,
-                                           self.testing_nn_indices)  # dD/dtheta
+            inter_dist, v = grad_confusion_pair(self.model, all_features, wrong_indices, confuse_indices)  # dD/dtheta
             print("Confusion: ", inter_dist)
             if inter_dist - inter_dist_orig >= 50.:  # FIXME: stopping criteria threshold selection
                 break
@@ -164,11 +162,10 @@ class DistinguishFeat(InfluentialSample):
             # plt.show()
 
 
-    def GradAnalysis4Train(self, wrong_cls, confuse_cls,
+    def GradAnalysis4Train(self,
+                           helpful_indices, harmful_indices,
                            dl, base_dir='Confuse_Vis_Train'):
 
-        helpful_indices = np.load('./{}/{}/{}_{}/helpful_indices.npy'.format(base_dir, self.dataset_name, wrong_cls, confuse_cls))
-        harmful_indices = np.load('./{}/{}/{}_{}/harmful_indices.npy'.format(base_dir, self.dataset_name, wrong_cls, confuse_cls))
         model_copy = self._load_model()
 
         for ind in helpful_indices:
@@ -177,47 +174,41 @@ class DistinguishFeat(InfluentialSample):
             # Get the two embeddings first
             cam_extractor._hooks_enabled = True
             model_copy.zero_grad()
-            out = model_copy(dl.dataset.__getitem__(ind)[0].unsqueeze(0).cuda())
-            cls_label = torch.tensor([dl.dataset.__getitem__(ind)[1]]).cuda()
-            score = self.criterion.forward_score(out, cls_label)
-            activation_map = cam_extractor(score)
+
+            cls_label = self.testing_label[ind]
+            same_cls_indices = (self.testing_label == cls_label).to(torch.float32).nonzero().flatten()
+            same_cls_emb = self.testing_embedding[same_cls_indices]
+
+            distances = sklearn.metrics.pairwise.pairwise_distances(same_cls_emb.detach().cpu().numpy())
+            nn_ind = np.argsort(distances, axis=1)[:, 1][same_cls_indices == ind]
+            nn_ind = same_cls_indices[nn_ind].item()
+
             img = to_pil_image(read_image(dl.dataset.im_paths[ind]))
+            img_nn = to_pil_image(read_image(dl.dataset.im_paths[nn_ind]))
+
+            out = model_copy(dl.dataset.__getitem__(ind)[0].unsqueeze(0).cuda())
+            score = self.criterion.forward_score(out, torch.tensor([dl.dataset.__getitem__(ind)[1]]).cuda())
+            activation_map = cam_extractor(score)
             result, _ = overlay_mask(img, to_pil_image(activation_map[0].detach().cpu(), mode='F'), alpha=0.5)
 
             fig = plt.figure()
             fig.subplots_adjust(top=0.8)
-            plt.imshow(result)
+            ax = fig.add_subplot(2, 2, 1)
+            ax.imshow(img)
             plt.axis('off')
-            # plt.show()
-            plt.savefig('./{}/{}/{}_{}/helpful_{}.png'.format(base_dir, self.dataset_name,
-                                                         wrong_cls, confuse_cls,
-                                                         ind))
-            plt.close()
 
-        for ind in harmful_indices:
-            cam_extractor = GradCustomize(model_copy, target_layer=model_copy.module[0].base.layer4)  # to last layer
-
-            # Get the two embeddings first
-            cam_extractor._hooks_enabled = True
-            model_copy.zero_grad()
-            out = model_copy(dl.dataset.__getitem__(ind)[0].unsqueeze(0).cuda())
-            cls_label = torch.tensor([dl.dataset.__getitem__(ind)[1]]).cuda()
-            score = self.criterion.forward_score(out, cls_label)
-            activation_map = cam_extractor(score)
-            img = to_pil_image(read_image(dl.dataset.im_paths[ind]))
-            result, _ = overlay_mask(img, to_pil_image(activation_map[0].detach().cpu(), mode='F'), alpha=0.5)
-
-            fig = plt.figure()
-            fig.subplots_adjust(top=0.8)
-            plt.imshow(result)
+            ax = fig.add_subplot(2, 2, 2)
+            ax.imshow(img_nn)
             plt.axis('off')
+
+            ax = fig.add_subplot(2, 2, 3)
+            ax.imshow(result)
+            plt.axis('off')
+
+            plt.suptitle('Class = {}, Ind = {}, NN Ind = {}'.format(cls_label, ind, nn_ind))
             # plt.show()
-            plt.savefig('./{}/{}/{}_{}/harmful_{}.png'.format(base_dir, self.dataset_name,
-                                                         wrong_cls, confuse_cls,
-                                                         ind))
+            plt.savefig('./{}/helpful_cls{}_{}.png'.format(base_dir, cls_label, ind))
             plt.close()
-
-
 
 
 if __name__ == '__main__':
@@ -231,37 +222,46 @@ if __name__ == '__main__':
 
     DF = DistinguishFeat(dataset_name, seed, loss_type, config_name, test_crop)
 
-    '''Analyze confusing features'''
-    confusion_class_pairs = DF.get_confusion_class_pairs()
-    for cls_idx in range(len(confusion_class_pairs)):
-        # for pair_idx in range(len(confusion_class_pairs[cls_idx])):
-        pair_idx = 0
-        wrong_cls = confusion_class_pairs[cls_idx][pair_idx][0]
-        confusion_cls = confusion_class_pairs[cls_idx][pair_idx][1]
-        print(wrong_cls, confusion_cls)
-        pred = DF.testing_nn_label.flatten(); label = DF.testing_label.flatten()
-        nn_indices = DF.testing_nn_indices.flatten()
+    '''Analyze confusing features for all confusion classes'''
+    '''Step 1: Visualize all pairs, Find confusion on background pairs'''
+    # confusion_class_pairs = DF.get_confusion_class_pairs()
+    # for cls_idx in range(len(confusion_class_pairs)):
+    #     for pair_idx in [0]:
+    #         wrong_cls = confusion_class_pairs[cls_idx][pair_idx][0]
+    #         confusion_cls = confusion_class_pairs[cls_idx][pair_idx][1]
+    #         print(wrong_cls, confusion_cls)
+    #         pred = DF.testing_nn_label.flatten(); label = DF.testing_label.flatten()
+    #         nn_indices = DF.testing_nn_indices.flatten()
+    #
+    #         wrong_as_confusion_cls_indices = np.where((pred == confusion_cls) & (label == wrong_cls))[0]
+    #         wrong_indices = wrong_as_confusion_cls_indices
+    #         confuse_indices = nn_indices[wrong_as_confusion_cls_indices]
+    #
+    #         DF.GradAnalysis(
+    #                      wrong_cls, confusion_cls,
+    #                      wrong_indices, confuse_indices,
+    #                      DF.dl_ev, base_dir='Confuse_Vis')
+    # exit()
 
-        wrong_as_confusion_cls_indices = np.where((pred == confusion_cls) & (label == wrong_cls))[0]
-        wrong_indices = wrong_as_confusion_cls_indices
-        confuse_indices = nn_indices[wrong_as_confusion_cls_indices]
+    '''Step 2: For confusion on background pairs, visualize influential training'''
+    wrong_cls = 139; confusion_cls = 137
+    wrong_index = 439; confuse_index = 350
+    DF.GradAnalysis(
+         wrong_cls, confusion_cls,
+         [wrong_index], [confuse_index],
+         DF.dl_ev, base_dir='Confuse_Vis_Interest')
 
-        DF.GradAnalysis(
-                     wrong_cls, confusion_cls,
-                     wrong_indices, confuse_indices,
-                     DF.dl_ev, base_dir='Confuse_Vis')
+    base_dir = 'Confuse_Vis_Train/{}/{}_{}/{}_{}'.format(DF.dataset_name, wrong_cls, confusion_cls, wrong_index, confuse_index)
+    os.makedirs(base_dir, exist_ok=True)
+    training_sample_by_influence = DF.temporal_influence_func([wrong_index], [confuse_index])
+    helpful_indices = training_sample_by_influence[:50]
+    harmful_indices = training_sample_by_influence[-50:]
+    np.save('./{}/helpful_indices'.format(base_dir), helpful_indices)
+    np.save('./{}/harmful_indices'.format(base_dir), harmful_indices)
 
-        base_dir = 'Confuse_Vis_Train'
-        os.makedirs('./{}/{}'.format(base_dir, DF.dataset_name), exist_ok=True)
-        os.makedirs('./{}/{}/{}_{}/'.format(base_dir, DF.dataset_name, wrong_cls, confusion_cls), exist_ok=True)
-        training_sample_by_influence = DF.temporal_influence_func(wrong_cls, [confusion_cls])
-        helpful_indices = training_sample_by_influence[:50]
-        harmful_indices = training_sample_by_influence[-50:]
-        np.save(
-            './{}/{}/{}_{}/helpful_indices'.format(base_dir, DF.dataset_name, wrong_cls, confusion_cls),
-            helpful_indices)
-        np.save(
-            './{}/{}/{}_{}/harmful_indices'.format(base_dir, DF.dataset_name, wrong_cls, confusion_cls),
-            harmful_indices)
-        DF.GradAnalysis4Train(wrong_cls, confusion_cls, DF.dl_tr)
+    helpful_indices = np.load('./{}/helpful_indices.npy'.format(base_dir))
+    harmful_indices = np.load('./{}/harmful_indices.npy'.format(base_dir))
+    DF.GradAnalysis4Train(helpful_indices=helpful_indices, harmful_indices=harmful_indices,
+                          dl=DF.dl_tr,
+                          base_dir=base_dir)
 

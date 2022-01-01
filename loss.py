@@ -294,8 +294,8 @@ class ProxyNCA_pfix(torch.nn.Module):
             proxies.data = self.cls_mean.to(proxies.device)
             _optimizer = torch.optim.Adam(params={proxies}, lr=0.1)
             for _ in tqdm(range(10), desc="Initializing the proxies"):
-                mean, var, d_diff = utils.inter_proxy_dist_super(proxies, self.super_classes)
-                _loss = mean + var + d_diff
+                mean, var, _ = utils.inter_proxy_dist_super(proxies, self.super_classes)
+                _loss = mean + var
                 _optimizer.zero_grad()
                 _loss.backward()
                 _optimizer.step()
@@ -328,7 +328,6 @@ class ProxyNCA_pfix(torch.nn.Module):
 
     @torch.no_grad()
     def assign_cls4proxy(self, cls_mean):
-        # if self.super_classes is None:
         cls2proxy = torch.einsum('bi,mi->bm', cls_mean, self.proxies) # class mean to proxy affinity
         row_ind, col_ind = linear_sum_assignment((1-cls2proxy.detach().cpu()).numpy()) # row_ind: which class, col_ind: which proxy
         cls_indx = row_ind.argsort() # class from 1, 2 ... C
@@ -336,21 +335,10 @@ class ProxyNCA_pfix(torch.nn.Module):
         sorted_proxies = col_ind[cls_indx] # proxy indices correponding to class from 1, 2 ... C
         self.proxies.data = self.proxies[sorted_proxies] # sort proxies according to proxy indices
         logging.info('Number of updated proxies: {}'.format(np.sum(sorted_proxies != np.asarray(range(len(self.proxies))))))
-        # else:
-            # for super_cls in set(self.super_classes.detach().cpu().numpy().tolist()):
-            #     proxies_supercls = self.proxies[self.super_classes == super_cls] # find proxies belonging to this superclass category
-            #     clsmean_supercls = cls_mean[self.super_classes == super_cls] # find class means for these classes
-            #     cls2proxy = torch.einsum('bi,mi->bm', clsmean_supercls, proxies_supercls)  # class mean to proxy affinity
-            #     row_ind, col_ind = linear_sum_assignment((1 - cls2proxy.detach().cpu()).numpy())  # row_ind: which class, col_ind: which proxy
-            #     cls_indx = row_ind.argsort()  # class from 1, 2 ... C
-            #     sorted_proxies = col_ind[cls_indx]  # proxy indices correponding to class from 1, 2 ... C
-            #     self.proxies[self.super_classes == super_cls].data = proxies_supercls[sorted_proxies]  # sort proxies according to proxy indices
-            #     logging.info('Number of updated proxies: {} for super class {}'.format(np.sum(sorted_proxies != np.asarray(range(len(proxies_supercls)))),
-            #                                                                            super_cls))
-            #     pass
 
     def forward_score(self, X, T):
-        P = self.proxies
+        P = self.proxies; P.requires_grad = False
+        T.requires_grad = False
         P = self.scale * F.normalize(P, p=2, dim=-1)
         X = self.scale * F.normalize(X, p=2, dim=-1)
 
