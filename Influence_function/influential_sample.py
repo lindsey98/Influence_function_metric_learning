@@ -264,6 +264,22 @@ class InfluentialSample():
             plt.title('Class = {}'.format(classes[i]))
         plt.show()
 
+    def viz_2sample(self, dl, ind1, ind2):
+        class1 = dl.dataset.ys[ind1]
+        class2 = dl.dataset.ys[ind2]
+
+        plt.subplot(1, 2, 1)
+        img = read_image(dl.dataset.im_paths[ind1])
+        plt.imshow(to_pil_image(img))
+        plt.title('Class = {}'.format(class1))
+
+        plt.subplot(1, 2, 2)
+        img = read_image(dl.dataset.im_paths[ind2])
+        plt.imshow(to_pil_image(img))
+        plt.title('Class = {}'.format(class2))
+        plt.show()
+        plt.close()
+
 if __name__ == '__main__':
 
     # dataset_name = 'cars'
