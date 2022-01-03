@@ -4,8 +4,10 @@ from torch.autograd import grad
 from tqdm import tqdm
 import numpy as np
 
+@torch.no_grad()
 def calc_loss_train(model, dl, criterion, indices=None):
     l = []
+    model.eval()
     if indices is not None:
         for ct, (x, t, ind) in tqdm(enumerate(dl)):
             if ind.item() in indices:
@@ -19,6 +21,7 @@ def calc_loss_train(model, dl, criterion, indices=None):
             m = model(x)
             l_this = criterion(m, None, t)
             l.append(l_this.detach().cpu().item())
+    model.train()
     return l
 
 def loss_change_train(model, criterion, dl_tr, params_prev, params_cur):
@@ -34,6 +37,9 @@ def loss_change_train(model, criterion, dl_tr, params_prev, params_cur):
     return np.asarray(l_prev), np.asarray(l_cur)
 
 def calc_inter_dist_pair(feat_cls1, feat_cls2):
+    if len(feat_cls1.shape) == 1 and len(feat_cls2.shape) == 1:
+        dist = (feat_cls1 - feat_cls2).square().sum()
+        return dist
     inter_dis = torch.cdist(feat_cls1, feat_cls2).square()  # inter class distance
     inter_dis = inter_dis.diagonal().sum() # only sum aligned pairs
     return inter_dis
@@ -44,6 +50,7 @@ def grad_confusion_pair(model, all_features, wrong_indices, confusion_indices):
     confuse_cls_features = all_features[confusion_indices]
 
     model.zero_grad()
+    model.eval()
     cls_features = cls_features.cuda()
     confuse_cls_features = confuse_cls_features.cuda()
 
@@ -56,6 +63,7 @@ def grad_confusion_pair(model, all_features, wrong_indices, confusion_indices):
     grad_confusion2params = [y.detach().cpu() for y in grad_confusion2params]  # accumulate gradients
     confusion = confusion.detach().cpu().item()  # accumulate confusion
 
+    model.train()
     return confusion, grad_confusion2params
 
 def grad_confusion(model, all_features, cls, confusion_classes,

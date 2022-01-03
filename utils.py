@@ -56,7 +56,6 @@ def predict_batchwise(model, dataloader):
         Predict on a batch
         :return: list with N lists, where N = |{image, label, index}|
     '''
-    # print(list(model.parameters())[0].device)
     model_is_training = model.training
     model.eval()
     ds = dataloader.dataset
@@ -79,6 +78,24 @@ def predict_batchwise(model, dataloader):
     model.train()
     model.train(model_is_training) # revert to previous training state
     return [torch.stack(A[i]) for i in range(len(A))]
+
+@torch.no_grad()
+def predict_batchwise_debug(model, dataloader):
+    '''
+        Predict on a batch
+        :return: list with N lists, where N = |{image, label, index}|
+    '''
+    model.eval()
+    embeddings = torch.tensor([])
+    labels = torch.tensor([])
+    # extract batches (A becomes list of samples)
+    for ct, (x, y, _) in tqdm(enumerate(dataloader)):
+        # predict model output for image
+        m = model(x.cuda())
+        embeddings = torch.cat((embeddings, m.detach().cpu()), dim=0)
+        labels = torch.cat((labels, y), dim=0)
+    model.train()
+    return embeddings, labels, _
 
 @torch.no_grad()
 def predict_batchwise_loss(model, dataloader, criterion):

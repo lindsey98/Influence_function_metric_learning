@@ -57,8 +57,7 @@ def load_single_sample(config_name, img_path, test_resize=False):
 def prepare_data(data_name='cub',
                  config_name='',
                  batch_size=1,
-                 test_crop=False,
-                 ):
+                 test_crop=False):
     '''
         Prepare dataloader
         :param data_name: dataset used
@@ -295,7 +294,7 @@ def get_wrong_indices(X, T, topk=None):
     else:
         top_wrong_classes = unique_labels[torch.argsort(wrong_freq, descending=True)[:topk]].numpy()
 
-    return wrong_ind, top_wrong_classes, wrong_labels, wrong_preds
+    return wrong_ind, top_wrong_classes.astype(int), wrong_labels, wrong_preds
 
 
 if __name__ == '__main__':
