@@ -79,6 +79,7 @@ class DistinguishFeat(InfluentialSample):
         self.viz_sample(training_sample_by_influence[-10:])  # harmful
         return training_sample_by_influence
 
+
     def GradAnalysis(self, wrong_cls, confuse_cls,
                      wrong_indices, confuse_indices,
                      dl, base_dir='Grad_Test'): # Only for confusion analysis
@@ -102,7 +103,6 @@ class DistinguishFeat(InfluentialSample):
             activation_map1 = cam_extractor1(torch.dot(emb1.squeeze(0), emb2.detach().squeeze(0)))
             img1 = to_pil_image(read_image(dl.dataset.im_paths[ind1]))
             result1, _ = overlay_mask(img1, to_pil_image(activation_map1[0].detach().cpu(), mode='F'), alpha=0.5)
-            _, mask1 = overlay_mask(img1, to_pil_image(activation_map1[0].detach().cpu(), mode='F'), alpha=0.5, colormap='Greys')
 
             cam_extractor2._hooks_enabled = True
             model_copy.zero_grad()
@@ -111,11 +111,6 @@ class DistinguishFeat(InfluentialSample):
             activation_map2 = cam_extractor2(torch.dot(emb1.detach().squeeze(0), emb2.squeeze(0)))
             img2 = to_pil_image(read_image(dl.dataset.im_paths[ind2]))
             result2, _ = overlay_mask(img2, to_pil_image(activation_map2[0].detach().cpu(), mode='F'), alpha=0.5)
-            _, mask2 = overlay_mask(img2, to_pil_image(activation_map2[0].detach().cpu(), mode='F'), alpha=0.5, colormap='Greys')
-
-            # Get inner product
-            before_ip = torch.dot(emb1.detach().squeeze(0),
-                                  emb2.detach().squeeze(0))
 
             # Display it
             fig = plt.figure()
@@ -136,10 +131,10 @@ class DistinguishFeat(InfluentialSample):
             ax=fig.add_subplot(2, 2, 4)
             ax.imshow(result2)
             plt.axis('off')
-            plt.suptitle('Before inner product (un-normalized) = {:.4f}'.format(before_ip), fontsize=10)
-            plt.savefig('./{}/{}/{}_{}/{}_{}.png'.format(base_dir, self.dataset_name,
-                                                         wrong_cls, confuse_cls,
-                                                         ind1, ind2))
+            plt.show()
+            # plt.savefig('./{}/{}/{}_{}/{}_{}.png'.format(base_dir, self.dataset_name,
+            #                                              wrong_cls, confuse_cls,
+            #                                              ind1, ind2))
             plt.close()
 
 
@@ -191,22 +186,17 @@ class DistinguishFeat(InfluentialSample):
     #         plt.savefig('./{}/helpful_cls{}_{}.png'.format(base_dir, cls_label, ind))
     #         plt.close()
 
-    def HelpfulTrain(self,
-                     wrong_ind, confusion_ind,
-                     helpful_indices, orig_NN_indices, curr_NN_indices,
-                     cur_weight_path,
-                     dl,
-                     base_dir):
+    def VisTrain(self, wrong_ind, confusion_ind,
+                 interest_indices, orig_NN_indices, curr_NN_indices,
+                 model1, model2,
+                 dl,
+                 base_dir):
 
         plt_dir = './{}/{}/{}_{}'.format(base_dir, self.dataset_name, wrong_ind, confusion_ind)
         os.makedirs(plt_dir, exist_ok=True)
-        model_copy = self._load_model()
-        model_copy.load_state_dict(torch.load(cur_weight_path))
-        model_copy_orig = self._load_model()
-        model_copy.eval()
-        model_copy_orig.eval()
+        model1.eval(); model2.eval()
 
-        for kk, ind in enumerate(helpful_indices):
+        for kk, ind in enumerate(interest_indices):
             fig = plt.figure()
             fig.subplots_adjust(top=0.8)
 
@@ -225,93 +215,23 @@ class DistinguishFeat(InfluentialSample):
             ax.title.set_text('Ind = {}, Class = {}'.format(curr_NN_indices[kk], dl.dataset.ys[curr_NN_indices[kk]]))
             plt.axis('off')
 
-            cam_extractor1 = GradCAMCustomize(model_copy_orig,
-                                              target_layer=model_copy_orig.module[0].base.layer4)  # to last layer
-            cam_extractor2 = GradCAMCustomize(model_copy,
-                                              target_layer=model_copy.module[0].base.layer4)  # to last layer
+            cam_extractor1 = GradCAMCustomize(model1,
+                                              target_layer=model1.module[0].base.layer4)  # to last layer
+            cam_extractor2 = GradCAMCustomize(model2,
+                                              target_layer=model2.module[0].base.layer4)  # to last layer
             cam_extractor1._hooks_enabled = True
-            model_copy_orig.zero_grad()
-            emb1 = model_copy_orig(dl.dataset.__getitem__(ind)[0].unsqueeze(0).cuda())
-            emb2 = model_copy_orig(dl.dataset.__getitem__(orig_NN_indices[kk])[0].unsqueeze(0).cuda())
+            model1.zero_grad()
+            emb1 = model1(dl.dataset.__getitem__(ind)[0].unsqueeze(0).cuda())
+            emb2 = model1(dl.dataset.__getitem__(orig_NN_indices[kk])[0].unsqueeze(0).cuda())
             activation_map1 = cam_extractor1(torch.dot(emb1.detach().squeeze(0), emb2.squeeze(0)))
             img1 = to_pil_image(read_image(dl.dataset.im_paths[orig_NN_indices[kk]]))
             result1, _ = overlay_mask(img1, to_pil_image(activation_map1[0].detach().cpu(), mode='F'), alpha=0.5)
             d1 = (emb1.squeeze(0) - emb2.squeeze(0)).square().sum()
 
             cam_extractor2._hooks_enabled = True
-            model_copy.zero_grad()
-            emb1 = model_copy(dl.dataset.__getitem__(ind)[0].unsqueeze(0).cuda())
-            emb2 = model_copy(dl.dataset.__getitem__(curr_NN_indices[kk])[0].unsqueeze(0).cuda())
-            activation_map2 = cam_extractor2(torch.dot(emb1.detach().squeeze(0), emb2.squeeze(0)))
-            img2 = to_pil_image(read_image(dl.dataset.im_paths[curr_NN_indices[kk]]))
-            result2, _ = overlay_mask(img2, to_pil_image(activation_map2[0].detach().cpu(), mode='F'), alpha=0.5)
-            d2 = (emb1.squeeze(0) - emb2.squeeze(0)).square().sum()
-
-
-            ax = fig.add_subplot(2, 3, 5)
-            ax.imshow(result1)
-            ax.title.set_text('Distance = {:.4f}'.format(d1))
-            plt.axis('off')
-
-            ax = fig.add_subplot(2, 3, 6)
-            ax.imshow(result2)
-            ax.title.set_text('Distance = {:.4f}'.format(d2))
-            plt.axis('off')
-            plt.savefig('./{}/{}.png'.format(plt_dir, ind))
-            plt.close()
-
-        pass
-
-    def SacrificedTrain(self, wrong_ind, confusion_ind,
-                        sacrifice_indices, orig_NN_indices, curr_NN_indices,
-                        cur_weight_path,
-                        dl,
-                        base_dir):
-
-        plt_dir = './{}/{}/{}_{}'.format(base_dir, self.dataset_name, wrong_ind, confusion_ind)
-        os.makedirs(plt_dir, exist_ok=True)
-        model_copy = self._load_model()
-        model_copy.load_state_dict(torch.load(cur_weight_path))
-        model_copy_orig = self._load_model()
-        model_copy.eval()
-        model_copy_orig.eval()
-
-        for kk, ind in enumerate(sacrifice_indices):
-            fig = plt.figure()
-            fig.subplots_adjust(top=0.8)
-
-            ax = fig.add_subplot(2, 3, 1)
-            ax.imshow(to_pil_image(read_image(dl.dataset.im_paths[ind])))
-            ax.title.set_text('Ind = {}, Class = {}'.format(ind, dl.dataset.ys[ind]))
-            plt.axis('off')
-
-            ax = fig.add_subplot(2, 3, 2)
-            ax.imshow(to_pil_image(read_image(dl.dataset.im_paths[orig_NN_indices[kk]])))
-            ax.title.set_text('Ind = {}, Class = {}'.format(orig_NN_indices[kk], dl.dataset.ys[orig_NN_indices[kk]]))
-            plt.axis('off')
-
-            ax = fig.add_subplot(2, 3, 3)
-            ax.imshow(to_pil_image(read_image(dl.dataset.im_paths[curr_NN_indices[kk]])))
-            ax.title.set_text('Ind = {}, Class = {}'.format(curr_NN_indices[kk], dl.dataset.ys[curr_NN_indices[kk]]))
-            plt.axis('off')
-
-            cam_extractor1 = GradCAMCustomize(model_copy_orig,
-                                              target_layer=model_copy_orig.module[0].base.layer4)  # to last layer
-            cam_extractor2 = GradCAMCustomize(model_copy,
-                                              target_layer=model_copy.module[0].base.layer4)  # to last layer
-            cam_extractor1._hooks_enabled = True
-            model_copy_orig.zero_grad()
-            emb1 = model_copy_orig(dl.dataset.__getitem__(ind)[0].unsqueeze(0).cuda())
-            emb2 = model_copy_orig(dl.dataset.__getitem__(orig_NN_indices[kk])[0].unsqueeze(0).cuda())
-            activation_map1 = cam_extractor1(torch.dot(emb1.detach().squeeze(0), emb2.squeeze(0)))
-            img1 = to_pil_image(read_image(dl.dataset.im_paths[orig_NN_indices[kk]]))
-            result1, _ = overlay_mask(img1, to_pil_image(activation_map1[0].detach().cpu(), mode='F'), alpha=0.5)
-            d1 = (emb1.squeeze(0) - emb2.squeeze(0)).square().sum()
-
-            cam_extractor2._hooks_enabled = True
-            model_copy.zero_grad()
-            emb1 = model_copy(dl.dataset.__getitem__(ind)[0].unsqueeze(0).cuda())
-            emb2 = model_copy(dl.dataset.__getitem__(curr_NN_indices[kk])[0].unsqueeze(0).cuda())
+            model2.zero_grad()
+            emb1 = model2(dl.dataset.__getitem__(ind)[0].unsqueeze(0).cuda())
+            emb2 = model2(dl.dataset.__getitem__(curr_NN_indices[kk])[0].unsqueeze(0).cuda())
             activation_map2 = cam_extractor2(torch.dot(emb1.detach().squeeze(0), emb2.squeeze(0)))
             img2 = to_pil_image(read_image(dl.dataset.im_paths[curr_NN_indices[kk]]))
             result2, _ = overlay_mask(img2, to_pil_image(activation_map2[0].detach().cpu(), mode='F'), alpha=0.5)
@@ -326,8 +246,145 @@ class DistinguishFeat(InfluentialSample):
             ax.imshow(result2)
             ax.title.set_text('Distance = {:.4f}'.format(d2))
             plt.axis('off')
+
             plt.savefig('./{}/{}.png'.format(plt_dir, ind))
             plt.close()
+
+    # def HelpfulTrain(self,
+    #                  wrong_ind, confusion_ind,
+    #                  helpful_indices, orig_NN_indices, curr_NN_indices,
+    #                  cur_weight_path,
+    #                  dl,
+    #                  base_dir):
+    #
+    #     plt_dir = './{}/{}/{}_{}'.format(base_dir, self.dataset_name, wrong_ind, confusion_ind)
+    #     os.makedirs(plt_dir, exist_ok=True)
+    #     model_copy = self._load_model()
+    #     model_copy.load_state_dict(torch.load(cur_weight_path))
+    #
+    #     model_copy_orig = self._load_model()
+    #     model_copy.eval()
+    #     model_copy_orig.eval()
+    #
+    #     for kk, ind in enumerate(helpful_indices):
+    #         fig = plt.figure()
+    #         fig.subplots_adjust(top=0.8)
+    #
+    #         ax = fig.add_subplot(2, 3, 1)
+    #         ax.imshow(to_pil_image(read_image(dl.dataset.im_paths[ind])))
+    #         ax.title.set_text('Ind = {}, Class = {}'.format(ind, dl.dataset.ys[ind]))
+    #         plt.axis('off')
+    #
+    #         ax = fig.add_subplot(2, 3, 2)
+    #         ax.imshow(to_pil_image(read_image(dl.dataset.im_paths[orig_NN_indices[kk]])))
+    #         ax.title.set_text('Ind = {}, Class = {}'.format(orig_NN_indices[kk], dl.dataset.ys[orig_NN_indices[kk]]))
+    #         plt.axis('off')
+    #
+    #         ax = fig.add_subplot(2, 3, 3)
+    #         ax.imshow(to_pil_image(read_image(dl.dataset.im_paths[curr_NN_indices[kk]])))
+    #         ax.title.set_text('Ind = {}, Class = {}'.format(curr_NN_indices[kk], dl.dataset.ys[curr_NN_indices[kk]]))
+    #         plt.axis('off')
+    #
+    #         cam_extractor1 = GradCAMCustomize(model_copy_orig,
+    #                                           target_layer=model_copy_orig.module[0].base.layer4)  # to last layer
+    #         cam_extractor2 = GradCAMCustomize(model_copy,
+    #                                           target_layer=model_copy.module[0].base.layer4)  # to last layer
+    #         cam_extractor1._hooks_enabled = True
+    #         model_copy_orig.zero_grad()
+    #         emb1 = model_copy_orig(dl.dataset.__getitem__(ind)[0].unsqueeze(0).cuda())
+    #         emb2 = model_copy_orig(dl.dataset.__getitem__(orig_NN_indices[kk])[0].unsqueeze(0).cuda())
+    #         activation_map1 = cam_extractor1(torch.dot(emb1.detach().squeeze(0), emb2.squeeze(0)))
+    #         img1 = to_pil_image(read_image(dl.dataset.im_paths[orig_NN_indices[kk]]))
+    #         result1, _ = overlay_mask(img1, to_pil_image(activation_map1[0].detach().cpu(), mode='F'), alpha=0.5)
+    #         d1 = (emb1.squeeze(0) - emb2.squeeze(0)).square().sum()
+    #
+    #         cam_extractor2._hooks_enabled = True
+    #         model_copy.zero_grad()
+    #         emb1 = model_copy(dl.dataset.__getitem__(ind)[0].unsqueeze(0).cuda())
+    #         emb2 = model_copy(dl.dataset.__getitem__(curr_NN_indices[kk])[0].unsqueeze(0).cuda())
+    #         activation_map2 = cam_extractor2(torch.dot(emb1.detach().squeeze(0), emb2.squeeze(0)))
+    #         img2 = to_pil_image(read_image(dl.dataset.im_paths[curr_NN_indices[kk]]))
+    #         result2, _ = overlay_mask(img2, to_pil_image(activation_map2[0].detach().cpu(), mode='F'), alpha=0.5)
+    #         d2 = (emb1.squeeze(0) - emb2.squeeze(0)).square().sum()
+    #
+    #         ax = fig.add_subplot(2, 3, 5)
+    #         ax.imshow(result1)
+    #         ax.title.set_text('Distance = {:.4f}'.format(d1))
+    #         plt.axis('off')
+    #
+    #         ax = fig.add_subplot(2, 3, 6)
+    #         ax.imshow(result2)
+    #         ax.title.set_text('Distance = {:.4f}'.format(d2))
+    #         plt.axis('off')
+    #         plt.savefig('./{}/{}.png'.format(plt_dir, ind))
+    #         plt.close()
+    #
+    # def SacrificedTrain(self, wrong_ind, confusion_ind,
+    #                     sacrifice_indices, orig_NN_indices, curr_NN_indices,
+    #                     cur_weight_path,
+    #                     dl,
+    #                     base_dir):
+    #
+    #     plt_dir = './{}/{}/{}_{}'.format(base_dir, self.dataset_name, wrong_ind, confusion_ind)
+    #     os.makedirs(plt_dir, exist_ok=True)
+    #     model_copy = self._load_model()
+    #     model_copy.load_state_dict(torch.load(cur_weight_path))
+    #     model_copy_orig = self._load_model()
+    #     model_copy.eval()
+    #     model_copy_orig.eval()
+    #
+    #     for kk, ind in enumerate(sacrifice_indices):
+    #         fig = plt.figure()
+    #         fig.subplots_adjust(top=0.8)
+    #
+    #         ax = fig.add_subplot(2, 3, 1)
+    #         ax.imshow(to_pil_image(read_image(dl.dataset.im_paths[ind])))
+    #         ax.title.set_text('Ind = {}, Class = {}'.format(ind, dl.dataset.ys[ind]))
+    #         plt.axis('off')
+    #
+    #         ax = fig.add_subplot(2, 3, 2)
+    #         ax.imshow(to_pil_image(read_image(dl.dataset.im_paths[orig_NN_indices[kk]])))
+    #         ax.title.set_text('Ind = {}, Class = {}'.format(orig_NN_indices[kk], dl.dataset.ys[orig_NN_indices[kk]]))
+    #         plt.axis('off')
+    #
+    #         ax = fig.add_subplot(2, 3, 3)
+    #         ax.imshow(to_pil_image(read_image(dl.dataset.im_paths[curr_NN_indices[kk]])))
+    #         ax.title.set_text('Ind = {}, Class = {}'.format(curr_NN_indices[kk], dl.dataset.ys[curr_NN_indices[kk]]))
+    #         plt.axis('off')
+    #
+    #         cam_extractor1 = GradCAMCustomize(model_copy_orig,
+    #                                           target_layer=model_copy_orig.module[0].base.layer4)  # to last layer
+    #         cam_extractor2 = GradCAMCustomize(model_copy,
+    #                                           target_layer=model_copy.module[0].base.layer4)  # to last layer
+    #         cam_extractor1._hooks_enabled = True
+    #         model_copy_orig.zero_grad()
+    #         emb1 = model_copy_orig(dl.dataset.__getitem__(ind)[0].unsqueeze(0).cuda())
+    #         emb2 = model_copy_orig(dl.dataset.__getitem__(orig_NN_indices[kk])[0].unsqueeze(0).cuda())
+    #         activation_map1 = cam_extractor1(torch.dot(emb1.detach().squeeze(0), emb2.squeeze(0)))
+    #         img1 = to_pil_image(read_image(dl.dataset.im_paths[orig_NN_indices[kk]]))
+    #         result1, _ = overlay_mask(img1, to_pil_image(activation_map1[0].detach().cpu(), mode='F'), alpha=0.5)
+    #         d1 = (emb1.squeeze(0) - emb2.squeeze(0)).square().sum()
+    #
+    #         cam_extractor2._hooks_enabled = True
+    #         model_copy.zero_grad()
+    #         emb1 = model_copy(dl.dataset.__getitem__(ind)[0].unsqueeze(0).cuda())
+    #         emb2 = model_copy(dl.dataset.__getitem__(curr_NN_indices[kk])[0].unsqueeze(0).cuda())
+    #         activation_map2 = cam_extractor2(torch.dot(emb1.detach().squeeze(0), emb2.squeeze(0)))
+    #         img2 = to_pil_image(read_image(dl.dataset.im_paths[curr_NN_indices[kk]]))
+    #         result2, _ = overlay_mask(img2, to_pil_image(activation_map2[0].detach().cpu(), mode='F'), alpha=0.5)
+    #         d2 = (emb1.squeeze(0) - emb2.squeeze(0)).square().sum()
+    #
+    #         ax = fig.add_subplot(2, 3, 5)
+    #         ax.imshow(result1)
+    #         ax.title.set_text('Distance = {:.4f}'.format(d1))
+    #         plt.axis('off')
+    #
+    #         ax = fig.add_subplot(2, 3, 6)
+    #         ax.imshow(result2)
+    #         ax.title.set_text('Distance = {:.4f}'.format(d2))
+    #         plt.axis('off')
+    #         plt.savefig('./{}/{}.png'.format(plt_dir, ind))
+    #         plt.close()
 
 if __name__ == '__main__':
 
@@ -355,13 +412,13 @@ if __name__ == '__main__':
     #         wrong_indices = wrong_as_confusion_cls_indices
     #         confuse_indices = nn_indices[wrong_as_confusion_cls_indices]
     #
-    #         DF.GradAnalysis(
-    #                      wrong_cls, confusion_cls,
-    #                      wrong_indices, confuse_indices,
-    #                      DF.dl_ev, base_dir='Confuse_Vis')
+    #         DF.GradAnalysis( wrong_cls, confusion_cls,
+    #                          wrong_indices, confuse_indices,
+    #                          DF.dl_ev, base_dir='Confuse_Vis')
+    # exit()
 
     '''Step 2: Human Confuse, Model Confuse: Do Influential sample training'''
-    wrong_index = 988; confuse_index = 1751
+    wrong_index = 2541; confuse_index = 2661
     base_dir = 'Confuse_pair_influential_data'
     new_weight_path = 'models/dvi_data_{}_{}_loss{}_{}_{}/ResNet_512_Model/Epoch_{}/{}_{}_trainval_{}_{}.pth'.format(
                                                                                                             dataset_name,
@@ -373,13 +430,13 @@ if __name__ == '__main__':
                                                                                                            dataset_name,
                                                                                                            512, seed) # reload weights as new
 
-    training_sample_by_influence = DF.temporal_influence_func([wrong_index], [confuse_index])
-    helpful_indices = training_sample_by_influence[:10]
-    harmful_indices = training_sample_by_influence[-10:]
-    os.makedirs(base_dir, exist_ok=True)
-    np.save('./{}/helpful_indices_{}_{}'.format(base_dir, wrong_index, confuse_index), helpful_indices)
-    np.save('./{}/harmful_indices_{}_{}'.format(base_dir, wrong_index, confuse_index), harmful_indices)
-    exit()
+    # training_sample_by_influence = DF.temporal_influence_func([wrong_index], [confuse_index])
+    # helpful_indices = training_sample_by_influence[:10]
+    # harmful_indices = training_sample_by_influence[-10:]
+    # os.makedirs(base_dir, exist_ok=True)
+    # np.save('./{}/helpful_indices_{}_{}'.format(base_dir, wrong_index, confuse_index), helpful_indices)
+    # np.save('./{}/harmful_indices_{}_{}'.format(base_dir, wrong_index, confuse_index), harmful_indices)
+    # exit()
 
     '''Step 3: Train the model'''
     # Run in shell
@@ -412,51 +469,60 @@ if __name__ == '__main__':
     # print("After distance to correct neighbor: ", d1)
 
     '''Step 5: Find cases (normal training samples not in harmful/helpful) where its original 1st NN is no longer its 1st NN'''
-    # helpful_indices = np.load('./{}/helpful_indices_{}_{}.npy'.format(base_dir, wrong_index, confuse_index))
-    # harmful_indices = np.load('./{}/harmful_indices_{}_{}.npy'.format(base_dir, wrong_index, confuse_index))
-
+    helpful_indices = np.load('./{}/helpful_indices_{}_{}.npy'.format(base_dir, wrong_index, confuse_index))
+    harmful_indices = np.load('./{}/harmful_indices_{}_{}.npy'.format(base_dir, wrong_index, confuse_index))
     # predict training 1st NN (original)
-    # train_nn_indices_orig, train_nn_label_orig = assign_by_euclidian_at_k_indices(DF.train_embedding, DF.train_label, 1)
+    train_nn_indices_orig, train_nn_label_orig = assign_by_euclidian_at_k_indices(DF.train_embedding, DF.train_label, 1)
+    # predict training 1st NN within the same class (original)
+    distances = sklearn.metrics.pairwise.pairwise_distances(DF.train_embedding)  # (N_train, N_train)
+    diff_cls_mask = (DF.train_label[:, None] != DF.train_label).detach().cpu().numpy().nonzero()
+    distances[diff_cls_mask[0], diff_cls_mask[1]] = distances.max() + 1
+    train_nn_indices_same_cls_orig = np.argsort(distances, axis=1)[:, 1]
 
+    new_model = DF._load_model()
+    new_model.load_state_dict(torch.load(new_weight_path))
+    train_embedding_curr, train_label, _ = predict_batchwise_debug(new_model, DF.dl_tr)
     # predict training 1st NN (after training)
-    # new_model = DF._load_model()
-    # new_model.load_state_dict(torch.load(new_weight_path))
-    # train_embedding_curr, train_label, _ = predict_batchwise_debug(new_model, DF.dl_tr)
-    # train_nn_indices_curr, train_nn_label_curr = assign_by_euclidian_at_k_indices(train_embedding_curr, train_label, 1)
+    train_nn_indices_curr, train_nn_label_curr = assign_by_euclidian_at_k_indices(train_embedding_curr, train_label, 1)
+    # predict training 1st NN within the same class(after training)
+    distances = sklearn.metrics.pairwise.pairwise_distances(train_embedding_curr)  # (N_test, N_test)
+    distances[diff_cls_mask[0], diff_cls_mask[1]] = distances.max() + 1
+    train_nn_indices_same_cls_curr = np.argsort(distances, axis=1)[:, 1]
 
-    # # Find whether 1st NN has changed from correct to wrong class (Similar -> Dissimilar)
-    # inconsistent_wrong_indices = ((train_nn_label_orig.flatten() == train_label.detach().cpu().numpy()) &
-    #                               (train_nn_label_orig.flatten() != train_nn_label_curr.flatten())).nonzero()[0]
-    # inconsistent_wrong_indices = set(inconsistent_wrong_indices.tolist()) - set(helpful_indices.tolist()) - set(harmful_indices.tolist())
-    # inconsistent_wrong_indices = list(inconsistent_wrong_indices)
-    #
-    # print(len(inconsistent_wrong_indices))
+    # Find whether 1st NN has changed from correct to wrong class (Similar -> Dissimilar)
+    inconsistent_wrong_indices = ((train_nn_label_orig.flatten() == train_label.detach().cpu().numpy()) &
+                                  (train_nn_label_orig.flatten() != train_nn_label_curr.flatten())).nonzero()[0]
+    inconsistent_wrong_indices = set(inconsistent_wrong_indices.tolist()) - set(helpful_indices.tolist()) - set(harmful_indices.tolist())
+    inconsistent_wrong_indices = list(inconsistent_wrong_indices)
+    print(len(inconsistent_wrong_indices))
 
     # Plot out (Sacrificed samples, its original NN, and its current NN)
-    # DF.SacrificedTrain(wrong_ind=wrong_index, confusion_ind=confuse_index,
-    #                    sacrifice_indices=inconsistent_wrong_indices,
-    #                    orig_NN_indices=train_nn_indices_orig.flatten()[inconsistent_wrong_indices],
-    #                    curr_NN_indices=train_nn_indices_curr.flatten()[inconsistent_wrong_indices],
-    #                    cur_weight_path=new_weight_path,
-    #                    dl=DF.dl_tr, base_dir='Confuse_sacrifice_train')
+    model_orig = DF._load_model()
+    model_curr = DF._load_model()
+    model_curr.load_state_dict(torch.load(new_weight_path))
+
+    DF.VisTrain(wrong_ind=wrong_index, confusion_ind=confuse_index,
+                       interest_indices=inconsistent_wrong_indices,
+                       orig_NN_indices=train_nn_indices_orig.flatten()[inconsistent_wrong_indices],
+                       curr_NN_indices=train_nn_indices_curr.flatten()[inconsistent_wrong_indices],
+                       model1=model_orig, model2=model_curr,
+                       dl=DF.dl_tr, base_dir='Confuse_sacrifice_train')
 
     # Plot out helpful training
-    # DF.HelpfulTrain(helpful_indices=helpful_indices,
-    #                 wrong_ind=wrong_index,
-    #                 confusion_ind=confuse_index,
-    #                 orig_NN_indices=train_nn_indices_orig.flatten()[helpful_indices],
-    #                 curr_NN_indices=train_nn_indices_curr.flatten()[helpful_indices],
-    #                 cur_weight_path=new_weight_path,
-    #                 dl=DF.dl_tr,
-    #                 base_dir='Confuse_helpful_train'
-    #                 )
+    DF.VisTrain(wrong_ind=wrong_index, confusion_ind=confuse_index,
+                interest_indices=helpful_indices,
+                orig_NN_indices=train_nn_indices_same_cls_orig.flatten()[helpful_indices],
+                curr_NN_indices=train_nn_indices_same_cls_curr.flatten()[helpful_indices],
+                model1=model_orig, model2=model_curr,
+                dl=DF.dl_tr,
+                base_dir='Confuse_helpful_train'
+            )
 
-    # DF.HelpfulTrain(helpful_indices=harmful_indices,
-    #                 wrong_ind=wrong_index,
-    #                 confusion_ind=confuse_index,
-    #                 orig_NN_indices=train_nn_indices_orig.flatten()[harmful_indices],
-    #                 curr_NN_indices=train_nn_indices_curr.flatten()[harmful_indices],
-    #                 cur_weight_path=new_weight_path,
-    #                 dl=DF.dl_tr,
-    #                 base_dir='Confuse_harmful_train'
-    #                 )
+    DF.VisTrain(wrong_ind=wrong_index, confusion_ind=confuse_index,
+                    interest_indices=harmful_indices,
+                    orig_NN_indices=train_nn_indices_same_cls_orig.flatten()[harmful_indices],
+                    curr_NN_indices=train_nn_indices_same_cls_curr.flatten()[harmful_indices],
+                    model1=model_orig, model2=model_curr,
+                    dl=DF.dl_tr,
+                    base_dir='Confuse_harmful_train'
+                )

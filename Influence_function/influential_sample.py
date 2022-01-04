@@ -36,6 +36,7 @@ class InfluentialSample():
         self.loss_type = loss_type
         self.sz_embedding = sz_embedding
         self.model = self._load_model()
+        self.model.eval()
         self.criterion = self._load_criterion()
         self.train_embedding, self.train_label, self.testing_embedding, self.testing_label, \
             self.testing_nn_label, self.testing_nn_indices = self._load_data()
@@ -127,7 +128,6 @@ class InfluentialSample():
             x = x.cuda()
             m = self.model.module[:-1](x)
             all_features = torch.cat((all_features, m.detach().cpu()), dim=0)
-        self.model.train()
         return all_features
 
     def get_wrong_freq_matrix(self, top10_wrong_classes, wrong_labels, wrong_preds):
@@ -314,30 +314,29 @@ if __name__ == '__main__':
     '''Other: get confusion (before VS after)'''
     # FIXME: inter class distance should be computed based on original confusion pairs
     # FIXME: confusion class pairs is computed with original weights, then we do weight reload
-    # features = IS.get_features()
-    # confusion_class_pairs = IS.get_confusion_class_pairs()
-    # for pair_idx in range(len(confusion_class_pairs)):
-    #     print('Pair index', pair_idx)
-    #     wrong_cls = confusion_class_pairs[pair_idx][0][0]
-    #     confuse_classes = [x[1] for x in confusion_class_pairs[pair_idx]]
-    #     IS.model = IS._load_model() # reload the original weights
-    #
-    #     inter_dist_orig, _ = grad_confusion(IS.model, features, wrong_cls, confuse_classes,
-    #                                         IS.testing_nn_label, IS.testing_label, IS.testing_nn_indices)
-    #     print("Original inter-class distance: ", inter_dist_orig)
-    #
-    #     # reload weights as new
-    #     IS.model.load_state_dict(torch.load(
-    #             'models/dvi_data_{}_{}_loss{}_{}_{}/ResNet_512_Model/Epoch_{}/{}_{}_trainval_{}_{}.pth'.format(dataset_name, seed,
-    #                              'ProxyNCA_pfix_confusion_{}_threshold50_reverse'.format(wrong_cls),
-    #                              0, 2,
-    #                              1, dataset_name,
-    #                              dataset_name, 512, seed)))
-    #     # IS.model = IS._load_model_random()
-    #     inter_dist_after, _ = grad_confusion(IS.model, features, wrong_cls, confuse_classes,
-    #                                          IS.testing_nn_label, IS.testing_label, IS.testing_nn_indices)
-    #     print("After inter-class distance: ", inter_dist_after)
-    # exit()
+    features = IS.get_features()
+    confusion_class_pairs = IS.get_confusion_class_pairs()
+    for pair_idx in range(len(confusion_class_pairs)):
+        print('Pair index', pair_idx)
+        wrong_cls = confusion_class_pairs[pair_idx][0][0]
+        confuse_classes = [x[1] for x in confusion_class_pairs[pair_idx]]
+        IS.model = IS._load_model() # reload the original weights
+        inter_dist_orig, _ = grad_confusion(IS.model, features, wrong_cls, confuse_classes,
+                                            IS.testing_nn_label, IS.testing_label, IS.testing_nn_indices)
+        print("Original inter-class distance: ", inter_dist_orig)
+
+        # reload weights as new
+        # IS.model.load_state_dict(torch.load(
+        #         'models/dvi_data_{}_{}_loss{}_{}_{}/ResNet_512_Model/Epoch_{}/{}_{}_trainval_{}_{}.pth'.format(dataset_name, seed,
+        #                          'ProxyNCA_pfix_confusion_{}_threshold50_reverse'.format(wrong_cls),
+        #                          0, 2,
+        #                          1, dataset_name,
+        #                          dataset_name, 512, seed)))
+        IS.model = IS._load_model_random()
+        inter_dist_after, _ = grad_confusion(IS.model, features, wrong_cls, confuse_classes,
+                                             IS.testing_nn_label, IS.testing_label, IS.testing_nn_indices)
+        print("After inter-class distance: ", inter_dist_after)
+    exit()
 
     '''Step 1: Cache all confusion gradient to parameters'''
     confusion_class_pairs = IS.get_confusion_class_pairs()

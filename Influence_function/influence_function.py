@@ -21,7 +21,6 @@ def calc_loss_train(model, dl, criterion, indices=None):
             m = model(x)
             l_this = criterion(m, None, t)
             l.append(l_this.detach().cpu().item())
-    model.train()
     return l
 
 def loss_change_train(model, criterion, dl_tr, params_prev, params_cur):
@@ -63,7 +62,6 @@ def grad_confusion_pair(model, all_features, wrong_indices, confusion_indices):
     grad_confusion2params = [y.detach().cpu() for y in grad_confusion2params]  # accumulate gradients
     confusion = confusion.detach().cpu().item()  # accumulate confusion
 
-    model.train()
     return confusion, grad_confusion2params
 
 def grad_confusion(model, all_features, cls, confusion_classes,
