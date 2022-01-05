@@ -186,6 +186,63 @@ class DistinguishFeat(InfluentialSample):
     #         plt.savefig('./{}/helpful_cls{}_{}.png'.format(base_dir, cls_label, ind))
     #         plt.close()
 
+    def VisTrainNN(self, wrong_ind, confusion_ind,
+                   interest_index, orig_NN_indices, orig_same_cls_NN_indices,
+                   curr_NN_indices, curr_same_cls_NN_indices,
+                   model_orig, model_curr,
+                   dl,
+                   base_dir):
+
+        plt_dir = './{}/{}/{}_{}'.format(base_dir, self.dataset_name, wrong_ind, confusion_ind)
+        os.makedirs(plt_dir, exist_ok=True)
+        model_orig.eval(); model_curr.eval()
+        # plotting layout
+        num_rows = 2
+        num_cols = len(orig_NN_indices) + 1
+
+        fig = plt.figure()
+        fig.subplots_adjust(top=0.8)
+
+        ax = fig.add_subplot(num_rows, num_cols, 1)
+        ax.imshow(to_pil_image(read_image(dl.dataset.im_paths[interest_index])))
+        ax.title.set_text('Ind = {}, Class = {}'.format(interest_index, dl.dataset.ys[interest_index]))
+        plt.axis('off')
+
+        for kk in range(len(orig_NN_indices)):
+            ax = fig.add_subplot(num_rows, num_cols, kk+2)
+            ax.imshow(to_pil_image(read_image(dl.dataset.im_paths[orig_NN_indices[kk]])))
+
+            emb1 = model_orig(dl.dataset.__getitem__(interest_index)[0].unsqueeze(0).cuda())
+            emb2 = model_orig(dl.dataset.__getitem__(orig_NN_indices[kk])[0].unsqueeze(0).cuda())
+            d = (emb1.squeeze(0) - emb2.squeeze(0)).square().sum()
+
+            emb1_a = model_curr(dl.dataset.__getitem__(interest_index)[0].unsqueeze(0).cuda())
+            emb2_a = model_curr(dl.dataset.__getitem__(orig_NN_indices[kk])[0].unsqueeze(0).cuda())
+            d_a = (emb1_a.squeeze(0) - emb2_a.squeeze(0)).square().sum()
+
+            ax.title.set_size(7)
+            ax.title.set_text('Class = {}, D = {:.2f}=>{:.2f}'.format(dl.dataset.ys[orig_NN_indices[kk]], d, d_a))
+            plt.axis('off')
+
+        for kk in range(len(orig_same_cls_NN_indices)):
+            ax = fig.add_subplot(num_rows, num_cols, kk+3+len(orig_NN_indices))
+            ax.imshow(to_pil_image(read_image(dl.dataset.im_paths[orig_same_cls_NN_indices[kk]])))
+            emb1 = model_orig(dl.dataset.__getitem__(interest_index)[0].unsqueeze(0).cuda())
+            emb2 = model_orig(dl.dataset.__getitem__(orig_same_cls_NN_indices[kk])[0].unsqueeze(0).cuda())
+            d = (emb1.squeeze(0) - emb2.squeeze(0)).square().sum()
+
+            emb1_a = model_curr(dl.dataset.__getitem__(interest_index)[0].unsqueeze(0).cuda())
+            emb2_a = model_curr(dl.dataset.__getitem__(orig_same_cls_NN_indices[kk])[0].unsqueeze(0).cuda())
+            d_a = (emb1_a.squeeze(0) - emb2_a.squeeze(0)).square().sum()
+
+            ax.title.set_size(7)
+            ax.title.set_text('Class = {}, D = {:.2f}=>{:.2f}'.format(dl.dataset.ys[orig_same_cls_NN_indices[kk]], d, d_a))
+            plt.axis('off')
+
+        plt.show()
+        # plt.savefig('./{}/{}.png'.format(plt_dir, interest_index))
+        plt.close()
+
     def VisTrain(self, wrong_ind, confusion_ind,
                  interest_indices, orig_NN_indices, curr_NN_indices,
                  model1, model2,
@@ -200,17 +257,17 @@ class DistinguishFeat(InfluentialSample):
             fig = plt.figure()
             fig.subplots_adjust(top=0.8)
 
-            ax = fig.add_subplot(2, 3, 1)
+            ax = fig.add_subplot(3, 3, 1)
             ax.imshow(to_pil_image(read_image(dl.dataset.im_paths[ind])))
             ax.title.set_text('Ind = {}, Class = {}'.format(ind, dl.dataset.ys[ind]))
             plt.axis('off')
 
-            ax = fig.add_subplot(2, 3, 2)
+            ax = fig.add_subplot(3, 3, 2)
             ax.imshow(to_pil_image(read_image(dl.dataset.im_paths[orig_NN_indices[kk]])))
             ax.title.set_text('Ind = {}, Class = {}'.format(orig_NN_indices[kk], dl.dataset.ys[orig_NN_indices[kk]]))
             plt.axis('off')
 
-            ax = fig.add_subplot(2, 3, 3)
+            ax = fig.add_subplot(3, 3, 3)
             ax.imshow(to_pil_image(read_image(dl.dataset.im_paths[curr_NN_indices[kk]])))
             ax.title.set_text('Ind = {}, Class = {}'.format(curr_NN_indices[kk], dl.dataset.ys[curr_NN_indices[kk]]))
             plt.axis('off')
@@ -237,16 +294,43 @@ class DistinguishFeat(InfluentialSample):
             result2, _ = overlay_mask(img2, to_pil_image(activation_map2[0].detach().cpu(), mode='F'), alpha=0.5)
             d2 = (emb1.squeeze(0) - emb2.squeeze(0)).square().sum()
 
-            ax = fig.add_subplot(2, 3, 5)
+            ax = fig.add_subplot(3, 3, 5)
             ax.imshow(result1)
             ax.title.set_text('Distance = {:.4f}'.format(d1))
             plt.axis('off')
 
-            ax = fig.add_subplot(2, 3, 6)
+            ax = fig.add_subplot(3, 3, 6)
             ax.imshow(result2)
             ax.title.set_text('Distance = {:.4f}'.format(d2))
             plt.axis('off')
 
+            # Affinity to proxy
+            proxy = self.criterion.proxies[dl.dataset.ys[ind]].detach()
+            cam_extractor1 = GradCAMCustomize(model1,
+                                              target_layer=model1.module[0].base.layer4)  # to last layer
+            cam_extractor2 = GradCAMCustomize(model2,
+                                              target_layer=model2.module[0].base.layer4)  # to last layer
+            cam_extractor1._hooks_enabled = True
+            model1.zero_grad()
+            emb1 = model1(dl.dataset.__getitem__(ind)[0].unsqueeze(0).cuda())
+            activation_map1 = cam_extractor1(torch.dot(emb1.squeeze(0), proxy.to(emb1.device)))
+            img = to_pil_image(read_image(dl.dataset.im_paths[ind]))
+            result1, _ = overlay_mask(img, to_pil_image(activation_map1[0].detach().cpu(), mode='F'), alpha=0.5)
+
+            cam_extractor2._hooks_enabled = True
+            model2.zero_grad()
+            emb1 = model2(dl.dataset.__getitem__(ind)[0].unsqueeze(0).cuda())
+            activation_map2 = cam_extractor2(torch.dot(emb1.squeeze(0), proxy.to(emb1.device)))
+            result2, _ = overlay_mask(img, to_pil_image(activation_map2[0].detach().cpu(), mode='F'), alpha=0.5)
+
+            ax = fig.add_subplot(3, 3, 8)
+            ax.imshow(result1)
+            plt.axis('off')
+
+            ax = fig.add_subplot(3, 3, 9)
+            ax.imshow(result2)
+            plt.axis('off')
+            # plt.show()
             plt.savefig('./{}/{}.png'.format(plt_dir, ind))
             plt.close()
 

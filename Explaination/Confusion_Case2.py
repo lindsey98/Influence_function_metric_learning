@@ -15,13 +15,34 @@ import dataset
 from torchvision import transforms
 from dataset.utils import RGBAToRGB, ScaleIntensities
 from utils import overlay_mask
-from utils import predict_batchwise
-from evaluation import assign_by_euclidian_at_k_indices
+from utils import predict_batchwise, predict_batchwise_debug
+from evaluation import assign_by_euclidian_at_k_indices, assign_same_cls_neighbor
 import sklearn
 from evaluation.pumap import prepare_data, get_wrong_indices
 from Explaination.Confusion_Case1 import DistinguishFeat
 os.environ['CUDA_VISIBLE_DEVICES'] = "1"
 
+
+def cache_influential_samples(DF, wrong_index, confuse_index, base_dir):
+
+    os.makedirs(base_dir, exist_ok=True)
+    training_sample_by_influence = DF.temporal_influence_func([wrong_index], [confuse_index])
+    helpful_indices = training_sample_by_influence[:10]
+    harmful_indices = training_sample_by_influence[-10:]
+    np.save('./{}/helpful_indices_{}_{}'.format(base_dir, wrong_index, confuse_index), helpful_indices)
+    np.save('./{}/harmful_indices_{}_{}'.format(base_dir, wrong_index, confuse_index), harmful_indices)
+    exit()
+
+def sanity_check(DF, new_weight_path, wrong_index, confuse_index):
+    DF.model = DF._load_model()  # reload the original weights
+    new_features = DF.get_features()
+    inter_dist_orig, _ = grad_confusion_pair(DF.model, new_features, [wrong_index], [confuse_index])
+    print("Original distance: ", inter_dist_orig)
+
+    DF.model.load_state_dict(torch.load(new_weight_path))
+    new_features = DF.get_features()
+    inter_dist_after, _ = grad_confusion_pair(DF.model, new_features, [wrong_index], [confuse_index])
+    print("After distance: ", inter_dist_after)
 
 if __name__ == '__main__':
 
@@ -70,32 +91,60 @@ if __name__ == '__main__':
     wrong_index = 55; confuse_index = 4204
     base_dir = 'Confuse_pair_influential_data'
     new_weight_path = 'models/dvi_data_{}_{}_loss{}_{}_{}/ResNet_512_Model/Epoch_{}/{}_{}_trainval_{}_{}.pth'.format(
-                                                                                                            dataset_name,
-                                                                                                           seed,
-                                                                                                           'ProxyNCA_pfix_confusion_{}_{}'.format(
-                                                                                                           wrong_index, confuse_index),
-                                                                                                           10, -10,
-                                                                                                           1, dataset_name,
-                                                                                                           dataset_name,
-                                                                                                           512, seed) # reload weights as new
+                           dataset_name,
+                           seed,
+                           'ProxyNCA_pfix_confusion_{}_{}'.format(
+                           wrong_index, confuse_index),
+                           10, -10,
+                           1, dataset_name,
+                           dataset_name,
+                           512, seed) # reload weights as new
     #
-    # training_sample_by_influence = DF.temporal_influence_func([wrong_index], [confuse_index])
-    # helpful_indices = training_sample_by_influence[:10]
-    # harmful_indices = training_sample_by_influence[-10:]
-    # os.makedirs(base_dir, exist_ok=True)
-    # np.save('./{}/helpful_indices_{}_{}'.format(base_dir, wrong_index, confuse_index), helpful_indices)
-    # np.save('./{}/harmful_indices_{}_{}'.format(base_dir, wrong_index, confuse_index), harmful_indices)
-    # exit()
+    # DF.viz_2sample(DF.dl_ev, wrong_index, confuse_index)
+    # cache_influential_samples(DF, wrong_index, confuse_index, base_dir)
 
     '''Step 3: Run training in bash'''
 
     '''Step 4: Sanity check'''
-    DF.model = DF._load_model()  # reload the original weights
-    new_features = DF.get_features()
-    inter_dist_orig, _ = grad_confusion_pair(DF.model, new_features, [wrong_index], [confuse_index])
-    print("Original distance: ", inter_dist_orig)
+    # sanity_check(DF, new_weight_path, wrong_index, confuse_index)
 
-    DF.model.load_state_dict(torch.load(new_weight_path))
-    new_features = DF.get_features()
-    inter_dist_after, _ = grad_confusion_pair(DF.model, new_features, [wrong_index], [confuse_index])
-    print("After distance: ", inter_dist_after)
+    '''Step 5: Visualize helpful/harmful'''
+    helpful_indices = np.load('./{}/helpful_indices_{}_{}.npy'.format(base_dir, wrong_index, confuse_index))
+    harmful_indices = np.load('./{}/harmful_indices_{}_{}.npy'.format(base_dir, wrong_index, confuse_index))
+    nn_k = 5 # check 5 neighbors
+
+    # predict training 1st NN (original)
+    train_nn_indices_orig, train_nn_label_orig = assign_by_euclidian_at_k_indices(DF.train_embedding, DF.train_label, nn_k)
+    # predict training 1st NN within the same class (original)
+    train_nn_indices_same_cls_orig = assign_same_cls_neighbor(DF.train_embedding, DF.train_label, nn_k)
+
+    # predict training 1st NN (after training)
+    new_model = DF._load_model()
+    new_model.load_state_dict(torch.load(new_weight_path))
+    train_embedding_curr, train_label, _ = predict_batchwise_debug(new_model, DF.dl_tr)
+    train_nn_indices_curr, train_nn_label_curr = assign_by_euclidian_at_k_indices(train_embedding_curr, DF.train_label, nn_k)
+    # predict training 1st NN within the same class (after training)
+    train_nn_indices_same_cls_curr = assign_same_cls_neighbor(train_embedding_curr, DF.train_label, nn_k)
+
+    # Plot out affected training (its original NN, and its current NN)
+    model_orig = DF._load_model()
+    model_curr = DF._load_model()
+    model_curr.load_state_dict(torch.load(new_weight_path))
+
+    for index in helpful_indices:
+        DF.VisTrainNN( wrong_index, confuse_index,
+                   index, train_nn_indices_orig[index], train_nn_indices_same_cls_orig[index],
+                   train_nn_indices_curr[index], train_nn_indices_same_cls_curr[index],
+                   model_orig, model_curr,
+                   DF.dl_tr,
+                   base_dir)
+    #
+    # # Plot out helpful training
+    # DF.VisTrain(wrong_ind=wrong_index, confusion_ind=confuse_index,
+    #             interest_indices=helpful_indices,
+    #             orig_NN_indices=train_nn_indices_same_cls_orig.flatten()[helpful_indices],
+    #             curr_NN_indices=train_nn_indices_same_cls_curr.flatten()[helpful_indices],
+    #             model1=model_orig, model2=model_curr,
+    #             dl=DF.dl_tr,
+    #             base_dir='Confuse_helpful_train'
+    #         )
