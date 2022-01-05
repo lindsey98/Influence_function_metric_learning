@@ -12,6 +12,7 @@ import argparse
 import json
 from tqdm import tqdm
 from torch.utils.data import Dataset, DataLoader
+import random
 
 os.environ["CUDA_VISIBLE_DEVICES"]="1, 0"
 
@@ -74,6 +75,8 @@ def find_samples_weights(y, helpful, harmful, indices):
 if __name__ == '__main__':
 
     # set random seed for all gpus
+    random.seed(args.seed)
+    np.random.seed(args.seed)
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed_all(args.seed)
 

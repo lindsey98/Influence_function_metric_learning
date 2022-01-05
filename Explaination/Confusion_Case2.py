@@ -16,7 +16,7 @@ from torchvision import transforms
 from dataset.utils import RGBAToRGB, ScaleIntensities
 from utils import overlay_mask
 from utils import predict_batchwise, predict_batchwise_debug
-from evaluation import assign_by_euclidian_at_k_indices, assign_same_cls_neighbor
+from evaluation import assign_by_euclidian_at_k_indices, assign_same_cls_neighbor, assign_diff_cls_neighbor
 import sklearn
 from evaluation.pumap import prepare_data, get_wrong_indices
 from Explaination.Confusion_Case1 import DistinguishFeat
@@ -88,7 +88,7 @@ if __name__ == '__main__':
     #                      DF.dl_ev, base_dir='Confuse_Vis4Case2')
 
     '''Step 2: Identify helpful/harmful training samples'''
-    wrong_index = 55; confuse_index = 4204
+    wrong_index = 77; confuse_index = 4103
     base_dir = 'Confuse_pair_influential_data'
     new_weight_path = 'models/dvi_data_{}_{}_loss{}_{}_{}/ResNet_512_Model/Epoch_{}/{}_{}_trainval_{}_{}.pth'.format(
                            dataset_name,
@@ -100,7 +100,7 @@ if __name__ == '__main__':
                            dataset_name,
                            512, seed) # reload weights as new
     #
-    # DF.viz_2sample(DF.dl_ev, wrong_index, confuse_index)
+    DF.viz_2sample(DF.dl_ev, wrong_index, confuse_index)
     # cache_influential_samples(DF, wrong_index, confuse_index, base_dir)
 
     '''Step 3: Run training in bash'''
@@ -117,6 +117,8 @@ if __name__ == '__main__':
     train_nn_indices_orig, train_nn_label_orig = assign_by_euclidian_at_k_indices(DF.train_embedding, DF.train_label, nn_k)
     # predict training 1st NN within the same class (original)
     train_nn_indices_same_cls_orig = assign_same_cls_neighbor(DF.train_embedding, DF.train_label, nn_k)
+    # predict training 1st NN from diff class
+    train_nn_indices_diff_cls_orig = assign_diff_cls_neighbor(DF.train_embedding, DF.train_label, nn_k)
 
     # predict training 1st NN (after training)
     new_model = DF._load_model()
@@ -125,6 +127,8 @@ if __name__ == '__main__':
     train_nn_indices_curr, train_nn_label_curr = assign_by_euclidian_at_k_indices(train_embedding_curr, DF.train_label, nn_k)
     # predict training 1st NN within the same class (after training)
     train_nn_indices_same_cls_curr = assign_same_cls_neighbor(train_embedding_curr, DF.train_label, nn_k)
+    # predict training 1st NN from diff class
+    train_nn_indices_diff_cls_curr = assign_diff_cls_neighbor(train_embedding_curr, DF.train_label, nn_k)
 
     # Plot out affected training (its original NN, and its current NN)
     model_orig = DF._load_model()
@@ -133,8 +137,8 @@ if __name__ == '__main__':
 
     for index in helpful_indices:
         DF.VisTrainNN( wrong_index, confuse_index,
-                   index, train_nn_indices_orig[index], train_nn_indices_same_cls_orig[index],
-                   train_nn_indices_curr[index], train_nn_indices_same_cls_curr[index],
+                   index, train_nn_indices_diff_cls_orig[index], train_nn_indices_same_cls_orig[index],
+                   train_nn_indices_diff_cls_curr[index], train_nn_indices_same_cls_curr[index],
                    model_orig, model_curr,
                    DF.dl_tr,
                    base_dir)

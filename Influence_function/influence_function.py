@@ -3,6 +3,7 @@ import torch
 from torch.autograd import grad
 from tqdm import tqdm
 import numpy as np
+import torch.nn.functional as F
 
 @torch.no_grad()
 def calc_loss_train(model, dl, criterion, indices=None):
@@ -36,6 +37,9 @@ def loss_change_train(model, criterion, dl_tr, params_prev, params_cur):
     return np.asarray(l_prev), np.asarray(l_cur)
 
 def calc_inter_dist_pair(feat_cls1, feat_cls2):
+    feat_cls1 = F.normalize(feat_cls1, p=2, dim=-1)
+    feat_cls2 = F.normalize(feat_cls2, p=2, dim=-1)
+
     if len(feat_cls1.shape) == 1 and len(feat_cls2.shape) == 1:
         dist = (feat_cls1 - feat_cls2).square().sum()
         return dist
@@ -87,7 +91,8 @@ def grad_confusion(model, all_features, cls, confusion_classes,
     accum_grads = [torch.zeros_like(model.module[-1].weight).detach().cpu()]
     accum_confusion = 0.
     for kk in range(len(confusion_classes)):
-        confusion, grad_confusion2params = grad_confusion_pair(model, all_features, wrong_indices[kk], confuse_indices[kk])
+        confusion, grad_confusion2params = grad_confusion_pair(model, all_features,
+                                                               wrong_indices[kk], confuse_indices[kk])
         accum_grads = [x + y for x, y in zip(accum_grads, grad_confusion2params)] # accumulate gradients
         accum_confusion += confusion # accumulate confusion
 
