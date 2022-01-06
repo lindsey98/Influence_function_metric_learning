@@ -15,7 +15,7 @@ from utils import predict_batchwise_debug
 from collections import OrderedDict
 import scipy.stats
 from evaluation import assign_by_euclidian_at_k_indices
-os.environ['CUDA_VISIBLE_DEVICES'] = "1"
+os.environ['CUDA_VISIBLE_DEVICES'] = "0"
 
 class InfluentialSample():
     def __init__(self, dataset_name, seed, loss_type, config_name,
@@ -176,7 +176,7 @@ class InfluentialSample():
         with open("Influential_data/{}_{}_confusion_grad4trainall_testpair{}_threshold50.pkl".format(self.dataset_name, self.loss_type, pair_idx), "wb") as fp:  # Pickling
             pickle.dump(grad_loss, fp)
 
-    def theta_grad_ascent(self, classes, steps=50, lr=0.001):
+    def agg_get_theta(self, classes, steps=50, lr=0.001):
 
         theta_orig = self.model.module[-1].weight.data
         torch.cuda.empty_cache()
@@ -212,8 +212,7 @@ class InfluentialSample():
 
         self.model.module[-1].weight.data = theta_orig
 
-
-    def run_sample(self, pair_idx):
+    def agg_influence_func(self, pair_idx):
         confusion_class_pairs = self.get_confusion_class_pairs()
         pair = confusion_class_pairs[pair_idx]
         self.viz_2cls(5, self.dl_ev, self.testing_label, pair[0][0], pair[0][1])  # visualize confusion classes
@@ -224,8 +223,8 @@ class InfluentialSample():
         influence_values = calc_influential_func_sample(grad4train)
         influence_values = np.asarray(influence_values)
         training_sample_by_influence = influence_values.argsort()  # ascending
-        self.viz_sample(training_sample_by_influence[:10])  # helpful
-        self.viz_sample(training_sample_by_influence[-10:])  # harmful
+        self.viz_sample(self.dl_tr, training_sample_by_influence[:10])  # helpful
+        self.viz_sample(self.dl_tr, training_sample_by_influence[-10:])  # harmful
 
         helpful_indices = np.where(influence_values < 0)[0] # cache all helpful
         harmful_indices = np.where(influence_values > 0)[0] # cache all harmful
@@ -234,37 +233,83 @@ class InfluentialSample():
         np.save("Influential_data/{}_{}_harmful_testcls{}_threshold50".format(self.dataset_name, self.loss_type, pair_idx),
                 harmful_indices)
 
-    def viz_cls(self, top_bottomk, dataloader, label, cls):
+    def single_get_theta(self, theta_orig, all_features, wrong_indices, confuse_indices):
+        # Revise back the weights
+        self.model.module[-1].weight.data = theta_orig
+        theta = theta_orig.clone()
+
+        # Record original inter-class distance
+        inter_dist_orig, _ = grad_confusion_pair(self.model, all_features, wrong_indices, confuse_indices)  # dD/dtheta
+        print("Original confusion: ", inter_dist_orig)
+
+        # Optimization
+        for _ in range(50):
+            inter_dist, v = grad_confusion_pair(self.model, all_features, wrong_indices, confuse_indices)  # dD/dtheta
+            print("Confusion: ", inter_dist)
+            if inter_dist - inter_dist_orig >= 1.:  # FIXME: stopping criteria threshold selection
+                break
+            theta_new = theta + 0.001 * v[0].to(theta.device)  # gradient ascent
+            theta = theta_new
+            self.model.module[-1].weight.data = theta
+
+        self.model.module[-1].weight.data = theta_orig
+        return theta
+
+    def single_influence_func(self, wrong_indices, confuse_indices):
+
+        '''Step 1: All confusion gradient to parameters'''
+        theta_orig = self.model.module[-1].weight.data
+        torch.cuda.empty_cache()
+        all_features = self.get_features()  # (N, 2048)
+        theta = self.single_get_theta(theta_orig, all_features, wrong_indices, confuse_indices)
+
+        '''Step 2: Training class loss changes'''
+        l_prev, l_cur = loss_change_train(self.model, self.criterion, self.dl_tr, theta_orig, theta)
+        grad_loss = {'l_prev': l_prev, 'l_cur': l_cur}
+
+        '''Step 3: Calc influence functions'''
+        # self.viz_2sample(self.dl_ev, wrong_indices[0], confuse_indices[0])
+        influence_values = calc_influential_func_sample(grad_loss)
+        influence_values = np.asarray(influence_values)
+        training_sample_by_influence = influence_values.argsort()  # ascending
+        print('Proportion of negative change: ', np.sum(influence_values < 0) / len(influence_values))
+        print('Proportion of zero change: ', np.sum(influence_values == 0) / len(influence_values))
+        print('Proportion of positive change: ', np.sum(influence_values > 0) / len(influence_values))
+        # self.viz_sample(self.dl_tr, training_sample_by_influence[:10])  # helpful
+        # self.viz_sample(self.dl_tr, training_sample_by_influence[-10:])  # harmful
+        return training_sample_by_influence, influence_values
+
+    def viz_cls(self, top_bottomk, dl, label, cls):
         ind_cls = np.where(label.detach().cpu().numpy() == cls)[0]
         for i in range(top_bottomk):
             plt.subplot(1, top_bottomk, i + 1)
-            img = read_image(dataloader.dataset.im_paths[ind_cls[i]])
+            img = read_image(dl.dataset.im_paths[ind_cls[i]])
             plt.imshow(to_pil_image(img))
             plt.title('Class = {}'.format(cls))
         plt.show()
 
-    def viz_2cls(self, top_bottomk, dataloader, label, cls1, cls2):
+    def viz_2cls(self, top_bottomk, dl, label, cls1, cls2):
         ind_cls1 = np.where(label.detach().cpu().numpy() == cls1)[0]
         ind_cls2 = np.where(label.detach().cpu().numpy() == cls2)[0]
 
         top_bottomk = min(top_bottomk, len(ind_cls1), len(ind_cls2))
         for i in range(top_bottomk):
             plt.subplot(2, top_bottomk, i + 1)
-            img = read_image(dataloader.dataset.im_paths[ind_cls1[i]])
+            img = read_image(dl.dataset.im_paths[ind_cls1[i]])
             plt.imshow(to_pil_image(img))
             plt.title('Class = {}'.format(cls1))
         for i in range(top_bottomk):
             plt.subplot(2, top_bottomk, i + 1 + top_bottomk)
-            img = read_image(dataloader.dataset.im_paths[ind_cls2[i]])
+            img = read_image(dl.dataset.im_paths[ind_cls2[i]])
             plt.imshow(to_pil_image(img))
             plt.title('Class = {}'.format(cls2))
         plt.show()
 
-    def viz_sample(self, indices):
-        classes = self.train_label[indices]
+    def viz_sample(self, dl, indices):
+        classes = dl.dataset.ys[indices]
         for i in range(10):
             plt.subplot(2, 5, i + 1)
-            img = read_image(self.dl_tr.dataset.im_paths[indices[i]])
+            img = read_image(dl.dataset.im_paths[indices[i]])
             plt.imshow(to_pil_image(img))
             plt.title('Class = {}'.format(classes[i]))
         plt.show()
@@ -287,21 +332,21 @@ class InfluentialSample():
 
 if __name__ == '__main__':
 
-    # dataset_name = 'cars'
-    # loss_type = 'ProxyNCA_pfix'
-    # config_name = 'cars'
-    # sz_embedding = 512
-    # seed = 4
-    # epoch = 40
-    # test_crop = False
-
-    dataset_name = 'sop'
-    loss_type = 'ProxyNCA_pfix_var'
-    config_name = 'sop'
+    dataset_name = 'cars'
+    loss_type = 'ProxyNCA_pfix'
+    config_name = 'cars'
     sz_embedding = 512
-    seed = 2
+    seed = 4
     epoch = 40
-    test_crop = True
+    test_crop = False
+
+    # dataset_name = 'sop'
+    # loss_type = 'ProxyNCA_pfix_var'
+    # config_name = 'sop'
+    # sz_embedding = 512
+    # seed = 2
+    # epoch = 40
+    # test_crop = True
 
     # dataset_name = 'inshop'
     # loss_type = 'ProxyNCA_pfix_var_complicate'
@@ -316,63 +361,66 @@ if __name__ == '__main__':
     '''Other: get confusion (before VS after)'''
     # FIXME: inter class distance should be computed based on original confusion pairs
     #  confusion class pairs is computed with original weights, then we do weight reload
-    # features = IS.get_features()
-    # confusion_class_pairs = IS.get_confusion_class_pairs()
-    # for pair_idx in range(len(confusion_class_pairs)):
-    #     print('Pair index', pair_idx)
-    #     wrong_cls = confusion_class_pairs[pair_idx][0][0]
-    #     confuse_classes = [x[1] for x in confusion_class_pairs[pair_idx]]
-    #
-    #     IS.model = IS._load_model() # reload the original weights
-    #     inter_dist_orig, _ = grad_confusion(IS.model, features, wrong_cls, confuse_classes,
-    #                                         IS.testing_nn_label, IS.testing_label, IS.testing_nn_indices)
-    #     print("Original inter-class distance: ", inter_dist_orig)
-    #
-    #     IS.model = IS._load_model_random()
-    #     inter_dist_after, _ = grad_confusion(IS.model, features, wrong_cls, confuse_classes,
-    #                                          IS.testing_nn_label, IS.testing_label, IS.testing_nn_indices)
-    #     print("Before training inter-class distance: ", inter_dist_after)
+
+    confusion_class_pairs = IS.get_confusion_class_pairs()
+    for pair_idx in range(len(confusion_class_pairs)):
+        print('Pair index', pair_idx)
+        wrong_cls = confusion_class_pairs[pair_idx][0][0]
+        confuse_classes = [x[1] for x in confusion_class_pairs[pair_idx]]
+
+        IS.model = IS._load_model_random()
+        features = IS.get_features()
+        inter_dist_after, _ = grad_confusion(IS.model, features, wrong_cls, confuse_classes,
+                                             IS.testing_nn_label, IS.testing_label, IS.testing_nn_indices)
+        print("Before training inter-class distance: ", inter_dist_after)
+
+        IS.model = IS._load_model() # reload the original weights
+        features = IS.get_features()
+        inter_dist_orig, _ = grad_confusion(IS.model, features, wrong_cls, confuse_classes,
+                                            IS.testing_nn_label, IS.testing_label, IS.testing_nn_indices)
+        print("Original inter-class distance: ", inter_dist_orig)
+
 
         # reload weights as new
-        # IS.model.load_state_dict(torch.load(
-        #         'models/dvi_data_{}_{}_loss{}_{}_{}/ResNet_512_Model/Epoch_{}/{}_{}_trainval_{}_{}.pth'.format(dataset_name, seed,
-        #          'ProxyNCA_pfix_confusion_{}_threshold50'.format(wrong_cls),
-        #          2, 0,
-        #          1, dataset_name,
-        #          dataset_name, 512, seed)))
-        # inter_dist_after, _ = grad_confusion(IS.model, features, wrong_cls, confuse_classes,
-        #                                      IS.testing_nn_label, IS.testing_label, IS.testing_nn_indices)
-        # print("After inter-class distance: ", inter_dist_after)
+        IS.model.load_state_dict(torch.load(
+                'models/dvi_data_{}_{}_loss{}_{}_{}/ResNet_512_Model/Epoch_{}/{}_{}_trainval_{}_{}.pth'.format(dataset_name, seed,
+                 'ProxyNCA_pfix_confusion_{}_threshold50'.format(wrong_cls),
+                 2, 0,
+                 1, dataset_name,
+                 dataset_name, 512, seed)))
+        inter_dist_after, _ = grad_confusion(IS.model, features, wrong_cls, confuse_classes,
+                                             IS.testing_nn_label, IS.testing_label, IS.testing_nn_indices)
+        print("After inter-class distance: ", inter_dist_after)
 
         # reload weights as new
-    #     IS.model.load_state_dict(torch.load(
-    #               'models/dvi_data_{}_{}_loss{}_{}_{}/ResNet_512_Model/Epoch_{}/{}_{}_trainval_{}_{}.pth'.format(dataset_name,
-    #                seed,
-    #                'ProxyNCA_pfix_confusion_{}_threshold50'.format(wrong_cls),
-    #                0, 2,
-    #                1,
-    #                dataset_name,
-    #                dataset_name,
-    #                512, seed)))
-    #     inter_dist_after, _ = grad_confusion(IS.model, features, wrong_cls, confuse_classes,
-    #                                          IS.testing_nn_label, IS.testing_label, IS.testing_nn_indices)
-    #     print("After inter-class distance reverse: ", inter_dist_after)
-    # exit()
+        IS.model.load_state_dict(torch.load(
+                  'models/dvi_data_{}_{}_loss{}_{}_{}/ResNet_512_Model/Epoch_{}/{}_{}_trainval_{}_{}.pth'.format(dataset_name,
+                   seed,
+                   'ProxyNCA_pfix_confusion_{}_threshold50'.format(wrong_cls),
+                   0, 2,
+                   1,
+                   dataset_name,
+                   dataset_name,
+                   512, seed)))
+        inter_dist_after, _ = grad_confusion(IS.model, features, wrong_cls, confuse_classes,
+                                             IS.testing_nn_label, IS.testing_label, IS.testing_nn_indices)
+        print("After inter-class distance reverse: ", inter_dist_after)
+    exit()
 
     '''Step 1: Cache all confusion gradient to parameters'''
-    # confusion_class_pairs = IS.get_confusion_class_pairs()
-    # IS.theta_grad_ascent(confusion_class_pairs)
+    confusion_class_pairs = IS.get_confusion_class_pairs()
+    IS.agg_get_theta(confusion_class_pairs)
 
     '''Step 2: Cache training class loss changes'''
-    # for cls_idx in range(len(confusion_class_pairs)):
-    #     i = confusion_class_pairs[cls_idx][0][0]
-    #     theta_dict = torch.load("Influential_data/{}_{}_confusion_theta_test_{}_threshold50.pth".format(IS.dataset_name, IS.loss_type, i))
-    #     theta = theta_dict['theta']
-    #     theta_hat = theta_dict['theta_hat']
-    #     IS.cache_grad_loss_train_all(theta, theta_hat, cls_idx)
+    for cls_idx in range(len(confusion_class_pairs)):
+        i = confusion_class_pairs[cls_idx][0][0]
+        theta_dict = torch.load("Influential_data/{}_{}_confusion_theta_test_{}_threshold50.pth".format(IS.dataset_name, IS.loss_type, i))
+        theta = theta_dict['theta']
+        theta_hat = theta_dict['theta_hat']
+        IS.cache_grad_loss_train_all(theta, theta_hat, cls_idx)
 
     '''Step 3: Calc influence functions'''
-    # for cls_idx in range(len(confusion_class_pairs)):
-    #     IS.run_sample(cls_idx)
-    # exit()
+    for cls_idx in range(len(confusion_class_pairs)):
+        IS.agg_influence_func(cls_idx)
+    exit()
 

@@ -293,6 +293,13 @@ if __name__ == '__main__':
     model = model.cuda()
     model.load_state_dict(torch.load('{}/Epoch_{}/{}_{}_trainval_{}_{}.pth'.format(args.model_dir, 40, args.dataset, args.dataset,
                                                                                    args.sz_embedding, args.seed)))
+    for module in model.modules():
+        if isinstance(module, torch.nn.BatchNorm2d):
+            if hasattr(module, 'weight'):
+                module.weight.requires_grad_(False)
+            if hasattr(module, 'bias'):
+                module.bias.requires_grad_(False)
+            module.eval()
 
     '''Loss'''
     criterion = config['criterion']['type'](

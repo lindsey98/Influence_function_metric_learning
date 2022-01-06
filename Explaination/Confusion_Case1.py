@@ -40,52 +40,6 @@ class DistinguishFeat(InfluentialSample):
                     )
         ])
 
-    def get_theta(self, theta_orig, all_features, wrong_indices, confuse_indices):
-        # Revise back the weights
-        self.model.module[-1].weight.data = theta_orig
-        theta = theta_orig.clone()
-
-        # Record original inter-class distance
-        inter_dist_orig, _ = grad_confusion_pair(self.model, all_features, wrong_indices, confuse_indices)  # dD/dtheta
-        print("Original confusion: ", inter_dist_orig)
-
-        # Optimization
-        for _ in range(50):
-            inter_dist, v = grad_confusion_pair(self.model, all_features, wrong_indices, confuse_indices)  # dD/dtheta
-            print("Confusion: ", inter_dist)
-            if inter_dist - inter_dist_orig >= 1.:  # FIXME: stopping criteria threshold selection
-                break
-            theta_new = theta + 0.01 * v[0].to(theta.device)  # gradient ascent
-            theta = theta_new
-            self.model.module[-1].weight.data = theta
-
-        self.model.module[-1].weight.data = theta_orig
-        return theta
-
-    def temporal_influence_func(self, wrong_indices, confuse_indices):
-
-        '''Step 1: All confusion gradient to parameters'''
-        theta_orig = self.model.module[-1].weight.data
-        torch.cuda.empty_cache()
-        all_features = self.get_features()  # (N, 2048)
-        theta = self.get_theta(theta_orig, all_features, wrong_indices, confuse_indices)
-
-        '''Step 2: Training class loss changes'''
-        l_prev, l_cur = loss_change_train(self.model, self.criterion, self.dl_tr, theta_orig, theta)
-        grad_loss = {'l_prev': l_prev, 'l_cur': l_cur}
-
-        '''Step 3: Calc influence functions'''
-        self.viz_2sample(self.dl_ev, wrong_indices[0], confuse_indices[0])
-        influence_values = calc_influential_func_sample(grad_loss)
-        influence_values = np.asarray(influence_values)
-        training_sample_by_influence = influence_values.argsort()  # ascending
-        print('Proportion of negative change: ', np.sum(influence_values < 0)/len(influence_values))
-        print('Proportion of zero change: ', np.sum(influence_values == 0)/len(influence_values))
-        print('Proportion of positive change: ', np.sum(influence_values > 0)/len(influence_values))
-        self.viz_sample(training_sample_by_influence[:10])  # helpful
-        self.viz_sample(training_sample_by_influence[-10:])  # harmful
-        return training_sample_by_influence, influence_values
-
     def GradAnalysis(self, wrong_cls, confuse_cls,
                      wrong_indices, confuse_indices,
                      dl, base_dir='Grad_Test'): # Only for confusion analysis
@@ -569,8 +523,6 @@ if __name__ == '__main__':
     # np.save('./{}/Allhelpful_indices_{}_{}'.format(base_dir, wrong_index, confuse_index), helpful_indices)
     # np.save('./{}/Allharmful_indices_{}_{}'.format(base_dir, wrong_index, confuse_index), harmful_indices)
     # exit()
-
-
 
     '''Step 3: Train the model'''
     # Run in shell
