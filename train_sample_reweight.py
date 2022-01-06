@@ -37,7 +37,7 @@ parser.add_argument('--mode', default='trainval', choices=['train', 'trainval', 
                     help='train with train data or train with trainval')
 parser.add_argument('--batch-size', default = 32, type=int, dest = 'sz_batch')
 parser.add_argument('--no_warmup', default=True, action='store_true')
-parser.add_argument('--loss-type', default='ProxyNCA_pfix_intravar_178', type=str)
+parser.add_argument('--loss-type', default='', type=str)
 parser.add_argument('--helpful', default='Influential_data/{}_{}_helpful_{}_testcls{}.npy'.format('cub', 'ProxyNCA_pfix', 'intravar', '1'), type=str)
 parser.add_argument('--harmful', default='Influential_data/{}_{}_harmful_{}_testcls{}.npy'.format('cub', 'ProxyNCA_pfix', 'intravar', '1'), type=str)
 parser.add_argument('--model_dir', default='models/dvi_data_{}_{}_lossProxyNCA_pfix/ResNet_512_Model'.format('cub', 4), type=str)
@@ -293,6 +293,7 @@ if __name__ == '__main__':
     model = model.cuda()
     model.load_state_dict(torch.load('{}/Epoch_{}/{}_{}_trainval_{}_{}.pth'.format(args.model_dir, 40, args.dataset, args.dataset,
                                                                                    args.sz_embedding, args.seed)))
+    # disable batchnorm training
     for module in model.modules():
         if isinstance(module, torch.nn.BatchNorm2d):
             if hasattr(module, 'weight'):

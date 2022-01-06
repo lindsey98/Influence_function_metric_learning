@@ -315,28 +315,6 @@ def bipartite_matching(embeddingX, embeddingY):
     return gapD
 
 
-def calc_gap(model, dl, proxies, topk=5):
-    X, T, *_ = predict_batchwise(model, dl)  # get embedding
-    embeddings = []
-    for cls in range(dl.dataset.nb_classes()):
-        indices = T == cls
-        X_cls = X[indices, :]  # class-specific embedding
-        embeddings.append(X_cls)
-
-    IP = pairwise_distance(proxies, squared=True)[1]
-    _, knn_indices = torch.sort(IP, dim=-1, descending=True)
-    knn_indices = knn_indices[:, 1:(topk+1)]
-
-    gaps = np.zeros((knn_indices.size()[0], topk))
-    for i in range(len(knn_indices)):
-        for j in range(topk): # 5 NNs
-            class_i = int(i)
-            class_j = int(knn_indices[i][j].item())
-            gaps[i][j] = bipartite_matching(embeddings[class_i].detach().cpu(),
-                                            embeddings[class_j].detach().cpu())
-
-    return gaps.mean()
-
 def inter_proxy_dist(proxies, cosine=True, neighbor_only=False):
     D, IP = pairwise_distance(proxies, squared=True)
     if cosine:
