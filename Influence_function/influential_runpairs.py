@@ -15,6 +15,14 @@ if __name__ == '__main__':
     seed = 4
     test_crop = False
 
+    # dataset_name = 'inshop'
+    # loss_type = 'ProxyNCA_pfix_var_complicate'
+    # config_name = 'inshop'
+    # sz_embedding = 512
+    # seed = 3
+    # epoch = 40
+    # test_crop = True
+
     IS = InfluentialSample(dataset_name, seed, loss_type, config_name, test_crop)
 
     '''Analyze confusing features for all confusion classes'''
