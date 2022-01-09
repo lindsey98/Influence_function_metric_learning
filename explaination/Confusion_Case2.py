@@ -7,9 +7,9 @@ from torchvision.transforms.functional import to_pil_image
 from torchvision.io.image import read_image
 from PIL import Image
 from Influence_function.influential_sample import InfluentialSample
-from Explaination.CAM_methods import *
+from explaination.CAM_methods import *
 from Influence_function.influence_function import *
-from Explaination.background_removal import remove_background
+from explaination.background_removal import remove_background
 import utils
 import dataset
 from torchvision import transforms
@@ -19,7 +19,7 @@ from utils import predict_batchwise, predict_batchwise_debug
 from evaluation import assign_by_euclidian_at_k_indices, assign_same_cls_neighbor, assign_diff_cls_neighbor
 import sklearn
 from evaluation.pumap import prepare_data, get_wrong_indices
-from Explaination.Confusion_Case1 import DistinguishFeat
+from explaination.Confusion_Case1 import DistinguishFeat
 os.environ['CUDA_VISIBLE_DEVICES'] = "1"
 
 
