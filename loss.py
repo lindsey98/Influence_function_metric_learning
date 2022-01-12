@@ -438,10 +438,6 @@ class ProxyNCA_pfix_softlabel(torch.nn.Module):
             squared=True
         )[0][:X.size()[0], X.size()[0]:]
 
-        # T = binarize_and_smooth_labels(
-        #     T=T, nb_classes=len(P), smoothing_const=0
-        # )
-
         loss = torch.sum(- T * F.log_softmax(-D, -1), -1)
         loss = loss.mean()
         return loss

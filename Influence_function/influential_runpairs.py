@@ -46,51 +46,51 @@ if __name__ == '__main__':
     os.makedirs(base_dir, exist_ok=True)
 
     '''Step 2: Save influential samples indices for 50 pairs'''
-    all_features = IS.get_features()
-    for kk in range(min(len(wrong_indices), 50)):
-        wrong_ind = wrong_indices[kk]
-        confuse_ind = confuse_indices[kk]
-        # sanity check: IS.viz_2sample(IS.dl_ev, wrong_ind, confuse_ind)
-        training_sample_by_influence, influence_values = IS.single_influence_func(all_features, [wrong_ind], [confuse_ind])
-        helpful_indices = np.where(influence_values < 0)[0]
-        harmful_indices = np.where(influence_values > 0)[0]
-        np.save('./{}/Allhelpful_indices_{}_{}'.format(base_dir, wrong_ind, confuse_ind), helpful_indices)
-        np.save('./{}/Allharmful_indices_{}_{}'.format(base_dir, wrong_ind, confuse_ind), harmful_indices)
-    exit()
+    # all_features = IS.get_features()
+    # for kk in range(min(len(wrong_indices), 50)):
+    #     wrong_ind = wrong_indices[kk]
+    #     confuse_ind = confuse_indices[kk]
+    #     # sanity check: IS.viz_2sample(IS.dl_ev, wrong_ind, confuse_ind)
+    #     training_sample_by_influence, influence_values = IS.single_influence_func(all_features, [wrong_ind], [confuse_ind])
+    #     helpful_indices = np.where(influence_values < 0)[0]
+    #     harmful_indices = np.where(influence_values > 0)[0]
+    #     np.save('./{}/Allhelpful_indices_{}_{}'.format(base_dir, wrong_ind, confuse_ind), helpful_indices)
+    #     np.save('./{}/Allharmful_indices_{}_{}'.format(base_dir, wrong_ind, confuse_ind), harmful_indices)
+    # exit()
 
     '''Step 3: Train the model for every pair'''
     # Run in shell
-    # for kk in tqdm(range(min(len(wrong_indices), 50))):
-    #     wrong_ind = wrong_indices[kk]
-    #     confuse_ind = confuse_indices[kk]
-    #     #  Normal training
-    #     os.system("python train_sample_reweight.py --dataset {} \
-    #                     --loss-type ProxyNCA_pfix_confusion_{}_{}_Allsamples \
-    #                     --helpful {}/Allhelpful_indices_{}_{}.npy \
-    #                     --harmful {}/Allharmful_indices_{}_{}.npy \
-    #                     --model_dir {} \
-    #                     --helpful_weight 2 --harmful_weight 0 \
-    #                     --seed {} --config config/{}_reweight.json".format(IS.dataset_name,
-    #                                                                        wrong_ind, confuse_ind,
-    #                                                                        base_dir, wrong_ind, confuse_ind,
-    #                                                                        base_dir, wrong_ind, confuse_ind,
-    #                                                                        IS.model_dir,
-    #                                                                        IS.seed,
-    #                                                                        IS.dataset_name))
-    #     # reverse training
-    #     os.system("python train_sample_reweight.py --dataset {} \
-    #                     --loss-type ProxyNCA_pfix_confusion_{}_{}_Allsamples \
-    #                     --helpful {}/Allhelpful_indices_{}_{}.npy \
-    #                     --harmful {}/Allharmful_indices_{}_{}.npy \
-    #                     --model_dir {} \
-    #                     --helpful_weight 0 --harmful_weight 2 \
-    #                     --seed {} --config config/{}_reweight.json".format(IS.dataset_name,
-    #                                                                        wrong_ind, confuse_ind,
-    #                                                                        base_dir, wrong_ind, confuse_ind,
-    #                                                                        base_dir, wrong_ind, confuse_ind,
-    #                                                                        IS.model_dir,
-    #                                                                        IS.seed,
-    #                                                                        IS.dataset_name))
+    for kk in tqdm(range(min(len(wrong_indices), 50))):
+        wrong_ind = wrong_indices[kk]
+        confuse_ind = confuse_indices[kk]
+        #  Normal training
+        os.system("python train_sample_reweight.py --dataset {} \
+                        --loss-type ProxyNCA_pfix_confusion_{}_{}_Allsamples \
+                        --helpful {}/Allhelpful_indices_{}_{}.npy \
+                        --harmful {}/Allharmful_indices_{}_{}.npy \
+                        --model_dir {} \
+                        --helpful_weight 2 --harmful_weight 0 \
+                        --seed {} --config config/{}_reweight.json".format(IS.dataset_name,
+                                                                           wrong_ind, confuse_ind,
+                                                                           base_dir, wrong_ind, confuse_ind,
+                                                                           base_dir, wrong_ind, confuse_ind,
+                                                                           IS.model_dir,
+                                                                           IS.seed,
+                                                                           IS.dataset_name))
+        # reverse training
+        os.system("python train_sample_reweight.py --dataset {} \
+                        --loss-type ProxyNCA_pfix_confusion_{}_{}_Allsamples \
+                        --helpful {}/Allhelpful_indices_{}_{}.npy \
+                        --harmful {}/Allharmful_indices_{}_{}.npy \
+                        --model_dir {} \
+                        --helpful_weight 0 --harmful_weight 2 \
+                        --seed {} --config config/{}_reweight.json".format(IS.dataset_name,
+                                                                           wrong_ind, confuse_ind,
+                                                                           base_dir, wrong_ind, confuse_ind,
+                                                                           base_dir, wrong_ind, confuse_ind,
+                                                                           IS.model_dir,
+                                                                           IS.seed,
+                                                                           IS.dataset_name))
 
     '''Step 4: Sanity check: Whether the confusion pairs are pulled far apart, Whether the confusion samples is pulled closer to correct neighbor'''
     result_log_file = 'Confuse_pair_influential_data/{}_pairs.txt'.format(IS.dataset_name)

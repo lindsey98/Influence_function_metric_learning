@@ -19,7 +19,7 @@ from utils import predict_batchwise, predict_batchwise_debug
 from evaluation import assign_by_euclidian_at_k_indices, assign_same_cls_neighbor, assign_diff_cls_neighbor
 import sklearn
 from evaluation.pumap import prepare_data, get_wrong_indices
-from explaination.Confusion_Case1 import DistinguishFeat
+from explaination.Confusion_Case1 import SampleRelabel
 os.environ['CUDA_VISIBLE_DEVICES'] = "1"
 
 
@@ -53,7 +53,7 @@ if __name__ == '__main__':
     seed = 4
     test_crop = False
 
-    DF = DistinguishFeat(dataset_name, seed, loss_type, config_name, test_crop)
+    DF = SampleRelabel(dataset_name, seed, loss_type, config_name, test_crop)
 
     '''Analyze confusing features for all confusion classes'''
     '''Step 1: Find pairs that human thinks dissimilar but model thinks similar'''

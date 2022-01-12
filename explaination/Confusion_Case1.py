@@ -22,7 +22,7 @@ import pickle
 os.environ['CUDA_VISIBLE_DEVICES'] = "1"
 
 
-class DistinguishFeat(InfluentialSample):
+class SampleRelabel(InfluentialSample):
     def __init__(self, dataset_name, seed, loss_type, config_name,
                  test_crop=False, sz_embedding=512, epoch=40):
 
@@ -140,101 +140,102 @@ class DistinguishFeat(InfluentialSample):
         plt.savefig('./{}/{}.png'.format(plt_dir, anchor_ind))
         plt.close()
 
-    # def VisTrain(self, wrong_ind, confusion_ind,
-    #              interest_indices, orig_NN_indices, curr_NN_indices,
-    #              model1, model2,
-    #              dl,
-    #              base_dir):
-    #
-    #     plt_dir = './{}/{}/{}_{}'.format(base_dir, self.dataset_name, wrong_ind, confusion_ind)
-    #     os.makedirs(plt_dir, exist_ok=True)
-    #     model1.eval(); model2.eval()
-    #
-    #     for kk, ind in enumerate(interest_indices):
-    #         fig = plt.figure()
-    #         fig.subplots_adjust(top=0.8)
-    #
-    #         ax = fig.add_subplot(3, 3, 1)
-    #         ax.imshow(to_pil_image(read_image(dl.dataset.im_paths[ind])))
-    #         ax.title.set_text('Ind = {}, Class = {}'.format(ind, dl.dataset.ys[ind]))
-    #         plt.axis('off')
-    #
-    #         ax = fig.add_subplot(3, 3, 2)
-    #         ax.imshow(to_pil_image(read_image(dl.dataset.im_paths[orig_NN_indices[kk]])))
-    #         ax.title.set_text('Ind = {}, Class = {}'.format(orig_NN_indices[kk], dl.dataset.ys[orig_NN_indices[kk]]))
-    #         plt.axis('off')
-    #
-    #         ax = fig.add_subplot(3, 3, 3)
-    #         ax.imshow(to_pil_image(read_image(dl.dataset.im_paths[curr_NN_indices[kk]])))
-    #         ax.title.set_text('Ind = {}, Class = {}'.format(curr_NN_indices[kk], dl.dataset.ys[curr_NN_indices[kk]]))
-    #         plt.axis('off')
-    #
-    #         cam_extractor1 = GradCAMCustomize(model1,
-    #                                           target_layer=model1.module[0].base.layer4)  # to last layer
-    #         cam_extractor2 = GradCAMCustomize(model2,
-    #                                           target_layer=model2.module[0].base.layer4)  # to last layer
-    #         cam_extractor1._hooks_enabled = True
-    #         model1.zero_grad()
-    #         emb1 = model1(dl.dataset.__getitem__(ind)[0].unsqueeze(0).cuda())
-    #         emb2 = model1(dl.dataset.__getitem__(orig_NN_indices[kk])[0].unsqueeze(0).cuda())
-    #         activation_map1 = cam_extractor1(torch.dot(emb1.detach().squeeze(0), emb2.squeeze(0)))
-    #         img1 = to_pil_image(read_image(dl.dataset.im_paths[orig_NN_indices[kk]]))
-    #         result1, _ = overlay_mask(img1, to_pil_image(activation_map1[0].detach().cpu(), mode='F'), alpha=0.5)
-    #         emb1 = F.normalize(emb1, p=2, dim=-1)
-    #         emb2 = F.normalize(emb2, p=2, dim=-1)
-    #         d1 = (emb1.squeeze(0) - emb2.squeeze(0)).square().sum()
-    #
-    #         cam_extractor2._hooks_enabled = True
-    #         model2.zero_grad()
-    #         emb1 = model2(dl.dataset.__getitem__(ind)[0].unsqueeze(0).cuda())
-    #         emb2 = model2(dl.dataset.__getitem__(curr_NN_indices[kk])[0].unsqueeze(0).cuda())
-    #         activation_map2 = cam_extractor2(torch.dot(emb1.detach().squeeze(0), emb2.squeeze(0)))
-    #         img2 = to_pil_image(read_image(dl.dataset.im_paths[curr_NN_indices[kk]]))
-    #         result2, _ = overlay_mask(img2, to_pil_image(activation_map2[0].detach().cpu(), mode='F'), alpha=0.5)
-    #         emb1 = F.normalize(emb1, p=2, dim=-1)
-    #         emb2 = F.normalize(emb2, p=2, dim=-1)
-    #         d2 = (emb1.squeeze(0) - emb2.squeeze(0)).square().sum()
-    #
-    #         ax = fig.add_subplot(3, 3, 5)
-    #         ax.imshow(result1)
-    #         ax.title.set_text('Distance = {:.4f}'.format(d1))
-    #         plt.axis('off')
-    #
-    #         ax = fig.add_subplot(3, 3, 6)
-    #         ax.imshow(result2)
-    #         ax.title.set_text('Distance = {:.4f}'.format(d2))
-    #         plt.axis('off')
-    #
-    #         # Affinity to proxy
-    #         proxy = self.criterion.proxies[dl.dataset.ys[ind]].detach()
-    #         cam_extractor1 = GradCAMCustomize(model1,
-    #                                           target_layer=model1.module[0].base.layer4)  # to last layer
-    #         cam_extractor2 = GradCAMCustomize(model2,
-    #                                           target_layer=model2.module[0].base.layer4)  # to last layer
-    #         cam_extractor1._hooks_enabled = True
-    #         model1.zero_grad()
-    #         emb1 = model1(dl.dataset.__getitem__(ind)[0].unsqueeze(0).cuda())
-    #         activation_map1 = cam_extractor1(torch.dot(emb1.squeeze(0), proxy.to(emb1.device)))
-    #         img = to_pil_image(read_image(dl.dataset.im_paths[ind]))
-    #         result1, _ = overlay_mask(img, to_pil_image(activation_map1[0].detach().cpu(), mode='F'), alpha=0.5)
-    #
-    #         cam_extractor2._hooks_enabled = True
-    #         model2.zero_grad()
-    #         emb1 = model2(dl.dataset.__getitem__(ind)[0].unsqueeze(0).cuda())
-    #         activation_map2 = cam_extractor2(torch.dot(emb1.squeeze(0), proxy.to(emb1.device)))
-    #         result2, _ = overlay_mask(img, to_pil_image(activation_map2[0].detach().cpu(), mode='F'), alpha=0.5)
-    #
-    #         ax = fig.add_subplot(3, 3, 8)
-    #         ax.imshow(result1)
-    #         plt.axis('off')
-    #
-    #         ax = fig.add_subplot(3, 3, 9)
-    #         ax.imshow(result2)
-    #         plt.axis('off')
-    #         # plt.show()
-    #         plt.savefig('./{}/{}.png'.format(plt_dir, ind))
-    #         plt.close()
+    def calc_relabel_dict(self, lookat_harmful, relabel_method,
+                          harmful_indices, helpful_indices, train_nn_indices, train_nn_indices_same_cls,
+                          base_dir, pair_ind1, pair_ind2):
 
+        if lookat_harmful:
+            top_harmful_indices = harmful_indices  # top_harmful_indices = influence_values.argsort()[-50:]
+            top_harmful_nn_indices = train_nn_indices[top_harmful_indices]
+            top_harmful_nn_samecls_indices = train_nn_indices_same_cls[top_harmful_indices]
+
+            if relabel_method == 'hard':
+                relabel_dict = {}
+                for kk in range(len(top_harmful_indices)):
+                    if self.dl_tr.dataset.ys[top_harmful_nn_indices[kk]] != self.dl_tr.dataset.ys[top_harmful_nn_samecls_indices[kk]]: # inconsistent label between global NN and same class NN
+                        relabel_dict[top_harmful_indices[kk]] = [self.dl_tr.dataset.ys[top_harmful_nn_samecls_indices[kk]],
+                                                                 self.dl_tr.dataset.ys[top_harmful_nn_indices[kk]]]
+                with open('./{}/Allrelabeldict_{}_{}.pkl'.format(base_dir, pair_ind1, pair_ind2), 'wb') as handle:
+                    pickle.dump(relabel_dict, handle)
+
+            elif relabel_method == 'soft':
+                relabel_dict = {}
+                unique_labels, unique_counts = torch.unique(self.train_label, return_counts=True)
+                median_shots_percls = unique_counts.median().item()
+                for kk in range(len(top_harmful_indices)):
+                    pred_labels, pred_scores = kNN_label_pred(top_harmful_indices[kk], self.train_embedding, self.train_label,
+                                                              self.dl_tr.dataset.nb_classes(), median_shots_percls)
+                    relabel_dict[top_harmful_indices[kk]] = pred_scores
+                with open('./{}/Allrelabeldict_{}_{}_soft.pkl'.format(base_dir, pair_ind1, pair_ind2), 'wb') as handle:
+                    pickle.dump(relabel_dict, handle)
+
+            else:
+                raise NotImplemented
+
+        else:
+            top_helpful_indices = helpful_indices
+            top_helpful_nn_indices = train_nn_indices[top_helpful_indices]
+            top_helpful_nn_samecls_indices = train_nn_indices_same_cls[top_helpful_indices]
+
+            if relabel_method == 'hard':
+                relabel_dict = {}
+                for kk in range(len(top_helpful_indices)):
+                    if DF.dl_tr.dataset.ys[top_helpful_nn_indices[kk]] != DF.dl_tr.dataset.ys[top_helpful_nn_samecls_indices[kk]]: # inconsistent label between global NN and same class NN
+                        relabel_dict[top_helpful_indices[kk]] = [DF.dl_tr.dataset.ys[top_helpful_nn_samecls_indices[kk]],
+                                                                 DF.dl_tr.dataset.ys[top_helpful_nn_indices[kk]]]
+                with open('./{}/Allrelabeldict_{}_{}.pkl'.format(base_dir, pair_ind1, pair_ind2), 'wb') as handle:
+                    pickle.dump(relabel_dict, handle)
+
+            elif relabel_method == 'soft':
+                relabel_dict = {}
+                unique_labels, unique_counts = torch.unique(self.train_label, return_counts=True)
+                median_shots_percls = unique_counts.median().item()
+                for kk in range(len(top_helpful_indices)):
+                    pred_labels, pred_scores = kNN_label_pred(top_helpful_indices[kk], self.train_embedding,
+                                                              self.train_label,
+                                                              self.dl_tr.dataset.nb_classes(), median_shots_percls)
+                    relabel_dict[top_helpful_indices[kk]] = pred_scores
+                with open('./{}/Allrelabeldict_{}_{}_soft.pkl'.format(base_dir, pair_ind1, pair_ind2), 'wb') as handle:
+                    pickle.dump(relabel_dict, handle)
+
+            else:
+                raise NotImplemented
+
+
+    def getNN_indices(self, embedding, label):
+
+        # global 1st NN
+        nn_indices, nn_label = assign_by_euclidian_at_k_indices(embedding, label, 1)
+        nn_indices, nn_label = nn_indices.flatten(), nn_label.flatten()
+
+        # Same class 1st NN
+        distances = sklearn.metrics.pairwise.pairwise_distances(embedding)  # (N_train, N_train)
+        diff_cls_mask = (label[:, None] != label).detach().cpu().numpy().nonzero()
+        distances[diff_cls_mask[0], diff_cls_mask[1]] = distances.max() + 1
+        nn_indices_same_cls = np.argsort(distances, axis=1)[:, 1]
+
+        return nn_indices, nn_label, nn_indices_same_cls
+
+
+# knn monitor as in InstDisc https://arxiv.org/abs/1805.01978
+# implementation follows http://github.com/zhirongw/lemniscate.pytorch and https://github.com/leftthomas/SimCLR, https://github.com/PatrickHua/SimSiam/blob/main/tools/knn_monitor.py
+def kNN_label_pred(query_ind, embeddings, labels, nb_classes, knn_k):
+
+    distances = sklearn.metrics.pairwise.pairwise_distances(embeddings)
+    indices = np.argsort(distances, axis=1)[:, 1: knn_k + 1]
+    query_nn_indices = indices[query_ind] # (knn_k, )
+    query_nn_labels = torch.gather(labels, dim=-1, index=torch.from_numpy(query_nn_indices)) # (knn_k, )
+
+    query2nn_dist = distances[query_ind, query_nn_indices] # (knn_k, )
+    query2nn_dist_exp = (-torch.from_numpy(query2nn_dist)).exp() # (knn_k, )
+
+    one_hot_label = torch.zeros(knn_k, nb_classes, device=query_nn_labels.device) # (knn_k, C)
+    one_hot_label = one_hot_label.scatter(dim=-1, index=query_nn_labels.view(-1, 1).type(torch.int64), value=1.0)
+
+    raw_pred_scores = torch.sum(one_hot_label.view(-1, nb_classes) * query2nn_dist_exp.unsqueeze(dim=-1), dim=0) # (C, )
+    pred_scores = raw_pred_scores / torch.sum(raw_pred_scores) # (C, )
+    pred_labels = pred_scores.argsort(descending=True)
+    return pred_labels, pred_scores
 
 if __name__ == '__main__':
 
@@ -245,23 +246,17 @@ if __name__ == '__main__':
     seed = 4
     test_crop = False
 
-    DF = DistinguishFeat(dataset_name, seed, loss_type, config_name, test_crop)
+    DF = SampleRelabel(dataset_name, seed, loss_type, config_name, test_crop)
 
     '''Analyze confusing features for all confusion classes'''
     '''Step 1: Visualize all pairs (confuse), Find interesting pairs'''
-    testing_embedding, testing_label = DF.testing_embedding, DF.testing_label
-    test_nn_indices, test_nn_label = assign_by_euclidian_at_k_indices(testing_embedding, testing_label, 1)
-    test_nn_indices, test_nn_label = test_nn_indices.flatten(), test_nn_label.flatten()
-    wrong_indices = (test_nn_label != testing_label.detach().cpu().numpy().flatten()).nonzero()[0]
+    test_nn_indices, test_nn_label, test_nn_indices_same_cls = DF.getNN_indices(DF.testing_embedding, DF.testing_label)
+    wrong_indices = (test_nn_label != DF.testing_label.detach().cpu().numpy().flatten()).nonzero()[0]
     confuse_indices = test_nn_indices[wrong_indices]
     print(len(confuse_indices))
     assert len(wrong_indices) == len(confuse_indices)
 
     # Same class 1st NN
-    distances = sklearn.metrics.pairwise.pairwise_distances(testing_embedding)  # (N_train, N_train)
-    diff_cls_mask = (testing_label[:, None] != testing_label).detach().cpu().numpy().nonzero()
-    distances[diff_cls_mask[0], diff_cls_mask[1]] = distances.max() + 1
-    test_nn_indices_same_cls = np.argsort(distances, axis=1)[:, 1]
     wrong_test_nn_indices_same_cls = test_nn_indices_same_cls[wrong_indices]
     assert len(wrong_indices) == len(wrong_test_nn_indices_same_cls)
 
@@ -270,13 +265,15 @@ if __name__ == '__main__':
     # exit()
 
     '''Step 2: Identify influential training points for a specific pair'''
-    pair_ind1 = 35; pair_ind2 = 2551
+    pair_ind1 = 722; pair_ind2 = 735
+    lookat_harmful = False
     base_dir = 'Confuse_pair_influential_data/{}'.format(DF.dataset_name)
     os.makedirs(base_dir, exist_ok=True)
 
     if not os.path.exists('./{}/All_influence_{}_{}.npy'.format(base_dir, pair_ind1, pair_ind2)):
         all_features = DF.get_features()
-        # sanity check: IS.viz_2sample(IS.dl_ev, wrong_ind, confuse_ind)
+        # sanity check:
+        DF.viz_2sample(DF.dl_ev, pair_ind1, pair_ind2)
         training_sample_by_influence, influence_values = DF.single_influence_func(all_features, [pair_ind1], [pair_ind2])
         helpful_indices = np.where(influence_values < 0)[0]
         harmful_indices = np.where(influence_values > 0)[0]
@@ -290,23 +287,11 @@ if __name__ == '__main__':
 
     '''Step 3: Visualize those training'''
     # Global 1st NN
-    training_embedding, training_label = DF.train_embedding, DF.train_label
-    train_nn_indices, train_nn_label = assign_by_euclidian_at_k_indices(training_embedding, training_label, 1)
-    train_nn_indices, train_nn_label = train_nn_indices.flatten(), train_nn_label.flatten()
-
-    # Same class 1st NN
-    distances = sklearn.metrics.pairwise.pairwise_distances(training_embedding)  # (N_train, N_train)
-    diff_cls_mask = (training_label[:, None] != training_label).detach().cpu().numpy().nonzero()
-    distances[diff_cls_mask[0], diff_cls_mask[1]] = distances.max() + 1
-    train_nn_indices_same_cls = np.argsort(distances, axis=1)[:, 1]
-
+    train_nn_indices, train_nn_label, train_nn_indices_same_cls = DF.getNN_indices(DF.train_embedding, DF.train_label)
     assert len(train_nn_indices_same_cls) == len(train_nn_indices)
-    assert len(training_label) == len(train_nn_indices)
+    assert len(DF.train_label) == len(train_nn_indices)
 
-    # print([influence_values[ind] for ind in influence_values.argsort()[-50:]])
-    # print([DF.dl_tr.dataset.ys[ind] for ind in influence_values.argsort()[-50:]])
-
-    # DF.model = DF._load_model()  # reload the original weights
+    DF.model = DF._load_model()  # reload the original weights
     # for harmful in influence_values.argsort()[-20:]:
     #     DF.VisTrainNN(pair_ind1, pair_ind2,
     #                   harmful,
@@ -316,37 +301,38 @@ if __name__ == '__main__':
     #                   DF.dl_tr,
     #                   base_dir='ModelS_HumanD')
 
+    # for helpful in influence_values.argsort()[:20]:
+    #     DF.VisTrainNN(pair_ind1, pair_ind2,
+    #                   helpful,
+    #                   train_nn_indices[helpful],
+    #                   train_nn_indices_same_cls[helpful],
+    #                   DF.model,
+    #                   DF.dl_tr,
+    #                   base_dir='ModelD_HumanS')
+
     '''Step 4: Save harmful indices as well as its neighboring indices'''
-    # top_harmful_indices = influence_values.argsort()[-50:]
-    # top_harmful_nn_indices = train_nn_indices[top_harmful_indices]
-    # top_harmful_nn_samecls_indices = train_nn_indices_same_cls[top_harmful_indices]
-    #
-    # relabel_dict = {}
-    # for kk in range(len(top_harmful_indices)):
-    #     if DF.dl_tr.dataset.ys[top_harmful_nn_indices[kk]] != DF.dl_tr.dataset.ys[top_harmful_nn_samecls_indices[kk]]: # inconsistent label between global NN and same class NN
-    #         relabel_dict[top_harmful_indices[kk]] = [DF.dl_tr.dataset.ys[top_harmful_nn_samecls_indices[kk]],
-    #                                                  DF.dl_tr.dataset.ys[top_harmful_nn_indices[kk]]]
-    #
-    #
-    # with open('./{}/relabeldict_{}_{}.pkl'.format(base_dir, pair_ind1, pair_ind2), 'wb') as handle:
-    #     pickle.dump(relabel_dict, handle)
+    DF.calc_relabel_dict(lookat_harmful=lookat_harmful, relabel_method='soft',
+                          harmful_indices=harmful_indices, helpful_indices=helpful_indices,
+                          train_nn_indices=train_nn_indices, train_nn_indices_same_cls=train_nn_indices_same_cls,
+                          base_dir=base_dir, pair_ind1=pair_ind1, pair_ind2=pair_ind2)
+    exit()
 
     '''Step 5: Verify that the model after training is better?'''
-    DF.model = DF._load_model()  # reload the original weights
-    new_features = DF.get_features()
-
-    inter_dist_orig, _ = grad_confusion_pair(DF.model, new_features, [pair_ind1], [pair_ind2])
-    print('Original distance: ', inter_dist_orig)
-
-    new_weight_path = 'models/dvi_data_{}_{}_loss{}/ResNet_512_Model/Epoch_{}/{}_{}_trainval_{}_{}.pth'.format(
-        dataset_name,
-        seed,
-        'ProxyNCA_pfix_softlabel_{}_{}'.format(pair_ind1, pair_ind2),
-        1, dataset_name,
-        dataset_name,
-        512, seed)  # reload weights as new
-    DF.model.load_state_dict(torch.load(new_weight_path))
-    inter_dist_after, _ = grad_confusion_pair(DF.model, new_features, [pair_ind1], [pair_ind2])
-    print('After distance: ', inter_dist_orig)
+    # DF.model = DF._load_model()  # reload the original weights
+    # new_features = DF.get_features()
+    # inter_dist_orig, _ = grad_confusion_pair(DF.model, new_features, [pair_ind1], [pair_ind2])
+    # print('Original distance: ', inter_dist_orig)
+    #
+    # new_weight_path = 'models/dvi_data_{}_{}_loss{}/ResNet_512_Model/Epoch_{}/{}_{}_trainval_{}_{}.pth'.format(
+    #     dataset_name,
+    #     seed,
+    #     'ProxyNCA_pfix_softlabel_{}_{}_continue_labelflip'.format(pair_ind1, pair_ind2),
+    #     5, dataset_name,
+    #     dataset_name,
+    #     512, seed)  # reload weights as new
+    # DF.model.load_state_dict(torch.load(new_weight_path))
+    # new_features = DF.get_features()
+    # inter_dist_after, _ = grad_confusion_pair(DF.model, new_features, [pair_ind1], [pair_ind2])
+    # print('After distance: ', inter_dist_after)
 
 

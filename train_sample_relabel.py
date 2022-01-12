@@ -13,7 +13,6 @@ import json
 from tqdm import tqdm
 from torch.utils.data import Dataset, DataLoader
 import random
-from loss import binarize_and_smooth_labels
 import pickle
 os.environ["CUDA_VISIBLE_DEVICES"]="0,1"
 
@@ -36,10 +35,11 @@ parser.add_argument('--mode', default='trainval', choices=['train', 'trainval', 
                                                            'testontrain', 'testontrain_super'],
                     help='train with train data or train with trainval')
 parser.add_argument('--batch-size', default = 32, type=int, dest = 'sz_batch')
-parser.add_argument('--no_warmup', default=False, action='store_true')
-parser.add_argument('--loss-type', default='ProxyNCA_pfix_softlabel_35_2551', type=str)
-parser.add_argument('--relabel_dict', default='./{}/relabeldict_{}_{}.pkl'.format('Confuse_pair_influential_data/{}'.format('cub'),
-                                                                                  35, 2551), type=str)
+parser.add_argument('--no_warmup', default=True, action='store_true')
+parser.add_argument('--model_dir', default='models/dvi_data_{}_{}_lossProxyNCA_pfix/ResNet_512_Model'.format('cub', 4), type=str)
+parser.add_argument('--loss-type', default='ProxyNCA_pfix_softlabel_{}_{}_continue_labelflip'.format(722, 735), type=str)
+parser.add_argument('--relabel_dict', default='./{}/Allrelabeldict_{}_{}.pkl'.format('Confuse_pair_influential_data/{}'.format('cub'),
+                                                                                     722, 735), type=str)
 parser.add_argument('--workers', default=2, type=int, dest = 'nb_workers')
 
 args = parser.parse_args()
@@ -62,10 +62,10 @@ def find_samples_label(y, nb_classes, indices):
     for i, ind in enumerate(indices):
         if ind.item() in args.relabel_dict.keys():
             relabel_label = args.relabel_dict[ind.item()]
-            T[i, relabel_label] = 0.5
+            # T[i, relabel_label] = 1/len(relabel_label)
+            T[i, relabel_label[1]] = 1.
         else:
             T[i, y[i]] = 1.
-
     return T
 
 if __name__ == '__main__':
@@ -286,13 +286,26 @@ if __name__ == '__main__':
     model = torch.nn.Sequential(feat, emb)
     model = torch.nn.DataParallel(model)
     model = model.cuda()
+    model.load_state_dict(torch.load('{}/Epoch_{}/{}_{}_trainval_{}_{}.pth'.format(args.model_dir, 40, args.dataset, args.dataset,
+                                                                                   args.sz_embedding, args.seed)))
+    # disable batchnorm training
+    for module in model.modules():
+        if isinstance(module, torch.nn.BatchNorm2d):
+            if hasattr(module, 'weight'):
+                module.weight.requires_grad_(False)
+            if hasattr(module, 'bias'):
+                module.bias.requires_grad_(False)
+            module.eval()
 
     '''Loss'''
     criterion = config['criterion']['type'](
         nb_classes = dl_tr.dataset.nb_classes(),
         sz_embed = args.sz_embedding,
         **config['criterion']['args']
-    ).cuda()
+    )
+    proxies = torch.load('{}/Epoch_{}/proxy.pth'.format(args.model_dir, 40), map_location='cpu')['proxies'].detach()
+    criterion.proxies.data = proxies
+    criterion.cuda()
 
     opt_warmup = config['opt']['type'](
         [
@@ -316,12 +329,12 @@ if __name__ == '__main__':
     # options for model and loss
     opt = config['opt']['type'](
         [
-            {
-                **{'params': list(feat.parameters()
-                    )
-                },
-                **config['opt']['args']['backbone']
-            },
+            # {
+            #     **{'params': list(feat.parameters()
+            #         )
+            #     },
+            #     **config['opt']['args']['backbone']
+            # },
             {
                 **{'params': list(emb.parameters()
                     )
@@ -363,6 +376,7 @@ if __name__ == '__main__':
 
     logging.info("Training parameters: {}".format(vars(args)))
     logging.info("Training for {} epochs.".format(args.nb_epochs))
+    logging.info("Number of relabelled items: {}".format(len(args.relabel_dict)))
     losses = []
     scores = []
     scores_tr = []
@@ -422,6 +436,10 @@ if __name__ == '__main__':
 
     '''training loop'''
     for e in range(0, args.nb_epochs):
+
+        # FIXME freeze in training
+        feat.requires_grad = False
+        emb.bias.requires_grad = False
 
         if args.mode == 'train':
             curr_lr = opt.param_groups[0]['lr']
@@ -518,7 +536,7 @@ if __name__ == '__main__':
             logging.info(str(lr_steps))
 
         if e == args.nb_epochs-1:
-            save_dir = 'dvi_data_{}_{}_loss{}/ResNet_{}_Model'.format(args.dataset, args.seed,
+            save_dir = 'models/dvi_data_{}_{}_loss{}/ResNet_{}_Model'.format(args.dataset, args.seed,
                                                                       args.loss_type, str(args.sz_embedding))
             os.makedirs('{}'.format(save_dir), exist_ok=True)
             os.makedirs('{}/Epoch_{}'.format(save_dir, e+1), exist_ok=True)
