@@ -311,28 +311,28 @@ if __name__ == '__main__':
     #                   base_dir='ModelD_HumanS')
 
     '''Step 4: Save harmful indices as well as its neighboring indices'''
-    DF.calc_relabel_dict(lookat_harmful=lookat_harmful, relabel_method='soft',
-                          harmful_indices=harmful_indices, helpful_indices=helpful_indices,
-                          train_nn_indices=train_nn_indices, train_nn_indices_same_cls=train_nn_indices_same_cls,
-                          base_dir=base_dir, pair_ind1=pair_ind1, pair_ind2=pair_ind2)
-    exit()
+    # DF.calc_relabel_dict(lookat_harmful=lookat_harmful, relabel_method='soft',
+    #                       harmful_indices=harmful_indices, helpful_indices=helpful_indices,
+    #                       train_nn_indices=train_nn_indices, train_nn_indices_same_cls=train_nn_indices_same_cls,
+    #                       base_dir=base_dir, pair_ind1=pair_ind1, pair_ind2=pair_ind2)
+    # exit()
 
     '''Step 5: Verify that the model after training is better?'''
-    # DF.model = DF._load_model()  # reload the original weights
-    # new_features = DF.get_features()
-    # inter_dist_orig, _ = grad_confusion_pair(DF.model, new_features, [pair_ind1], [pair_ind2])
-    # print('Original distance: ', inter_dist_orig)
-    #
-    # new_weight_path = 'models/dvi_data_{}_{}_loss{}/ResNet_512_Model/Epoch_{}/{}_{}_trainval_{}_{}.pth'.format(
-    #     dataset_name,
-    #     seed,
-    #     'ProxyNCA_pfix_softlabel_{}_{}_continue_labelflip'.format(pair_ind1, pair_ind2),
-    #     5, dataset_name,
-    #     dataset_name,
-    #     512, seed)  # reload weights as new
-    # DF.model.load_state_dict(torch.load(new_weight_path))
-    # new_features = DF.get_features()
-    # inter_dist_after, _ = grad_confusion_pair(DF.model, new_features, [pair_ind1], [pair_ind2])
-    # print('After distance: ', inter_dist_after)
+    DF.model = DF._load_model()  # reload the original weights
+    new_features = DF.get_features()
+    inter_dist_orig, _ = grad_confusion_pair(DF.model, new_features, [pair_ind1], [pair_ind2])
+    print('Original distance: ', inter_dist_orig)
+
+    new_weight_path = 'models/dvi_data_{}_{}_loss{}/ResNet_512_Model/Epoch_{}/{}_{}_trainval_{}_{}.pth'.format(
+        dataset_name,
+        seed,
+        'ProxyNCA_pfix_softlabel_{}_{}_continue_soft'.format(pair_ind1, pair_ind2),
+        5, dataset_name,
+        dataset_name,
+        512, seed)  # reload weights as new
+    DF.model.load_state_dict(torch.load(new_weight_path))
+    new_features = DF.get_features()
+    inter_dist_after, _ = grad_confusion_pair(DF.model, new_features, [pair_ind1], [pair_ind2])
+    print('After distance: ', inter_dist_after)
 
 

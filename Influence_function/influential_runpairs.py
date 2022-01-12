@@ -46,17 +46,18 @@ if __name__ == '__main__':
     os.makedirs(base_dir, exist_ok=True)
 
     '''Step 2: Save influential samples indices for 50 pairs'''
-    # all_features = IS.get_features()
+    all_features = IS.get_features()
     # for kk in range(min(len(wrong_indices), 50)):
-    #     wrong_ind = wrong_indices[kk]
-    #     confuse_ind = confuse_indices[kk]
-    #     # sanity check: IS.viz_2sample(IS.dl_ev, wrong_ind, confuse_ind)
-    #     training_sample_by_influence, influence_values = IS.single_influence_func(all_features, [wrong_ind], [confuse_ind])
-    #     helpful_indices = np.where(influence_values < 0)[0]
-    #     harmful_indices = np.where(influence_values > 0)[0]
-    #     np.save('./{}/Allhelpful_indices_{}_{}'.format(base_dir, wrong_ind, confuse_ind), helpful_indices)
-    #     np.save('./{}/Allharmful_indices_{}_{}'.format(base_dir, wrong_ind, confuse_ind), harmful_indices)
-    # exit()
+    for kk in range(48, 50):
+        wrong_ind = wrong_indices[kk]
+        confuse_ind = confuse_indices[kk]
+        # sanity check: IS.viz_2sample(IS.dl_ev, wrong_ind, confuse_ind)
+        training_sample_by_influence, influence_values = IS.single_influence_func(all_features, [wrong_ind], [confuse_ind])
+        helpful_indices = np.where(influence_values < 0)[0]
+        harmful_indices = np.where(influence_values > 0)[0]
+        np.save('./{}/Allhelpful_indices_{}_{}'.format(base_dir, wrong_ind, confuse_ind), helpful_indices)
+        np.save('./{}/Allharmful_indices_{}_{}'.format(base_dir, wrong_ind, confuse_ind), harmful_indices)
+    exit()
 
     '''Step 3: Train the model for every pair'''
     # Run in shell
