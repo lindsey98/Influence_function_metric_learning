@@ -311,11 +311,11 @@ if __name__ == '__main__':
     #                   base_dir='ModelD_HumanS')
 
     '''Step 4: Save harmful indices as well as its neighboring indices'''
-    # DF.calc_relabel_dict(lookat_harmful=lookat_harmful, relabel_method='soft',
-    #                       harmful_indices=harmful_indices, helpful_indices=helpful_indices,
-    #                       train_nn_indices=train_nn_indices, train_nn_indices_same_cls=train_nn_indices_same_cls,
-    #                       base_dir=base_dir, pair_ind1=pair_ind1, pair_ind2=pair_ind2)
-    # exit()
+    DF.calc_relabel_dict(lookat_harmful=lookat_harmful, relabel_method='soft',
+                          harmful_indices=harmful_indices, helpful_indices=helpful_indices,
+                          train_nn_indices=train_nn_indices, train_nn_indices_same_cls=train_nn_indices_same_cls,
+                          base_dir=base_dir, pair_ind1=pair_ind1, pair_ind2=pair_ind2)
+    exit()
 
     '''Step 5: Verify that the model after training is better?'''
     DF.model = DF._load_model()  # reload the original weights

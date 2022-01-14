@@ -656,3 +656,41 @@ class ProxyAnchor_pfix_reweight(torch.nn.Module):
         loss = pos_term + neg_term
 
         return loss
+
+
+class MultiSimilarityLoss(torch.nn.Module):
+    def __init__(self):
+        super(MultiSimilarityLoss, self).__init__()
+        self.thresh = 0.5
+        self.margin = 0.1
+        self.scale_pos = 2.0
+        self.scale_neg = 40.0
+
+    def forward(self, X, indices, T):
+        batch_size = X.size(0)
+        sim_mat = torch.matmul(X, torch.t(X))
+
+        epsilon = 1e-5
+        loss = list()
+
+        for i in range(batch_size):
+            pos_pair_ = sim_mat[i][T == T[i]]
+            pos_pair_ = pos_pair_[pos_pair_ < 1 - epsilon]
+            neg_pair_ = sim_mat[i][T != T[i]]
+
+            neg_pair = neg_pair_[neg_pair_ + self.margin > min(pos_pair_)]
+            pos_pair = pos_pair_[pos_pair_ - self.margin < max(neg_pair_)]
+
+            if len(neg_pair) < 1 or len(pos_pair) < 1:
+                continue
+
+            # weighting step
+            pos_loss = 1.0 / self.scale_pos * torch.log(1 + torch.sum(torch.exp(-self.scale_pos * (pos_pair - self.thresh))))
+            neg_loss = 1.0 / self.scale_neg * torch.log(1 + torch.sum(torch.exp(self.scale_neg * (neg_pair - self.thresh))))
+            loss.append(pos_loss + neg_loss)
+
+        if len(loss) == 0:
+            return torch.zeros([], requires_grad=True)
+
+        loss = sum(loss) / batch_size
+        return loss
