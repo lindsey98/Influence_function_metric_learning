@@ -658,39 +658,42 @@ class ProxyAnchor_pfix_reweight(torch.nn.Module):
         return loss
 
 
-class MultiSimilarityLoss(torch.nn.Module):
-    def __init__(self):
-        super(MultiSimilarityLoss, self).__init__()
-        self.thresh = 0.5
-        self.margin = 0.1
-        self.scale_pos = 2.0
-        self.scale_neg = 40.0
+class SoftTriple(torch.nn.Module):
+    def __init__(self, la, gamma, tau, margin, K,
+                 nb_classes, sz_embed,
+                 ):
+        super(SoftTriple, self).__init__()
+        self.la = la  # scaling factor in softmax loss
+        self.gamma = 1. / gamma  # temperature scaling factor in q_k
+        self.tau = tau  # tradeoff param in center regularization
+        self.margin = margin  # delta
+        self.nb_classes =  nb_classes
+        self.sz_embed = sz_embed
+        self.K = K
+        self.proxies = torch.nn.Parameter(torch.randn(nb_classes*K, sz_embed).cuda())
+        self.weight = torch.zeros(nb_classes * K, nb_classes * K, dtype=torch.bool).cuda()
+        for i in range(0, nb_classes):
+            for j in range(0, K):
+                self.weight[i * K + j, i * K + j + 1:(i + 1) * K] = 1
+        torch.nn.init.kaiming_normal_(self.proxies, mode='fan_out')
 
     def forward(self, X, indices, T):
-        batch_size = X.size(0)
-        sim_mat = torch.matmul(X, torch.t(X))
 
-        epsilon = 1e-5
-        loss = list()
+        P = F.normalize(self.proxies, p=2, dim=-1)  # proxy embeddings
+        X = F.normalize(X, p=2, dim=-1)
+        simInd = X.matmul(P.t())  # (B, nb_classes*K)
+        simStruc = simInd.reshape(-1, self.nb_classes, self.K) # (B, nb_classes, K)
 
-        for i in range(batch_size):
-            pos_pair_ = sim_mat[i][T == T[i]]
-            pos_pair_ = pos_pair_[pos_pair_ < 1 - epsilon]
-            neg_pair_ = sim_mat[i][T != T[i]]
+        prob = F.softmax(simStruc * self.gamma, dim=2) # (B, nb_classes, K)
+        simClass = torch.sum(prob * simStruc, dim=2) # (B, nb_classes)
 
-            neg_pair = neg_pair_[neg_pair_ + self.margin > min(pos_pair_)]
-            pos_pair = pos_pair_[pos_pair_ - self.margin < max(neg_pair_)]
+        marginM = torch.zeros(simClass.shape).cuda()
+        marginM[torch.arange(0, marginM.shape[0]), T] = self.margin # (B, nb_classes)
+        loss = F.cross_entropy(self.la * (simClass-marginM), T) # scalar
 
-            if len(neg_pair) < 1 or len(pos_pair) < 1:
-                continue
-
-            # weighting step
-            pos_loss = 1.0 / self.scale_pos * torch.log(1 + torch.sum(torch.exp(-self.scale_pos * (pos_pair - self.thresh))))
-            neg_loss = 1.0 / self.scale_neg * torch.log(1 + torch.sum(torch.exp(self.scale_neg * (neg_pair - self.thresh))))
-            loss.append(pos_loss + neg_loss)
-
-        if len(loss) == 0:
-            return torch.zeros([], requires_grad=True)
-
-        loss = sum(loss) / batch_size
-        return loss
+        if self.tau > 0 and self.K > 1:
+            simCenter = P.matmul(P.t()) # (nb_classes*K, nb_classes*K)
+            reg = torch.sum(torch.sqrt(2.0 + 1e-5 - 2.*simCenter[self.weight])) / (self.nb_classes * self.K * (self.K-1.))
+            return loss + self.tau * reg
+        else:
+            return loss
