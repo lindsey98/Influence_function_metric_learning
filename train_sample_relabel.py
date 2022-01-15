@@ -306,6 +306,7 @@ if __name__ == '__main__':
     )
     proxies = torch.load('{}/Epoch_{}/proxy.pth'.format(args.model_dir, 40), map_location='cpu')['proxies'].detach()
     criterion.proxies.data = proxies
+    criterion.proxies.requires_grad = False
     criterion.cuda()
 
     opt_warmup = config['opt']['type'](

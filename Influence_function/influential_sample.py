@@ -331,21 +331,21 @@ class InfluentialSample():
 
 if __name__ == '__main__':
 
-    # dataset_name = 'cars'
-    # loss_type = 'ProxyNCA_pfix'
-    # config_name = 'cars'
-    # sz_embedding = 512
-    # seed = 4
-    # epoch = 40
-    # test_crop = False
-
-    dataset_name = 'sop'
-    loss_type = 'ProxyNCA_pfix_var'
-    config_name = 'sop'
+    dataset_name = 'cub'
+    loss_type = 'ProxyNCA_prob_orig'
+    config_name = 'cub'
     sz_embedding = 512
-    seed = 2
+    seed = 0
     epoch = 40
     test_crop = False
+
+    # dataset_name = 'sop'
+    # loss_type = 'ProxyNCA_pfix_var'
+    # config_name = 'sop'
+    # sz_embedding = 512
+    # seed = 2
+    # epoch = 40
+    # test_crop = False
 
     # dataset_name = 'inshop'
     # loss_type = 'ProxyNCA_pfix_var_complicate'
@@ -360,53 +360,53 @@ if __name__ == '__main__':
     '''Other: get confusion (before VS after)'''
     # FIXME: inter class distance should be computed based on original confusion pairs
     #  confusion class pairs is computed with original weights, then we do weight reload
-    IS.model = IS._load_model()  # reload the original weights
-    features = IS.get_features()
-
-    IS.model = IS._load_model_random()
-    random_features = IS.get_features()
-
-    confusion_class_pairs = IS.get_confusion_class_pairs()
-    for pair_idx in range(len(confusion_class_pairs)):
-        print('Pair index', pair_idx)
-        wrong_cls = confusion_class_pairs[pair_idx][0][0]
-        confuse_classes = [x[1] for x in confusion_class_pairs[pair_idx]]
-
-        IS.model = IS._load_model_random()
-        inter_dist_after, _ = grad_confusion(IS.model, random_features, wrong_cls, confuse_classes,
-                                             IS.testing_nn_label, IS.testing_label, IS.testing_nn_indices)
-        print("Before training inter-class distance: ", inter_dist_after)
-
-        IS.model = IS._load_model() # reload the original weights
-        inter_dist_orig, _ = grad_confusion(IS.model, features, wrong_cls, confuse_classes,
-                                            IS.testing_nn_label, IS.testing_label, IS.testing_nn_indices)
-        print("Original inter-class distance: ", inter_dist_orig)
-
-        # reload weights as new
-        IS.model.load_state_dict(torch.load(
-                'models/dvi_data_{}_{}_loss{}_{}_{}/ResNet_512_Model/Epoch_{}/{}_{}_trainval_{}_{}.pth'.format(dataset_name, seed,
-                 'ProxyNCA_pfix_confusion_{}_threshold50'.format(wrong_cls),
-                 2, 0,
-                 1, dataset_name,
-                 dataset_name, 512, seed)))
-        inter_dist_after, _ = grad_confusion(IS.model, features, wrong_cls, confuse_classes,
-                                             IS.testing_nn_label, IS.testing_label, IS.testing_nn_indices)
-        print("After inter-class distance: ", inter_dist_after)
-
-        # reload weights as new
-        IS.model.load_state_dict(torch.load(
-                  'models/dvi_data_{}_{}_loss{}_{}_{}/ResNet_512_Model/Epoch_{}/{}_{}_trainval_{}_{}.pth'.format(dataset_name,
-                   seed,
-                   'ProxyNCA_pfix_confusion_{}_threshold50'.format(wrong_cls),
-                   0, 2,
-                   1,
-                   dataset_name,
-                   dataset_name,
-                   512, seed)))
-        inter_dist_after, _ = grad_confusion(IS.model, features, wrong_cls, confuse_classes,
-                                             IS.testing_nn_label, IS.testing_label, IS.testing_nn_indices)
-        print("After inter-class distance reverse: ", inter_dist_after)
-    exit()
+    # IS.model = IS._load_model()  # reload the original weights
+    # features = IS.get_features()
+    #
+    # IS.model = IS._load_model_random()
+    # random_features = IS.get_features()
+    #
+    # confusion_class_pairs = IS.get_confusion_class_pairs()
+    # for pair_idx in range(len(confusion_class_pairs)):
+    #     print('Pair index', pair_idx)
+    #     wrong_cls = confusion_class_pairs[pair_idx][0][0]
+    #     confuse_classes = [x[1] for x in confusion_class_pairs[pair_idx]]
+    #
+    #     IS.model = IS._load_model_random()
+    #     inter_dist_after, _ = grad_confusion(IS.model, random_features, wrong_cls, confuse_classes,
+    #                                          IS.testing_nn_label, IS.testing_label, IS.testing_nn_indices)
+    #     print("Before training inter-class distance: ", inter_dist_after)
+    #
+    #     IS.model = IS._load_model() # reload the original weights
+    #     inter_dist_orig, _ = grad_confusion(IS.model, features, wrong_cls, confuse_classes,
+    #                                         IS.testing_nn_label, IS.testing_label, IS.testing_nn_indices)
+    #     print("Original inter-class distance: ", inter_dist_orig)
+    #
+    #     # reload weights as new
+    #     IS.model.load_state_dict(torch.load(
+    #             'models/dvi_data_{}_{}_loss{}_{}_{}/ResNet_512_Model/Epoch_{}/{}_{}_trainval_{}_{}.pth'.format(dataset_name, seed,
+    #              'ProxyNCA_pfix_confusion_{}_threshold50'.format(wrong_cls),
+    #              2, 0,
+    #              1, dataset_name,
+    #              dataset_name, 512, seed)))
+    #     inter_dist_after, _ = grad_confusion(IS.model, features, wrong_cls, confuse_classes,
+    #                                          IS.testing_nn_label, IS.testing_label, IS.testing_nn_indices)
+    #     print("After inter-class distance: ", inter_dist_after)
+    #
+    #     # reload weights as new
+    #     IS.model.load_state_dict(torch.load(
+    #               'models/dvi_data_{}_{}_loss{}_{}_{}/ResNet_512_Model/Epoch_{}/{}_{}_trainval_{}_{}.pth'.format(dataset_name,
+    #                seed,
+    #                'ProxyNCA_pfix_confusion_{}_threshold50'.format(wrong_cls),
+    #                0, 2,
+    #                1,
+    #                dataset_name,
+    #                dataset_name,
+    #                512, seed)))
+    #     inter_dist_after, _ = grad_confusion(IS.model, features, wrong_cls, confuse_classes,
+    #                                          IS.testing_nn_label, IS.testing_label, IS.testing_nn_indices)
+    #     print("After inter-class distance reverse: ", inter_dist_after)
+    # exit()
 
     '''Step 1: Cache all confusion gradient to parameters'''
     confusion_class_pairs = IS.get_confusion_class_pairs()
