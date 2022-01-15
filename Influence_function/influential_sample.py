@@ -331,11 +331,19 @@ class InfluentialSample():
 
 if __name__ == '__main__':
 
-    dataset_name = 'cub'
+    # dataset_name = 'cub'
+    # loss_type = 'ProxyNCA_prob_orig'
+    # config_name = 'cub'
+    # sz_embedding = 512
+    # seed = 0
+    # epoch = 40
+    # test_crop = False
+
+    dataset_name = 'cars'
     loss_type = 'ProxyNCA_prob_orig'
-    config_name = 'cub'
+    config_name = 'cars'
     sz_embedding = 512
-    seed = 0
+    seed = 3
     epoch = 40
     test_crop = False
 
