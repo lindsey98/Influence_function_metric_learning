@@ -15,7 +15,7 @@ from utils import predict_batchwise_debug
 from collections import OrderedDict
 import scipy.stats
 from evaluation import assign_by_euclidian_at_k_indices
-os.environ['CUDA_VISIBLE_DEVICES'] = "1"
+os.environ['CUDA_VISIBLE_DEVICES'] = "0"
 
 class InfluentialSample():
     def __init__(self, dataset_name, seed, loss_type, config_name,
@@ -305,7 +305,7 @@ class InfluentialSample():
         plt.show()
 
     def viz_sample(self, dl, indices):
-        classes = dl.dataset.ys[indices]
+        classes = [dl.dataset.ys[x] for x in indices]
         for i in range(10):
             plt.subplot(2, 5, i + 1)
             img = read_image(dl.dataset.im_paths[indices[i]])
@@ -331,21 +331,11 @@ class InfluentialSample():
 
 if __name__ == '__main__':
 
-    # dataset_name = 'cub'
-    # loss_type = 'ProxyNCA_prob_orig'
-    # config_name = 'cub'
-    # sz_embedding = 512
-    # seed = 0
-    # epoch = 40
-    # test_crop = False
-
-    dataset_name = 'cars'
-    loss_type = 'ProxyNCA_prob_orig'
-    config_name = 'cars'
-    sz_embedding = 512
-    seed = 3
-    epoch = 40
-    test_crop = False
+    loss_type = 'ProxyNCA_prob_orig'; sz_embedding = 512; epoch = 40; test_crop = False
+    # dataset_name = 'cub';  config_name = 'cub'; seed = 0
+    # dataset_name = 'cars'; config_name = 'cars'; seed = 3
+    # dataset_name = 'inshop'; config_name = 'inshop'; seed = 4
+    dataset_name = 'sop'; config_name = 'sop'; seed = 3
 
     # dataset_name = 'sop'
     # loss_type = 'ProxyNCA_pfix_var'
@@ -371,8 +361,8 @@ if __name__ == '__main__':
     # IS.model = IS._load_model()  # reload the original weights
     # features = IS.get_features()
     #
-    # IS.model = IS._load_model_random()
-    # random_features = IS.get_features()
+    # # IS.model = IS._load_model_random()
+    # # random_features = IS.get_features()
     #
     # confusion_class_pairs = IS.get_confusion_class_pairs()
     # for pair_idx in range(len(confusion_class_pairs)):
@@ -380,10 +370,10 @@ if __name__ == '__main__':
     #     wrong_cls = confusion_class_pairs[pair_idx][0][0]
     #     confuse_classes = [x[1] for x in confusion_class_pairs[pair_idx]]
     #
-    #     IS.model = IS._load_model_random()
-    #     inter_dist_after, _ = grad_confusion(IS.model, random_features, wrong_cls, confuse_classes,
-    #                                          IS.testing_nn_label, IS.testing_label, IS.testing_nn_indices)
-    #     print("Before training inter-class distance: ", inter_dist_after)
+    #     # IS.model = IS._load_model_random()
+    #     # inter_dist_after, _ = grad_confusion(IS.model, random_features, wrong_cls, confuse_classes,
+    #     #                                      IS.testing_nn_label, IS.testing_label, IS.testing_nn_indices)
+    #     # print("Before training inter-class distance: ", inter_dist_after)
     #
     #     IS.model = IS._load_model() # reload the original weights
     #     inter_dist_orig, _ = grad_confusion(IS.model, features, wrong_cls, confuse_classes,
@@ -393,7 +383,7 @@ if __name__ == '__main__':
     #     # reload weights as new
     #     IS.model.load_state_dict(torch.load(
     #             'models/dvi_data_{}_{}_loss{}_{}_{}/ResNet_512_Model/Epoch_{}/{}_{}_trainval_{}_{}.pth'.format(dataset_name, seed,
-    #              'ProxyNCA_pfix_confusion_{}_threshold50'.format(wrong_cls),
+    #              'ProxyNCA_prob_orig_confusion_{}_threshold50'.format(wrong_cls),
     #              2, 0,
     #              1, dataset_name,
     #              dataset_name, 512, seed)))
@@ -405,7 +395,7 @@ if __name__ == '__main__':
     #     IS.model.load_state_dict(torch.load(
     #               'models/dvi_data_{}_{}_loss{}_{}_{}/ResNet_512_Model/Epoch_{}/{}_{}_trainval_{}_{}.pth'.format(dataset_name,
     #                seed,
-    #                'ProxyNCA_pfix_confusion_{}_threshold50'.format(wrong_cls),
+    #                'ProxyNCA_prob_orig_confusion_{}_threshold50'.format(wrong_cls),
     #                0, 2,
     #                1,
     #                dataset_name,
@@ -415,7 +405,7 @@ if __name__ == '__main__':
     #                                          IS.testing_nn_label, IS.testing_label, IS.testing_nn_indices)
     #     print("After inter-class distance reverse: ", inter_dist_after)
     # exit()
-
+    #
     '''Step 1: Cache all confusion gradient to parameters'''
     confusion_class_pairs = IS.get_confusion_class_pairs()
     IS.agg_get_theta(confusion_class_pairs)
