@@ -6,8 +6,8 @@ os.environ['CUDA_VISIBLE_DEVICES'] = "0"
 
 if __name__ == '__main__':
     loss_type = 'ProxyNCA_prob_orig'; sz_embedding = 512; epoch = 40; test_crop = False
-    dataset_name = 'cub';  config_name = 'cub'; seed = 0
-    # dataset_name = 'cars'; config_name = 'cars'; seed = 3
+    # dataset_name = 'cub';  config_name = 'cub'; seed = 0
+    dataset_name = 'cars'; config_name = 'cars'; seed = 3
     # dataset_name = 'inshop'; config_name = 'inshop'; seed = 4
     # dataset_name = 'sop'; config_name = 'sop'; seed = 3
 
@@ -66,8 +66,8 @@ if __name__ == '__main__':
         influence_values = calc_influential_func(IS=IS, train_features=train_features, inverse_hvp_prod=ihvp)
         influence_values = np.asarray(influence_values).flatten()
         training_sample_by_influence = influence_values.argsort()  # ascending
-        IS.viz_sample(IS.dl_tr, training_sample_by_influence[:10])  # harmful
-        IS.viz_sample(IS.dl_tr, training_sample_by_influence[-10:])  # helpful
+        # IS.viz_sample(IS.dl_tr, training_sample_by_influence[:10])  # harmful
+        # IS.viz_sample(IS.dl_tr, training_sample_by_influence[-10:])  # helpful
 
         helpful_indices = np.where(influence_values > 0)[0]  # cache all helpful
         harmful_indices = np.where(influence_values < 0)[0]  # cache all harmful
