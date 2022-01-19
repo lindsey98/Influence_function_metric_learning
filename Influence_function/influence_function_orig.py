@@ -14,7 +14,7 @@ def grad_loss(model, criterion, all_features, all_labels):
         Get dL/dtheta for all training
     '''
     grad_all = []
-    for feat, t in tqdm(zip(all_features, all_labels)):
+    for feat, t in zip(all_features, all_labels):
         grad_this = jacobian(feat.unsqueeze(0), t.view(1, -1), model, criterion)
         grad_this = [g.detach().cpu() for g in grad_this]
         grad_all.append(grad_this) # (N_tr, |\theta|)
@@ -102,7 +102,7 @@ def hessian_vector_product(y, x, v):
     return_grads = grad(elemwise_products, x)
     return return_grads
 
-def calc_influential_func(inverse_hvp_prod, grad_alltrain):
+def calc_influential_func(IS, train_features, inverse_hvp_prod):
     '''
         Calculate influential functions
         Arguments:
@@ -112,8 +112,9 @@ def calc_influential_func(inverse_hvp_prod, grad_alltrain):
             influence_values: list of influence values (N_train,)
     '''
     influence_values = []
-    for grad1train in grad_alltrain:
+    for i in tqdm(range(len(train_features))):
         # influence = (-1) * grad(test)' H^-1 grad(train), dont forget the negative sign
+        grad1train = grad_loss(IS.model, IS.criterion, [train_features[i]], [IS.train_label[i]])[0]
         influence_thistrain = [(-1) * torch.dot(x.flatten().detach().cpu(), y.flatten()).item() \
                                for x, y in zip(inverse_hvp_prod, grad1train)]
         influence_values.append(influence_thistrain)
