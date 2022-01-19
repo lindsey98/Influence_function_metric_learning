@@ -8,7 +8,7 @@ if __name__ == '__main__':
         dataset_name = 'sop'
         config_name = 'sop'
         loss_type = 'SoftTriple'
-        seed = 3
+        seed = 4
 
         IS = InfluentialSample(dataset_name, seed, loss_type, config_name, test_crop, sz_embedding, epoch)
         confusion_class_pairs = IS.get_confusion_class_pairs()

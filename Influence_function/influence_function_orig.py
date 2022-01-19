@@ -1,10 +1,13 @@
 #! /usr/bin/env python3
 # Code is modified from https://github.com/kohpangwei/influence-release and https://github.com/nimarb/pytorch_influence_functions
+import pickle
+
 import torch
 from torch.autograd import grad
 from tqdm import tqdm
 from torch.autograd import Variable
 import numpy as np
+
 
 def grad_loss(model, criterion, all_features, all_labels):
     '''
@@ -39,7 +42,6 @@ def jacobian(feat, t, model, criterion):
     params = model.module[-1].weight # last linear layer weights
     return list(grad(loss, params, create_graph=True))
 
-
 def inverse_hessian_product(model, criterion, v, dl_tr,
                             scale=500, damping=0.01):
     """
@@ -64,7 +66,8 @@ def inverse_hessian_product(model, criterion, v, dl_tr,
         params = [model.module[-1].weight]
         hv = hessian_vector_product(loss, params, cur_estimate) # get hvp
         # Inverse Hessian product Update: v + (I - Hessian_at_x) * cur_estimate
-        cur_estimate = [_v + (1 - damping) * _h_e - _hv / scale for _v, _h_e, _hv in zip(v, cur_estimate, hv)]
+        cur_estimate = [_v + (1 - damping) * _h_e - _hv.detach().cpu() / scale for _v, _h_e, _hv in zip(v, cur_estimate, hv)]
+        pass
 
     inverse_hvp = [b.detach().cpu() / scale for b in cur_estimate] # "In the loop, we scale the Hessian down by scale, which means that the estimate of the inverse Hessian-vector product will be scaled up by scale. The last division corrects for this scaling."
     return inverse_hvp # I didn't divide it by number of recursions
@@ -116,19 +119,6 @@ def calc_influential_func(inverse_hvp_prod, grad_alltrain):
         influence_values.append(influence_thistrain)
     return influence_values
 
-if __name__ == '__main__':
-    from Influence_function.influential_sample import InfluentialSample
-    loss_type = 'ProxyNCA_prob_orig'; sz_embedding = 512; epoch = 40; test_crop = False
-    dataset_name = 'cub';  config_name = 'cub'; seed = 0
-    # dataset_name = 'cars'; config_name = 'cars'; seed = 3
-    # dataset_name = 'inshop'; config_name = 'inshop'; seed = 4
-    # dataset_name = 'sop'; config_name = 'sop'; seed = 3
 
-    IS = InfluentialSample(dataset_name, seed, loss_type, config_name, test_crop, sz_embedding, epoch)
-    '''Step 1: Get grad(train)'''
-    '''Step 2: Get H^-1 grad(test)'''
-    '''Step 3: Multiply grad(test) H^-1 grad(train)'''
-    '''Step 4: Finding mislabelled training samples'''
-    pass
 
 

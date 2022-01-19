@@ -119,6 +119,17 @@ class InfluentialSample():
         return train_embedding, train_label, testing_embedding, testing_label, testing_nn_label, testing_nn_indices
 
     @torch.no_grad()
+    def get_train_features(self):
+        self.model.eval()
+        # Forward propogate up to projection layer, cache the features (testing loader)
+        all_features = torch.tensor([])  # (N, 2048)
+        for ct, (x, t, _) in tqdm(enumerate(self.dl_tr)):
+            x = x.cuda()
+            m = self.model.module[:-1](x)
+            all_features = torch.cat((all_features, m.detach().cpu()), dim=0)
+        return all_features
+
+    @torch.no_grad()
     def get_features(self):
         self.model.eval()
         # Forward propogate up to projection layer, cache the features (testing loader)

@@ -317,66 +317,14 @@ class ProxyNCA_prob_orig_reweight(torch.nn.Module):
         loss = loss.mean()
         return loss
 
-class ProxyNCA_pfix_softlabel(torch.nn.Module):
+class ProxyNCA_prob_orig_softlabel(torch.nn.Module):
     '''
         ProxyNCA++ with fixed proxies
     '''
-    def __init__(self, nb_classes, sz_embed, scale, initialize_method='optim', super_classes=None, cls_mean=None, **kwargs):
+    def __init__(self, nb_classes, sz_embed, scale, **kwargs):
         torch.nn.Module.__init__(self)
-        self.proxies = torch.nn.Parameter(torch.randn(nb_classes, sz_embed)) # not training
-        self.proxies.requires_grad = False
+        self.proxies = torch.nn.Parameter(torch.randn(nb_classes, sz_embed) / 8)  # not training
         self.scale = scale
-        self.initialize_method = initialize_method
-        self.super_classes = super_classes
-        self.cls_mean = cls_mean
-        self._proxy_init(nb_classes, sz_embed)
-
-    def _proxy_init(self, nb_classes, sz_embed):
-        if self.initialize_method == 'optim':
-            proxies = torch.randn((nb_classes, sz_embed), requires_grad=True)
-            _optimizer = torch.optim.Adam(params={proxies}, lr=0.1)
-            for _ in tqdm(range(100), desc="Initializing the proxies"):
-                mean, var = utils.inter_proxy_dist(proxies)
-                _loss = mean + var
-                _optimizer.zero_grad()
-                _loss.backward()
-                _optimizer.step()
-
-            proxies = F.normalize(proxies, p=2, dim=-1)
-            self.proxies.data = proxies.detach()
-        elif self.initialize_method == 'random':
-            pass # do nothing
-        elif self.initialize_method == 'duplicate':
-            dup_cls = np.random.choice(nb_classes, int(nb_classes/5), replace=False)
-            for cls in dup_cls:
-                if cls == 0:
-                    self.proxies.data[cls] = self.proxies.data[cls+1]
-                else:
-                    self.proxies.data[cls] = self.proxies.data[cls-1]
-
-        elif self.initialize_method == 'super_optim':
-            proxies = torch.randn((nb_classes, sz_embed), requires_grad=True)
-            proxies.data = self.cls_mean.to(proxies.device)
-            _optimizer = torch.optim.Adam(params={proxies}, lr=0.1)
-            for _ in tqdm(range(10), desc="Initializing the proxies"):
-                mean, var, _ = utils.inter_proxy_dist_super(proxies, self.super_classes)
-                _loss = mean + var
-                _optimizer.zero_grad()
-                _loss.backward()
-                _optimizer.step()
-
-            proxies = F.normalize(proxies, p=2, dim=-1)
-            self.proxies.data = proxies.detach()
-
-    @torch.no_grad()
-    def assign_cls4proxy(self, cls_mean):
-        cls2proxy = torch.einsum('bi,mi->bm', cls_mean, self.proxies) # class mean to proxy affinity
-        row_ind, col_ind = linear_sum_assignment((1-cls2proxy.detach().cpu()).numpy()) # row_ind: which class, col_ind: which proxy
-        cls_indx = row_ind.argsort() # class from 1, 2 ... C
-        sorted_class = row_ind[cls_indx]
-        sorted_proxies = col_ind[cls_indx] # proxy indices correponding to class from 1, 2 ... C
-        self.proxies.data = self.proxies[sorted_proxies] # sort proxies according to proxy indices
-        logging.info('Number of updated proxies: {}'.format(np.sum(sorted_proxies != np.asarray(range(len(self.proxies))))))
 
     def forward(self, X, indices, T):
         P = self.proxies
@@ -392,118 +340,6 @@ class ProxyNCA_pfix_softlabel(torch.nn.Module):
 
         loss = torch.sum(- T * F.log_softmax(-D, -1), -1)
         loss = loss.mean()
-        return loss
-
-class ProxyAnchor_pfix(torch.nn.Module):
-    '''
-        Fixed anchor
-    '''
-    def __init__(self, nb_classes, sz_embed, initialize_method='optim', super_classes=None, cls_mean=None, mrg=0.1, alpha=32):
-        torch.nn.Module.__init__(self)
-        self.proxies = torch.nn.Parameter(torch.randn(nb_classes, sz_embed)) # not training
-        self.proxies.requires_grad = False
-        self.initialize_method = initialize_method
-        self._proxy_init(nb_classes, sz_embed, super_classes, cls_mean)
-        self.nb_classes = nb_classes
-        self.sz_embed = sz_embed
-        self.mrg = mrg
-        self.alpha = alpha
-
-    def _proxy_init(self, nb_classes, sz_embed, super_classes, cls_mean):
-        if self.initialize_method == 'optim':
-            proxies = torch.randn((nb_classes, sz_embed), requires_grad=True)
-            _optimizer = torch.optim.Adam(params={proxies}, lr=0.1)
-            for _ in tqdm(range(100), desc="Initializing the proxies"):
-                mean, var = utils.inter_proxy_dist(proxies, cosine=True)
-                _loss = mean + var
-                _optimizer.zero_grad()
-                _loss.backward()
-                _optimizer.step()
-
-            proxies = F.normalize(proxies, p=2, dim=-1)
-            self.proxies.data = proxies.detach()
-        elif self.initialize_method == 'random':
-            pass # do nothing
-        elif self.initialize_method == 'duplicate':
-            dup_cls = np.random.choice(nb_classes, int(nb_classes/5), replace=False)
-            for cls in dup_cls:
-                if cls == 0:
-                    self.proxies.data[cls] = self.proxies.data[cls+1]
-                else:
-                    self.proxies.data[cls] = self.proxies.data[cls-1]
-        elif self.initialize_method == 'super_optim':
-            proxies = torch.randn((nb_classes, sz_embed), requires_grad=True)
-            proxies.data = cls_mean.to(self.proxies.device)
-            _optimizer = torch.optim.Adam(params={proxies}, lr=0.1)
-            for _ in tqdm(range(25), desc="Initializing the proxies"):
-                mean, var = utils.inter_proxy_dist_super(proxies, super_classes)
-                _loss = mean + var
-                _optimizer.zero_grad()
-                _loss.backward()
-                _optimizer.step()
-
-            proxies = F.normalize(proxies, p=2, dim=-1)
-            self.proxies.data = proxies.detach()
-        else:
-            raise NotImplementedError
-
-    @torch.no_grad()
-    def assign_cls4proxy(self, cls_mean):
-        cls2proxy = torch.einsum('bi,mi->bm', cls_mean, self.proxies) # class mean to proxy affinity
-        row_ind, col_ind = linear_sum_assignment((1-cls2proxy.detach().cpu()).numpy()) # row_ind: which class, col_ind: which proxy
-        cls_indx = row_ind.argsort()
-        sorted_class = row_ind[cls_indx]
-        sorted_proxies = col_ind[cls_indx]
-        self.proxies.data = self.proxies[sorted_proxies]
-        logging.info('Number of updated proxies: {}'.format(np.sum(sorted_proxies != np.asarray(range(len(self.proxies))))))
-
-    @torch.no_grad()
-    def debug(self, X, indices, T):
-        P = self.proxies
-        P = F.normalize(P, p=2, dim=-1)
-        X = F.normalize(X, p=2, dim=-1)
-
-        cos = F.linear(X, P)  # Calcluate cosine similarity
-        P_one_hot = binarize_and_smooth_labels(T=T, nb_classes=self.nb_classes)
-        N_one_hot = 1 - P_one_hot
-
-        pos_exp = torch.exp(-self.alpha * (cos - self.mrg))
-        neg_exp = torch.exp(self.alpha * (cos + self.mrg))
-
-        with_pos_proxies = torch.nonzero(P_one_hot.sum(dim=0) != 0).squeeze(dim=1)  # The set of positive proxies of data in the batch
-        num_valid_proxies = len(with_pos_proxies)  # The number of positive proxies
-
-        P_sim_sum = torch.where(P_one_hot == 1, pos_exp, torch.zeros_like(pos_exp)).sum(dim=0)
-        N_sim_sum = torch.where(N_one_hot == 1, neg_exp, torch.zeros_like(neg_exp)).sum(dim=0)
-
-        pos_term = torch.log(1 + P_sim_sum).sum() / num_valid_proxies
-        neg_term = torch.log(1 + N_sim_sum).sum() / self.nb_classes
-        loss = pos_term + neg_term
-
-        return loss, None
-
-    def forward(self, X, indices, T):
-        P = self.proxies
-        P = F.normalize(P, p=2, dim=-1)
-        X = F.normalize(X, p=2, dim=-1)
-
-        cos = F.linear(X, P)  # Calcluate cosine similarity
-        P_one_hot = binarize_and_smooth_labels(T=T, nb_classes=self.nb_classes)
-        N_one_hot = 1 - P_one_hot
-
-        pos_exp = torch.exp(-self.alpha * (cos - self.mrg)) # (N, C)
-        neg_exp = torch.exp(self.alpha * (cos + self.mrg))
-
-        with_pos_proxies = torch.nonzero(P_one_hot.sum(dim=0) != 0).squeeze(dim=1)  # The set of positive proxies of data in the batch
-        num_valid_proxies = len(with_pos_proxies)  # The number of positive proxies
-
-        P_sim_sum = torch.where(P_one_hot == 1, pos_exp, torch.zeros_like(pos_exp)).sum(dim=0) # (C,)
-        N_sim_sum = torch.where(N_one_hot == 1, neg_exp, torch.zeros_like(neg_exp)).sum(dim=0)
-
-        pos_term = torch.log(1 + P_sim_sum).sum() / num_valid_proxies
-        neg_term = torch.log(1 + N_sim_sum).sum() / self.nb_classes
-        loss = pos_term + neg_term
-
         return loss
 
 class ProxyAnchor_reweight(torch.nn.Module):

@@ -271,8 +271,8 @@ if __name__ == '__main__':
     # exit()
 
     '''Step 2: Identify influential training points for a specific pair'''
-    pair_ind1 = 76; pair_ind2 = 635
-    lookat_harmful = True
+    pair_ind1, pair_ind2 = 558, 522
+    lookat_harmful = False
     base_dir = 'Confuse_pair_influential_data/{}'.format(DF.dataset_name)
     os.makedirs(base_dir, exist_ok=True)
 
