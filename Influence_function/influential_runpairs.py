@@ -3,15 +3,15 @@ import os
 from Influence_function.influential_sample import InfluentialSample
 from Influence_function.influence_function import *
 from evaluation import assign_by_euclidian_at_k_indices
-os.environ['CUDA_VISIBLE_DEVICES'] = "0, 1"
+os.environ['CUDA_VISIBLE_DEVICES'] = "1, 0"
 
 if __name__ == '__main__':
 
     loss_type = 'ProxyNCA_prob_orig'; sz_embedding = 512; epoch = 40; test_crop = False
-    dataset_name = 'cub';  config_name = 'cub'; seed = 0
+    # dataset_name = 'cub';  config_name = 'cub'; seed = 0
     # dataset_name = 'cars'; config_name = 'cars'; seed = 3
     # dataset_name = 'inshop'; config_name = 'inshop'; seed = 4
-    # dataset_name = 'sop'; config_name = 'sop'; seed = 3
+    dataset_name = 'sop'; config_name = 'sop'; seed = 3
 
     IS = InfluentialSample(dataset_name, seed, loss_type, config_name, test_crop)
 
@@ -32,6 +32,9 @@ if __name__ == '__main__':
     for kk in range(min(len(wrong_indices), 50)):
         wrong_ind = wrong_indices[kk]
         confuse_ind = confuse_indices[kk]
+        if os.path.exists('./{}/Allhelpful_indices_{}_{}.npy'.format(base_dir, wrong_ind, confuse_ind)):
+            print('skip')
+            continue
         # sanity check: IS.viz_2sample(IS.dl_ev, wrong_ind, confuse_ind)
         training_sample_by_influence, influence_values = IS.single_influence_func(all_features,
                                                                                   [wrong_ind],

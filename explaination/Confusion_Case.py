@@ -19,7 +19,7 @@ from utils import predict_batchwise_debug
 from evaluation import assign_by_euclidian_at_k_indices, assign_diff_cls_neighbor, assign_same_cls_neighbor
 import sklearn
 import pickle
-os.environ['CUDA_VISIBLE_DEVICES'] = "1"
+os.environ['CUDA_VISIBLE_DEVICES'] = "0"
 
 
 class SampleRelabel(InfluentialSample):
@@ -144,6 +144,8 @@ class SampleRelabel(InfluentialSample):
                           harmful_indices, helpful_indices, train_nn_indices, train_nn_indices_same_cls,
                           base_dir, pair_ind1, pair_ind2):
 
+        assert isinstance(lookat_harmful, bool)
+        assert relabel_method in ['hard', 'soft']
         if lookat_harmful:
             top_harmful_indices = harmful_indices  # top_harmful_indices = influence_values.argsort()[-50:]
             top_harmful_nn_indices = train_nn_indices[top_harmful_indices]
@@ -162,10 +164,10 @@ class SampleRelabel(InfluentialSample):
                 relabel_dict = {}
                 unique_labels, unique_counts = torch.unique(self.train_label, return_counts=True)
                 median_shots_percls = unique_counts.median().item()
+                _, pred_scores = kNN_label_pred(top_harmful_indices, self.train_embedding, self.train_label,
+                                                self.dl_tr.dataset.nb_classes(), median_shots_percls)
                 for kk in range(len(top_harmful_indices)):
-                    pred_labels, pred_scores = kNN_label_pred(top_harmful_indices[kk], self.train_embedding, self.train_label,
-                                                              self.dl_tr.dataset.nb_classes(), median_shots_percls)
-                    relabel_dict[top_harmful_indices[kk]] = pred_scores
+                    relabel_dict[top_harmful_indices[kk]] = pred_scores[kk]
                 with open('./{}/Allrelabeldict_{}_{}_soft.pkl'.format(base_dir, pair_ind1, pair_ind2), 'wb') as handle:
                     pickle.dump(relabel_dict, handle)
 
@@ -190,11 +192,13 @@ class SampleRelabel(InfluentialSample):
                 relabel_dict = {}
                 unique_labels, unique_counts = torch.unique(self.train_label, return_counts=True)
                 median_shots_percls = unique_counts.median().item()
+                _, pred_scores = kNN_label_pred(top_helpful_indices, self.train_embedding,
+                                                self.train_label,
+                                                self.dl_tr.dataset.nb_classes(), median_shots_percls)
+
                 for kk in range(len(top_helpful_indices)):
-                    pred_labels, pred_scores = kNN_label_pred(top_helpful_indices[kk], self.train_embedding,
-                                                              self.train_label,
-                                                              self.dl_tr.dataset.nb_classes(), median_shots_percls)
-                    relabel_dict[top_helpful_indices[kk]] = pred_scores
+                    relabel_dict[top_helpful_indices[kk]] = pred_scores[kk]
+
                 with open('./{}/Allrelabeldict_{}_{}_soft.pkl'.format(base_dir, pair_ind1, pair_ind2), 'wb') as handle:
                     pickle.dump(relabel_dict, handle)
 
@@ -219,54 +223,56 @@ class SampleRelabel(InfluentialSample):
 
 # knn monitor as in InstDisc https://arxiv.org/abs/1805.01978
 # implementation follows http://github.com/zhirongw/lemniscate.pytorch and https://github.com/leftthomas/SimCLR, https://github.com/PatrickHua/SimSiam/blob/main/tools/knn_monitor.py
-def kNN_label_pred(query_ind, embeddings, labels, nb_classes, knn_k):
+def kNN_label_pred(query_indices, embeddings, labels, nb_classes, knn_k):
 
     distances = sklearn.metrics.pairwise.pairwise_distances(embeddings)
     indices = np.argsort(distances, axis=1)[:, 1: knn_k + 1]
-    query_nn_indices = indices[query_ind] # (knn_k, )
-    query_nn_labels = torch.gather(labels, dim=-1, index=torch.from_numpy(query_nn_indices)) # (knn_k, )
+    query_nn_indices = indices[query_indices] # (B, knn_k)
+    query_nn_labels = torch.gather(labels.expand(query_indices.shape[0], -1),
+                                   dim=-1,
+                                   index=torch.from_numpy(query_nn_indices)) # (B, knn_k)
 
-    query2nn_dist = distances[query_ind, query_nn_indices] # (knn_k, )
-    query2nn_dist_exp = (-torch.from_numpy(query2nn_dist)).exp() # (knn_k, )
+    query2nn_dist = distances[np.repeat(query_indices, knn_k), query_nn_indices.flatten()] # (B*knn_k, )
+    query2nn_dist = query2nn_dist.reshape(len(query_indices), -1) # (B, knn_k)
+    query2nn_dist_exp = (-torch.from_numpy(query2nn_dist)).exp() # (B, knn_k)
 
-    one_hot_label = torch.zeros(knn_k, nb_classes, device=query_nn_labels.device) # (knn_k, C)
+    one_hot_label = torch.zeros(query_indices.shape[0] * knn_k, nb_classes, device=query_nn_labels.device) # (B*knn_k, C)
     one_hot_label = one_hot_label.scatter(dim=-1, index=query_nn_labels.view(-1, 1).type(torch.int64), value=1.0)
 
-    raw_pred_scores = torch.sum(one_hot_label.view(-1, nb_classes) * query2nn_dist_exp.unsqueeze(dim=-1), dim=0) # (C, )
-    pred_scores = raw_pred_scores / torch.sum(raw_pred_scores) # (C, )
-    pred_labels = pred_scores.argsort(descending=True)
+    raw_pred_scores = torch.sum(one_hot_label.view(query_indices.shape[0], -1, nb_classes) * query2nn_dist_exp.unsqueeze(dim=-1), dim=1) # (B, C)
+    pred_scores = raw_pred_scores / torch.sum(raw_pred_scores, dim=-1, keepdim=True) # (B, C)
+    pred_labels = torch.argsort(pred_scores, dim=-1, descending=True) # (B, C)
     return pred_labels, pred_scores
 
 if __name__ == '__main__':
 
-    dataset_name = 'cub'
-    loss_type = 'ProxyNCA_pfix'
-    config_name = 'cub'
-    sz_embedding = 512
-    seed = 4
-    test_crop = False
+    loss_type = 'ProxyNCA_prob_orig'; sz_embedding = 512; epoch = 40; test_crop = False
+    dataset_name = 'cub';  config_name = 'cub'; seed = 0
+    # dataset_name = 'cars'; config_name = 'cars'; seed = 3
+    # dataset_name = 'inshop'; config_name = 'inshop'; seed = 4
+    # dataset_name = 'sop'; config_name = 'sop'; seed = 3
 
     DF = SampleRelabel(dataset_name, seed, loss_type, config_name, test_crop)
 
     '''Analyze confusing features for all confusion classes'''
     '''Step 1: Visualize all pairs (confuse), Find interesting pairs'''
-    test_nn_indices, test_nn_label, test_nn_indices_same_cls = DF.getNN_indices(DF.testing_embedding, DF.testing_label)
-    wrong_indices = (test_nn_label != DF.testing_label.detach().cpu().numpy().flatten()).nonzero()[0]
-    confuse_indices = test_nn_indices[wrong_indices]
-    print(len(confuse_indices))
-    assert len(wrong_indices) == len(confuse_indices)
-
-    # Same class 1st NN
-    wrong_test_nn_indices_same_cls = test_nn_indices_same_cls[wrong_indices]
-    assert len(wrong_indices) == len(wrong_test_nn_indices_same_cls)
-
+    # test_nn_indices, test_nn_label, test_nn_indices_same_cls = DF.getNN_indices(DF.testing_embedding, DF.testing_label)
+    # wrong_indices = (test_nn_label != DF.testing_label.detach().cpu().numpy().flatten()).nonzero()[0]
+    # confuse_indices = test_nn_indices[wrong_indices]
+    # print(len(confuse_indices))
+    # assert len(wrong_indices) == len(confuse_indices)
+    #
+    # # Same class 1st NN
+    # wrong_test_nn_indices_same_cls = test_nn_indices_same_cls[wrong_indices]
+    # assert len(wrong_indices) == len(wrong_test_nn_indices_same_cls)
+    #
     # DF.GradAnalysis( wrong_indices, confuse_indices, wrong_test_nn_indices_same_cls,
     #                  DF.dl_ev, base_dir='Confuse_Vis')
     # exit()
 
     '''Step 2: Identify influential training points for a specific pair'''
-    pair_ind1 = 722; pair_ind2 = 735
-    lookat_harmful = False
+    pair_ind1 = 76; pair_ind2 = 635
+    lookat_harmful = True
     base_dir = 'Confuse_pair_influential_data/{}'.format(DF.dataset_name)
     os.makedirs(base_dir, exist_ok=True)
 
@@ -285,30 +291,30 @@ if __name__ == '__main__':
         harmful_indices = np.load('./{}/Allharmful_indices_{}_{}.npy'.format(base_dir, pair_ind1, pair_ind2))
         influence_values = np.load('./{}/All_influence_{}_{}.npy'.format(base_dir, pair_ind1, pair_ind2))
 
-    '''Step 3: Visualize those training'''
-    # Global 1st NN
+    # '''Step 3: Visualize those training'''
+    # # Global 1st NN
     train_nn_indices, train_nn_label, train_nn_indices_same_cls = DF.getNN_indices(DF.train_embedding, DF.train_label)
     assert len(train_nn_indices_same_cls) == len(train_nn_indices)
     assert len(DF.train_label) == len(train_nn_indices)
-
-    DF.model = DF._load_model()  # reload the original weights
-    # for harmful in influence_values.argsort()[-20:]:
-    #     DF.VisTrainNN(pair_ind1, pair_ind2,
-    #                   harmful,
-    #                   train_nn_indices[harmful],
-    #                   train_nn_indices_same_cls[harmful],
-    #                   DF.model,
-    #                   DF.dl_tr,
-    #                   base_dir='ModelS_HumanD')
-
-    # for helpful in influence_values.argsort()[:20]:
-    #     DF.VisTrainNN(pair_ind1, pair_ind2,
-    #                   helpful,
-    #                   train_nn_indices[helpful],
-    #                   train_nn_indices_same_cls[helpful],
-    #                   DF.model,
-    #                   DF.dl_tr,
-    #                   base_dir='ModelD_HumanS')
+    #
+    # DF.model = DF._load_model()  # reload the original weights
+    # # for harmful in influence_values.argsort()[-20:]:
+    # #     DF.VisTrainNN(pair_ind1, pair_ind2,
+    # #                   harmful,
+    # #                   train_nn_indices[harmful],
+    # #                   train_nn_indices_same_cls[harmful],
+    # #                   DF.model,
+    # #                   DF.dl_tr,
+    # #                   base_dir='ModelS_HumanD')
+    #
+    # # for helpful in influence_values.argsort()[:20]:
+    # #     DF.VisTrainNN(pair_ind1, pair_ind2,
+    # #                   helpful,
+    # #                   train_nn_indices[helpful],
+    # #                   train_nn_indices_same_cls[helpful],
+    # #                   DF.model,
+    # #                   DF.dl_tr,
+    # #                   base_dir='ModelD_HumanS')
 
     '''Step 4: Save harmful indices as well as its neighboring indices'''
     DF.calc_relabel_dict(lookat_harmful=lookat_harmful, relabel_method='soft',
