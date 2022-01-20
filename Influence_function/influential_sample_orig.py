@@ -7,46 +7,46 @@ os.environ['CUDA_VISIBLE_DEVICES'] = "0"
 if __name__ == '__main__':
     loss_type = 'ProxyNCA_prob_orig'; sz_embedding = 512; epoch = 40; test_crop = False
     # dataset_name = 'cub';  config_name = 'cub'; seed = 0
-    dataset_name = 'cars'; config_name = 'cars'; seed = 3
+    # dataset_name = 'cars'; config_name = 'cars'; seed = 3
     # dataset_name = 'inshop'; config_name = 'inshop'; seed = 4
-    # dataset_name = 'sop'; config_name = 'sop'; seed = 3
+    dataset_name = 'sop'; config_name = 'sop'; seed = 3
 
     IS = InfluentialSample(dataset_name, seed, loss_type, config_name, test_crop, sz_embedding, epoch)
 
-    IS.model = IS._load_model()  # reload the original weights
-    features = IS.get_features()
-    confusion_class_pairs = IS.get_confusion_class_pairs()
-    for pair_idx in range(len(confusion_class_pairs)):
-        print('Pair index', pair_idx)
-        wrong_cls = confusion_class_pairs[pair_idx][0][0]
-        confuse_classes = [x[1] for x in confusion_class_pairs[pair_idx]]
-
-        IS.model = IS._load_model() # reload the original weights
-        inter_dist_orig, _ = grad_confusion(IS.model, features, wrong_cls, confuse_classes,
-                                            IS.testing_nn_label, IS.testing_label, IS.testing_nn_indices)
-        print("Original inter-class distance: ", inter_dist_orig)
-
-        # reload weights as new
-        IS.model.load_state_dict(torch.load(
-                'models/dvi_data_{}_{}_loss{}_{}_{}/ResNet_512_Model/Epoch_{}/{}_{}_trainval_{}_{}.pth'.format(dataset_name, seed,
-                 'ProxyNCA_prob_orig_confusion_{}_baseline'.format(wrong_cls),
-                 2, 0,
-                 1, dataset_name, dataset_name, 512, seed)))
-        inter_dist_after, _ = grad_confusion(IS.model, features, wrong_cls, confuse_classes,
-                                             IS.testing_nn_label, IS.testing_label, IS.testing_nn_indices)
-        print("After inter-class distance: ", inter_dist_after)
-
-        # reload weights as new
-        IS.model.load_state_dict(torch.load(
-                  'models/dvi_data_{}_{}_loss{}_{}_{}/ResNet_512_Model/Epoch_{}/{}_{}_trainval_{}_{}.pth'.format(dataset_name, seed,
-                   'ProxyNCA_prob_orig_confusion_{}_baseline'.format(wrong_cls),
-                   0, 2,
-                   1,
-                   dataset_name, dataset_name, 512, seed)))
-        inter_dist_after, _ = grad_confusion(IS.model, features, wrong_cls, confuse_classes,
-                                             IS.testing_nn_label, IS.testing_label, IS.testing_nn_indices)
-        print("After inter-class distance reverse: ", inter_dist_after)
-    exit()
+    # IS.model = IS._load_model()  # reload the original weights
+    # features = IS.get_features()
+    # confusion_class_pairs = IS.get_confusion_class_pairs()
+    # for pair_idx in range(len(confusion_class_pairs)):
+    #     print('Pair index', pair_idx)
+    #     wrong_cls = confusion_class_pairs[pair_idx][0][0]
+    #     confuse_classes = [x[1] for x in confusion_class_pairs[pair_idx]]
+    #
+    #     IS.model = IS._load_model() # reload the original weights
+    #     inter_dist_orig, _ = grad_confusion(IS.model, features, wrong_cls, confuse_classes,
+    #                                         IS.testing_nn_label, IS.testing_label, IS.testing_nn_indices)
+    #     print("Original inter-class distance: ", inter_dist_orig)
+    #
+    #     # reload weights as new
+    #     IS.model.load_state_dict(torch.load(
+    #             'models/dvi_data_{}_{}_loss{}_{}_{}/ResNet_512_Model/Epoch_{}/{}_{}_trainval_{}_{}.pth'.format(dataset_name, seed,
+    #              'ProxyNCA_prob_orig_confusion_{}_baseline'.format(wrong_cls),
+    #              2, 0,
+    #              1, dataset_name, dataset_name, 512, seed)))
+    #     inter_dist_after, _ = grad_confusion(IS.model, features, wrong_cls, confuse_classes,
+    #                                          IS.testing_nn_label, IS.testing_label, IS.testing_nn_indices)
+    #     print("After inter-class distance: ", inter_dist_after)
+    #
+    #     # reload weights as new
+    #     IS.model.load_state_dict(torch.load(
+    #               'models/dvi_data_{}_{}_loss{}_{}_{}/ResNet_512_Model/Epoch_{}/{}_{}_trainval_{}_{}.pth'.format(dataset_name, seed,
+    #                'ProxyNCA_prob_orig_confusion_{}_baseline'.format(wrong_cls),
+    #                0, 2,
+    #                1,
+    #                dataset_name, dataset_name, 512, seed)))
+    #     inter_dist_after, _ = grad_confusion(IS.model, features, wrong_cls, confuse_classes,
+    #                                          IS.testing_nn_label, IS.testing_label, IS.testing_nn_indices)
+    #     print("After inter-class distance reverse: ", inter_dist_after)
+    # exit()
 
     '''Step 1: Get grad(test)'''
     train_features = IS.get_train_features()

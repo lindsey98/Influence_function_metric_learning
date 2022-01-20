@@ -9,7 +9,6 @@ from PIL import Image
 from Influence_function.influential_sample import InfluentialSample
 from explaination.CAM_methods import *
 from Influence_function.influence_function import *
-from explaination.background_removal import remove_background
 import utils
 import dataset
 from torchvision import transforms
