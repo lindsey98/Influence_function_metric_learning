@@ -18,7 +18,7 @@ from utils import predict_batchwise_debug
 from evaluation import assign_by_euclidian_at_k_indices, assign_diff_cls_neighbor, assign_same_cls_neighbor
 import sklearn
 import pickle
-os.environ['CUDA_VISIBLE_DEVICES'] = "0"
+os.environ['CUDA_VISIBLE_DEVICES'] = "1"
 
 
 class SampleRelabel(InfluentialSample):
@@ -144,7 +144,7 @@ class SampleRelabel(InfluentialSample):
                           base_dir, pair_ind1, pair_ind2):
 
         assert isinstance(lookat_harmful, bool)
-        assert relabel_method in ['hard', 'soft']
+        assert relabel_method in ['hard', 'soft_knn', 'soft_IF']
         if lookat_harmful:
             top_harmful_indices = harmful_indices  # top_harmful_indices = influence_values.argsort()[-50:]
             top_harmful_nn_indices = train_nn_indices[top_harmful_indices]
@@ -159,7 +159,7 @@ class SampleRelabel(InfluentialSample):
                 with open('./{}/Allrelabeldict_{}_{}.pkl'.format(base_dir, pair_ind1, pair_ind2), 'wb') as handle:
                     pickle.dump(relabel_dict, handle)
 
-            elif relabel_method == 'soft':
+            elif relabel_method == 'soft_knn':
                 relabel_dict = {}
                 unique_labels, unique_counts = torch.unique(self.train_label, return_counts=True)
                 median_shots_percls = unique_counts.median().item()
@@ -170,6 +170,15 @@ class SampleRelabel(InfluentialSample):
                 with open('./{}/Allrelabeldict_{}_{}_soft.pkl'.format(base_dir, pair_ind1, pair_ind2), 'wb') as handle:
                     pickle.dump(relabel_dict, handle)
 
+            elif relabel_method == 'soft_IF':
+                relabel_dict = {}
+                all_features = self.get_features()
+                theta_orig = self.model.module[-1].weight.data
+                torch.cuda.empty_cache()
+                theta = self.single_get_theta(theta_orig, all_features, [pair_ind1], [pair_ind2])
+                l_prev, l_cur = loss_change_train_relabel(self.model, self.criterion, self.dl_tr, theta_orig, theta, top_harmful_indices)
+                l_diff_harmful = l_cur - l_prev # (N_harmful, nb_classes)
+                pass
             else:
                 raise NotImplemented
 
@@ -187,7 +196,7 @@ class SampleRelabel(InfluentialSample):
                 with open('./{}/Allrelabeldict_{}_{}.pkl'.format(base_dir, pair_ind1, pair_ind2), 'wb') as handle:
                     pickle.dump(relabel_dict, handle)
 
-            elif relabel_method == 'soft':
+            elif relabel_method == 'soft_knn':
                 relabel_dict = {}
                 unique_labels, unique_counts = torch.unique(self.train_label, return_counts=True)
                 median_shots_percls = unique_counts.median().item()
@@ -201,6 +210,14 @@ class SampleRelabel(InfluentialSample):
                 with open('./{}/Allrelabeldict_{}_{}_soft.pkl'.format(base_dir, pair_ind1, pair_ind2), 'wb') as handle:
                     pickle.dump(relabel_dict, handle)
 
+            elif relabel_method == 'soft_IF':
+                relabel_dict = {}
+                all_features = self.get_features()
+                theta_orig = self.model.module[-1].weight.data
+                torch.cuda.empty_cache()
+                theta = self.single_get_theta(theta_orig, all_features, [pair_ind1], [pair_ind2])
+
+                pass # FIXME
             else:
                 raise NotImplemented
 
@@ -270,8 +287,9 @@ if __name__ == '__main__':
     # exit()
 
     '''Step 2: Identify influential training points for a specific pair'''
-    pair_ind1, pair_ind2 = 558, 522
-    lookat_harmful = False
+    pair_ind1, pair_ind2 = 35, 2555
+    lookat_harmful = True
+    relabel_method = 'soft_IF'
     base_dir = 'Confuse_pair_influential_data/{}'.format(DF.dataset_name)
     os.makedirs(base_dir, exist_ok=True)
 
@@ -316,7 +334,7 @@ if __name__ == '__main__':
     # #                   base_dir='ModelD_HumanS')
 
     '''Step 4: Save harmful indices as well as its neighboring indices'''
-    DF.calc_relabel_dict(lookat_harmful=lookat_harmful, relabel_method='soft',
+    DF.calc_relabel_dict(lookat_harmful=lookat_harmful, relabel_method=relabel_method,
                           harmful_indices=harmful_indices, helpful_indices=helpful_indices,
                           train_nn_indices=train_nn_indices, train_nn_indices_same_cls=train_nn_indices_same_cls,
                           base_dir=base_dir, pair_ind1=pair_ind1, pair_ind2=pair_ind2)

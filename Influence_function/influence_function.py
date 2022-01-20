@@ -6,6 +6,39 @@ import numpy as np
 import torch.nn.functional as F
 
 @torch.no_grad()
+def calc_loss_train_relabel(model, dl, criterion, indices=None):
+    l_all = []
+    model.eval()
+    if indices is not None:
+        for ct, (x, t, ind) in tqdm(enumerate(dl)):
+            if ind.item() in indices:
+                x = x.cuda().expand(dl.dataset.nb_classes(), x.size()[1], x.size()[2], x.size()[3])
+                y = torch.arange(dl.dataset.nb_classes()).cuda()
+                m = model(x)
+                l_this_all = criterion.debug(m, None, y)
+                l_all.append(l_this_all.detach().cpu().numpy())
+    else:
+        for ct, (x, t, _) in tqdm(enumerate(dl)):
+            x = x.cuda().expand(dl.dataset.nb_classes(), x.size()[1], x.size()[2], x.size()[3])
+            y = torch.arange(dl.dataset.nb_classes()).cuda()
+            m = model(x)
+            l_this_all = criterion.debug(m, None, y) # (nb_classes, )
+            l_all.append(l_this_all.detach().cpu().numpy())
+    return l_all # (N, nb_classes)
+
+def loss_change_train_relabel(model, criterion, dl_tr, params_prev, params_cur, indices):
+
+    weight_orig = model.module[-1].weight.data # cache original parameters
+    model.module[-1].weight.data = params_prev
+    l_prev = calc_loss_train_relabel(model, dl_tr, criterion, indices) # (N, nb_classes)
+
+    model.module[-1].weight.data = params_cur
+    l_cur = calc_loss_train_relabel(model, dl_tr, criterion, indices) # (N, nb_classes)
+
+    model.module[-1].weight.data = weight_orig # dont forget to revise the weights back to the original
+    return np.asarray(l_prev), np.asarray(l_cur)
+
+@torch.no_grad()
 def calc_loss_train(model, dl, criterion, indices=None):
     l = []
     model.eval()
@@ -35,6 +68,7 @@ def loss_change_train(model, criterion, dl_tr, params_prev, params_cur):
 
     model.module[-1].weight.data = weight_orig # dont forget to revise the weights back to the original
     return np.asarray(l_prev), np.asarray(l_cur)
+
 
 def calc_inter_dist_pair(feat_cls1, feat_cls2):
     feat_cls1 = F.normalize(feat_cls1, p=2, dim=-1)
