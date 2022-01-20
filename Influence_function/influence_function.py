@@ -9,21 +9,14 @@ import torch.nn.functional as F
 def calc_loss_train_relabel(model, dl, criterion, indices=None):
     l_all = []
     model.eval()
+    for ct, (x, t, _) in tqdm(enumerate(dl)):
+        x = x.cuda().expand(dl.dataset.nb_classes(), x.size()[1], x.size()[2], x.size()[3])
+        y = torch.arange(dl.dataset.nb_classes()).cuda()
+        m = model(x)
+        l_this_all = criterion.debug(m, None, y) # (nb_classes, )
+        l_all.append(l_this_all.detach().cpu().numpy())
     if indices is not None:
-        for ct, (x, t, ind) in tqdm(enumerate(dl)):
-            if ind.item() in indices:
-                x = x.cuda().expand(dl.dataset.nb_classes(), x.size()[1], x.size()[2], x.size()[3])
-                y = torch.arange(dl.dataset.nb_classes()).cuda()
-                m = model(x)
-                l_this_all = criterion.debug(m, None, y)
-                l_all.append(l_this_all.detach().cpu().numpy())
-    else:
-        for ct, (x, t, _) in tqdm(enumerate(dl)):
-            x = x.cuda().expand(dl.dataset.nb_classes(), x.size()[1], x.size()[2], x.size()[3])
-            y = torch.arange(dl.dataset.nb_classes()).cuda()
-            m = model(x)
-            l_this_all = criterion.debug(m, None, y) # (nb_classes, )
-            l_all.append(l_this_all.detach().cpu().numpy())
+        l_all = l_all[indices]
     return l_all # (N, nb_classes)
 
 def loss_change_train_relabel(model, criterion, dl_tr, params_prev, params_cur, indices):
@@ -42,19 +35,14 @@ def loss_change_train_relabel(model, criterion, dl_tr, params_prev, params_cur, 
 def calc_loss_train(model, dl, criterion, indices=None):
     l = []
     model.eval()
+
+    for ct, (x, t, _) in tqdm(enumerate(dl)):
+        x, t = x.cuda(), t.cuda()
+        m = model(x)
+        l_this = criterion(m, None, t)
+        l.append(l_this.detach().cpu().item())
     if indices is not None:
-        for ct, (x, t, ind) in tqdm(enumerate(dl)):
-            if ind.item() in indices:
-                x, t = x.cuda(), t.cuda()
-                m = model(x)
-                l_this = criterion(m, None, t)
-                l.append(l_this.detach().cpu().item())
-    else:
-        for ct, (x, t, _) in tqdm(enumerate(dl)):
-            x, t = x.cuda(), t.cuda()
-            m = model(x)
-            l_this = criterion(m, None, t)
-            l.append(l_this.detach().cpu().item())
+        l = l[indices]
     return l
 
 def loss_change_train(model, criterion, dl_tr, params_prev, params_cur):

@@ -178,6 +178,12 @@ class SampleRelabel(InfluentialSample):
                 theta = self.single_get_theta(theta_orig, all_features, [pair_ind1], [pair_ind2])
                 l_prev, l_cur = loss_change_train_relabel(self.model, self.criterion, self.dl_tr, theta_orig, theta, top_harmful_indices)
                 l_diff_harmful = l_cur - l_prev # (N_harmful, nb_classes)
+                l_diff_filtered = (l_diff_harmful < 0) * np.abs(l_diff_harmful)
+                l_diff_normalize = l_diff_filtered / np.sum(l_diff_filtered, axis=-1, keepdims=True)
+                for kk in range(len(top_harmful_indices)):
+                    relabel_dict[top_harmful_indices[kk]] = l_diff_normalize[kk]
+                with open('./{}/Allrelabeldict_{}_{}_softIF.pkl'.format(base_dir, pair_ind1, pair_ind2), 'wb') as handle:
+                    pickle.dump(relabel_dict, handle)
                 pass
             else:
                 raise NotImplemented
@@ -216,8 +222,16 @@ class SampleRelabel(InfluentialSample):
                 theta_orig = self.model.module[-1].weight.data
                 torch.cuda.empty_cache()
                 theta = self.single_get_theta(theta_orig, all_features, [pair_ind1], [pair_ind2])
-
-                pass # FIXME
+                l_prev, l_cur = loss_change_train_relabel(self.model, self.criterion, self.dl_tr, theta_orig, theta,
+                                                          top_helpful_indices)
+                l_diff_helpful = l_cur - l_prev  # (N_harmful, nb_classes)
+                l_diff_filtered = (l_diff_helpful > 0) * np.abs(l_diff_helpful)
+                l_diff_normalize = l_diff_filtered / np.sum(l_diff_filtered, axis=-1, keepdims=True)
+                for kk in range(len(top_helpful_indices)):
+                    relabel_dict[top_helpful_indices[kk]] = l_diff_normalize[kk]
+                with open('./{}/Allrelabeldict_{}_{}_softIF.pkl'.format(base_dir, pair_ind1, pair_ind2), 'wb') as handle:
+                    pickle.dump(relabel_dict, handle)
+                pass
             else:
                 raise NotImplemented
 
