@@ -3,12 +3,12 @@ import os
 import matplotlib.pyplot as plt
 from torchvision.transforms.functional import to_pil_image
 from torchvision.io.image import read_image
-from Influence_function.ScalableIF_rungroups import ScalableIF
+from Influence_function.influence_function import ScalableIF
 from explaination.CAM_methods import *
 from Influence_function.ScalableIF_utils import *
 from Influence_function.IF_utils import *
 from utils import overlay_mask
-from evaluation import assign_by_euclidian_at_k_indices, assign_diff_cls_neighbor, assign_same_cls_neighbor
+from evaluation import assign_by_euclidian_at_k_indices
 import sklearn
 import pickle
 os.environ['CUDA_VISIBLE_DEVICES'] = "1"

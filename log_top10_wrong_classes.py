@@ -1,4 +1,4 @@
-from Influence_function.ScalableIF_rungroups import *
+from Influence_function.influence_function import *
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 if __name__ == '__main__':

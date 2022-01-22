@@ -54,23 +54,6 @@ def assign_by_euclidian_at_k_indices(X, T, k):
 
     return indices, np.array([[T[i] for i in ii] for ii in indices])
 
-def assign_same_cls_neighbor(X, T, nn_k):
-
-    distances = sklearn.metrics.pairwise.pairwise_distances(X)  # (N_train, N_train)
-    diff_cls_mask = (T[:, None] != T).detach().cpu().numpy().nonzero()
-    distances[diff_cls_mask[0], diff_cls_mask[1]] = distances.max() + 1
-    nn_indices_same_cls = np.argsort(distances, axis=1)[:, 1:(nn_k + 1)]
-    return nn_indices_same_cls
-
-
-def assign_diff_cls_neighbor(X, T, nn_k):
-
-    distances = sklearn.metrics.pairwise.pairwise_distances(X)  # (N_train, N_train)
-    diff_cls_mask = (T[:, None] == T).detach().cpu().numpy().nonzero()
-    distances[diff_cls_mask[0], diff_cls_mask[1]] = distances.max() + 1
-    nn_indices_same_cls = np.argsort(distances, axis=1)[:, 1:(nn_k + 1)]
-    return nn_indices_same_cls
-
 
 
 def calc_recall_at_k(T, Y, k):
