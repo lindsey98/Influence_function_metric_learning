@@ -1,133 +1,361 @@
-#! /usr/bin/env python3
-import torch
-from torch.autograd import grad
-from tqdm import tqdm
 import numpy as np
-import torch.nn.functional as F
+import torch
+import torchvision
+import loss
+from networks import Feat_resnet50_max_n
+from evaluation.pumap import prepare_data, get_wrong_indices
+import torch.nn as nn
+import os
+import matplotlib.pyplot as plt
+from torchvision.transforms.functional import normalize, resize, to_pil_image
+from torchvision.io.image import read_image
+from Influence_function.ScalableIF_utils import *
+from Influence_function.IF_utils import *
+import pickle
+from utils import predict_batchwise_debug
+from collections import OrderedDict
+import scipy.stats
+from evaluation import assign_by_euclidian_at_k_indices
 
-@torch.no_grad()
-def calc_loss_train_relabel(model, dl, criterion, indices=None):
-    l_all = []
-    model.eval()
-    for ct, (x, t, _) in tqdm(enumerate(dl)):
-        x = x.cuda().expand(dl.dataset.nb_classes(), x.size()[1], x.size()[2], x.size()[3])
-        y = torch.arange(dl.dataset.nb_classes()).cuda()
-        m = model(x)
-        l_this_all = criterion.debug(m, None, y) # (nb_classes, )
-        l_all.append(l_this_all.detach().cpu().numpy())
-    if indices is not None:
-        l_all = l_all[indices]
-    return l_all # (N, nb_classes)
+class BaseInfluenceFunction():
+    def __init__(self, dataset_name, seed, loss_type, config_name,
+                 test_crop=False, sz_embedding=512, epoch=40):
 
-def loss_change_train_relabel(model, criterion, dl_tr, params_prev, params_cur, indices):
+        self.folder = 'models/dvi_data_{}_{}_loss{}/'.format(dataset_name, seed, loss_type)
+        self.model_dir = '{}/ResNet_{}_Model'.format(self.folder, sz_embedding)
+        self.config_name = config_name
+        self.epoch = epoch
 
-    weight_orig = model.module[-1].weight.data # cache original parameters
-    model.module[-1].weight.data = params_prev
-    l_prev = calc_loss_train_relabel(model, dl_tr, criterion, indices) # (N, nb_classes)
+        # load data
+        self.dl_tr, self.dl_ev = prepare_data(data_name=dataset_name,
+                                              config_name=self.config_name,
+                                              batch_size=1,
+                                              test_crop=test_crop)
+        self.dataset_name = dataset_name
+        self.seed = seed
+        self.loss_type = loss_type
+        self.sz_embedding = sz_embedding
+        self.model = self._load_model()
+        self.model.eval()
+        self.criterion = self._load_criterion()
+        self.train_embedding, self.train_label, self.testing_embedding, self.testing_label, \
+            self.testing_nn_label, self.testing_nn_indices = self._load_data()
+        pass
 
-    model.module[-1].weight.data = params_cur
-    l_cur = calc_loss_train_relabel(model, dl_tr, criterion, indices) # (N, nb_classes)
+    def _load_model(self, multi_gpu=True):
+        feat = Feat_resnet50_max_n()
+        emb = torch.nn.Linear(2048, self.sz_embedding) # projection layer
+        model = torch.nn.Sequential(feat, emb)
+        weights = torch.load(
+            '{}/Epoch_{}/{}_{}_trainval_{}_{}.pth'.format(self.model_dir, self.epoch, self.dataset_name, self.dataset_name, self.sz_embedding, self.seed))
+        if multi_gpu:
+            model = nn.DataParallel(model)
+        model.cuda()
+        if multi_gpu:
+            model.load_state_dict(weights)
+        else:
+            weights_detach = OrderedDict()
+            for k, v in weights.items():
+                weights_detach[k.split('module.')[1]] = v
+            model.load_state_dict(weights_detach)
+        return model
 
-    model.module[-1].weight.data = weight_orig # dont forget to revise the weights back to the original
-    return np.asarray(l_prev), np.asarray(l_cur)
+    def _load_model_random(self, multi_gpu=True):
+        feat = Feat_resnet50_max_n()
+        emb = torch.nn.Linear(2048, self.sz_embedding) # projection layer
+        model = torch.nn.Sequential(feat, emb)
+        if multi_gpu:
+            model = nn.DataParallel(model)
+        model.cuda()
+        return model
 
-@torch.no_grad()
-def calc_loss_train(model, dl, criterion, indices=None):
-    l = []
-    model.eval()
+    def _load_criterion(self):
+        proxies = torch.load('{}/Epoch_{}/proxy.pth'.format(self.model_dir, self.epoch), map_location='cpu')['proxies'].detach()
+        if 'ProxyNCA_prob_orig' in self.loss_type:
+            criterion = loss.ProxyNCA_prob_orig(nb_classes=self.dl_tr.dataset.nb_classes(), sz_embed=self.sz_embedding, scale=3)
+        elif 'ProxyAnchor' in self.loss_type:
+            criterion = loss.Proxy_Anchor(nb_classes=self.dl_tr.dataset.nb_classes(), sz_embed=self.sz_embedding)
+        elif 'SoftTriple' in self.loss_type:
+            criterion = loss.SoftTriple(nb_classes=self.dl_tr.dataset.nb_classes(), sz_embed=self.sz_embedding,
+                                        la=20, gamma=0.1, tau=0.2, margin=0.01, K=1)
+        else:
+            raise NotImplementedError
+        criterion.proxies.data = proxies
+        criterion.cuda()
+        return criterion
 
-    for ct, (x, t, _) in tqdm(enumerate(dl)):
-        x, t = x.cuda(), t.cuda()
-        m = model(x)
-        l_this = criterion(m, None, t)
-        l.append(l_this.detach().cpu().item())
-    if indices is not None:
-        l = l[indices]
-    return l
+    def cache_embedding(self):
+        embedding, label, _ = predict_batchwise_debug(self.model, self.dl_tr)
+        torch.save(embedding, '{}/Epoch_{}/training_embeddings.pth'.format(self.model_dir, self.epoch))
+        torch.save(label, '{}/Epoch_{}/training_labels.pth'.format(self.model_dir, self.epoch))
 
-def loss_change_train(model, criterion, dl_tr, params_prev, params_cur):
+        testing_embedding, testing_label, _ = predict_batchwise_debug(self.model, self.dl_ev)
+        torch.save(testing_embedding, '{}/Epoch_{}/testing_embeddings.pth'.format(self.model_dir, self.epoch))
+        torch.save(testing_label, '{}/Epoch_{}/testing_labels.pth'.format(self.model_dir, self.epoch))
 
-    weight_orig = model.module[-1].weight.data # cache original parameters
-    model.module[-1].weight.data = params_prev
-    l_prev = calc_loss_train(model, dl_tr, criterion, None)
+        # Caution: I only care about these pairs, re-evaluation (if any) should also be based on these pairs
+        nn_indices, pred = assign_by_euclidian_at_k_indices(testing_embedding, testing_label, 1)  # predict
+        torch.save(torch.from_numpy(pred.flatten()), '{}/Epoch_{}/testing_nn_labels.pth'.format(self.model_dir, self.epoch))
+        np.save('{}/Epoch_{}/testing_nn_indices'.format(self.model_dir, self.epoch), nn_indices)
 
-    model.module[-1].weight.data = params_cur
-    l_cur = calc_loss_train(model, dl_tr, criterion, None)
+    def _load_data(self):
+        try:
+            train_embedding = torch.load('{}/Epoch_{}/training_embeddings.pth'.format(self.model_dir, self.epoch))  # high dimensional embedding
+            train_label = torch.load('{}/Epoch_{}/training_labels.pth'.format(self.model_dir, self.epoch))
+            testing_embedding = torch.load('{}/Epoch_{}/testing_embeddings.pth'.format(self.model_dir, self.epoch))  # high dimensional embedding
+            testing_label = torch.load('{}/Epoch_{}/testing_labels.pth'.format(self.model_dir, self.epoch))
+            testing_nn_label = torch.load('{}/Epoch_{}/testing_nn_labels.pth'.format(self.model_dir, self.epoch))
+            testing_nn_indices = np.load('{}/Epoch_{}/testing_nn_indices.npy'.format(self.model_dir, self.epoch))
 
-    model.module[-1].weight.data = weight_orig # dont forget to revise the weights back to the original
-    return np.asarray(l_prev), np.asarray(l_cur)
+        except FileNotFoundError:
+            self.cache_embedding()
+            train_embedding = torch.load('{}/Epoch_{}/training_embeddings.pth'.format(self.model_dir, self.epoch))  # high dimensional embedding
+            train_label = torch.load('{}/Epoch_{}/training_labels.pth'.format(self.model_dir, self.epoch))
+            testing_embedding = torch.load('{}/Epoch_{}/testing_embeddings.pth'.format(self.model_dir, self.epoch))  # high dimensional embedding
+            testing_label = torch.load('{}/Epoch_{}/testing_labels.pth'.format(self.model_dir, self.epoch))
+            testing_nn_label = torch.load('{}/Epoch_{}/testing_nn_labels.pth'.format(self.model_dir, self.epoch))
+            testing_nn_indices = np.load('{}/Epoch_{}/testing_nn_indices.npy'.format(self.model_dir, self.epoch))
 
+        return train_embedding, train_label, testing_embedding, testing_label, testing_nn_label, testing_nn_indices
 
-def calc_inter_dist_pair(feat_cls1, feat_cls2):
-    feat_cls1 = F.normalize(feat_cls1, p=2, dim=-1)
-    feat_cls2 = F.normalize(feat_cls2, p=2, dim=-1)
+    @torch.no_grad()
+    def get_train_features(self):
+        self.model.eval()
+        # Forward propogate up to projection layer, cache the features (testing loader)
+        all_features = torch.tensor([])  # (N, 2048)
+        for ct, (x, t, _) in tqdm(enumerate(self.dl_tr)):
+            x = x.cuda()
+            m = self.model.module[:-1](x)
+            all_features = torch.cat((all_features, m.detach().cpu()), dim=0)
+        return all_features
 
-    if len(feat_cls1.shape) == 1 and len(feat_cls2.shape) == 1:
-        dist = (feat_cls1 - feat_cls2).square().sum()
-        return dist
-    inter_dis = torch.cdist(feat_cls1, feat_cls2).square()  # inter class distance
-    inter_dis = inter_dis.diagonal().sum() # only sum aligned pairs
-    return inter_dis
+    @torch.no_grad()
+    def get_features(self):
+        self.model.eval()
+        # Forward propogate up to projection layer, cache the features (testing loader)
+        all_features = torch.tensor([])  # (N, 2048)
+        for ct, (x, t, _) in tqdm(enumerate(self.dl_ev)):
+            x = x.cuda()
+            m = self.model.module[:-1](x)
+            all_features = torch.cat((all_features, m.detach().cpu()), dim=0)
+        return all_features
 
-def grad_confusion_pair(model, all_features, wrong_indices, confusion_indices):
+    def get_wrong_freq_matrix(self, top10_wrong_classes, wrong_labels, wrong_preds):
+        wrong_labels = wrong_labels.detach().cpu().numpy()
+        wrong_preds = wrong_preds.squeeze().detach().cpu().numpy()
 
-    cls_features = all_features[wrong_indices]
-    confuse_cls_features = all_features[confusion_indices]
+        wrong_freq_matrix = np.zeros((len(top10_wrong_classes), len(self.dl_ev.dataset.classes)))
+        for indi, i in enumerate(top10_wrong_classes):
+            ct_wrong = np.sum(wrong_labels == i)
+            for indj, j in enumerate(self.dl_ev.dataset.classes):
+                if i == j:
+                    continue
+                ct_wrong_as_clsj = np.sum((wrong_preds == j) & (wrong_labels == i)) # wrong and predicted as j
+                wrong_freq_matrix[indi][indj] = - ct_wrong_as_clsj / ct_wrong # negative for later sorting purpose
 
-    model.zero_grad()
-    model.eval()
-    cls_features = cls_features.cuda()
-    confuse_cls_features = confuse_cls_features.cuda()
+        return wrong_freq_matrix
 
-    feature1 = model.module[-1](cls_features)  # (N', 512)
-    feature2 = model.module[-1](confuse_cls_features)  # (N', 512)
-    confusion = calc_inter_dist_pair(feature1, feature2)
+    def get_confusion_class_pairs(self):
+        _, top10_wrong_classes, wrong_labels, wrong_preds = get_wrong_indices(self.testing_embedding, self.testing_label, topk=10)
 
-    params = model.module[-1].weight
-    grad_confusion2params = list(grad(confusion, params))
-    grad_confusion2params = [y.detach().cpu() for y in grad_confusion2params]  # accumulate gradients
-    confusion = confusion.detach().cpu().item()  # accumulate confusion
+        wrong_freq_matrix = self.get_wrong_freq_matrix(top10_wrong_classes, wrong_labels, wrong_preds)
+        confusion_classes_ind = np.argsort(wrong_freq_matrix, axis=-1)[:, :10]  # get top 10 classes that are frequently confused with top 10 wrong testing classes
 
-    return confusion, grad_confusion2params
+        # Find the first index which explains >half of the wrong cases (cumulatively)
+        confusion_class_degree = -1 * wrong_freq_matrix[np.repeat(np.arange(len(confusion_classes_ind)), 10),
+                                                        confusion_classes_ind.flatten()].reshape(len(confusion_classes_ind), -1)
+        result = np.cumsum(confusion_class_degree, -1)
+        row, col = np.where(result > 0.5)
+        first_index = [np.where(row == i)[0][0] if len(np.where(row == i)[0]) > 0 else 9 \
+                       for i in range(len(confusion_classes_ind))]
+        first_index = col[first_index]
 
-def grad_confusion(model, all_features, cls, confusion_classes,
-                   pred, label, nn_indices):
+        # Filter out those confusion class pairs
+        confusion_class_pairs = [[(top10_wrong_classes[i], np.asarray(self.dl_ev.dataset.classes)[confusion_classes_ind[i][j]]) \
+                                  for j in range(first_index[i] + 1)] \
+                                  for i in range(confusion_classes_ind.shape[0])]
 
-    pred = pred.detach().cpu().numpy()
-    label = label.detach().cpu().numpy()
-    nn_indices = nn_indices.flatten()
-    assert len(pred) == len(label)
-    assert len(pred) == len(nn_indices)
+        print("Top 10 wrong classes", top10_wrong_classes)
+        print("Confusion pairs", confusion_class_pairs)
 
-    # Get cls samples indices and confusion_classes samples indices
-    wrong_indices = [[] for _ in range(len(confusion_classes))] # belong to cls and wrongly predicted
-    confuse_indices = [[] for _ in range(len(confusion_classes))] # belong to confusion classes and are neighbors of interest_indices
-    pair_counts = 0 # count how many confusion pairs in total
-    for kk, confusion_cls in enumerate(confusion_classes):
-        wrong_as_confusion_cls_indices = np.where((pred == confusion_cls) & (label == cls))[0]
-        wrong_indices[kk] = wrong_as_confusion_cls_indices
-        confuse_indices[kk] = nn_indices[wrong_as_confusion_cls_indices]
-        pair_counts += len(wrong_as_confusion_cls_indices)
+        return confusion_class_pairs
 
-    # Compute pairwise confusion and record gradients to projection layer's weights
-    accum_grads = [torch.zeros_like(model.module[-1].weight).detach().cpu()]
-    accum_confusion = 0.
-    for kk in range(len(confusion_classes)):
-        confusion, grad_confusion2params = grad_confusion_pair(model, all_features,
-                                                               wrong_indices[kk], confuse_indices[kk])
-        accum_grads = [x + y for x, y in zip(accum_grads, grad_confusion2params)] # accumulate gradients
-        accum_confusion += confusion # accumulate confusion
+    def viz_cls(self, top_bottomk, dl, label, cls):
+        ind_cls = np.where(label.detach().cpu().numpy() == cls)[0]
+        for i in range(top_bottomk):
+            plt.subplot(1, top_bottomk, i + 1)
+            img = read_image(dl.dataset.im_paths[ind_cls[i]])
+            plt.imshow(to_pil_image(img))
+            plt.title('Class = {}'.format(cls))
+        plt.show()
 
-    accum_grads = [x / pair_counts for x in accum_grads]
-    accum_confusion = accum_confusion / pair_counts
-    return accum_confusion, accum_grads
+    def viz_2cls(self, top_bottomk, dl, label, cls1, cls2):
+        ind_cls1 = np.where(label.detach().cpu().numpy() == cls1)[0]
+        ind_cls2 = np.where(label.detach().cpu().numpy() == cls2)[0]
 
-def calc_influential_func_sample(grad_alltrain):
-    l_prev = grad_alltrain['l_prev']
-    l_cur = grad_alltrain['l_cur']
-    l_diff = np.stack(l_cur) - np.stack(l_prev) # l_diff = l'-l0, if l_diff < 0, helpful, otherwise harmful
-    return l_diff
+        top_bottomk = min(top_bottomk, len(ind_cls1), len(ind_cls2))
+        for i in range(top_bottomk):
+            plt.subplot(2, top_bottomk, i + 1)
+            img = read_image(dl.dataset.im_paths[ind_cls1[i]])
+            plt.imshow(to_pil_image(img))
+            plt.title('Class = {}'.format(cls1))
+        for i in range(top_bottomk):
+            plt.subplot(2, top_bottomk, i + 1 + top_bottomk)
+            img = read_image(dl.dataset.im_paths[ind_cls2[i]])
+            plt.imshow(to_pil_image(img))
+            plt.title('Class = {}'.format(cls2))
+        plt.show()
 
+    def viz_sample(self, dl, indices):
+        classes = [dl.dataset.ys[x] for x in indices]
+        for i in range(10):
+            plt.subplot(2, 5, i + 1)
+            img = read_image(dl.dataset.im_paths[indices[i]])
+            plt.imshow(to_pil_image(img))
+            plt.title('Class = {}'.format(classes[i]))
+        plt.show()
 
+    def viz_2sample(self, dl, ind1, ind2):
+        class1 = dl.dataset.ys[ind1]
+        class2 = dl.dataset.ys[ind2]
 
+        plt.subplot(1, 2, 1)
+        img = read_image(dl.dataset.im_paths[ind1])
+        plt.imshow(to_pil_image(img))
+        plt.title('Class = {}'.format(class1))
 
+        plt.subplot(1, 2, 2)
+        img = read_image(dl.dataset.im_paths[ind2])
+        plt.imshow(to_pil_image(img))
+        plt.title('Class = {}'.format(class2))
+        plt.show()
+        plt.close()
+
+class ScalableIF(BaseInfluenceFunction):
+    def __int__(self, dataset_name, seed, loss_type, config_name,
+                 test_crop=False, sz_embedding=512, epoch=40):
+        super(ScalableIF, self).__init__(dataset_name, seed, loss_type, config_name,
+                                         test_crop=False, sz_embedding=512, epoch=40)
+
+    def cache_grad_loss_train_all(self, theta, theta_hat, pair_idx):
+        l_prev, l_cur = loss_change_train(self.model, self.criterion, self.dl_tr, theta, theta_hat)
+        grad_loss = {'l_prev': l_prev, 'l_cur': l_cur}
+        with open("Influential_data/{}_{}_confusion_grad4trainall_testpair{}.pkl".format(self.dataset_name, self.loss_type, pair_idx), "wb") as fp:  # Pickling
+            pickle.dump(grad_loss, fp)
+
+    def agg_get_theta(self, classes, steps=50, lr=0.001):
+
+        theta_orig = self.model.module[-1].weight.data
+        torch.cuda.empty_cache()
+
+        all_features = self.get_features() # (N, 2048)
+
+        for pair in classes:
+            wrong_cls = pair[0][0]
+            confused_classes = [x[1] for x in pair]
+
+            # revise back the weights
+            self.model.module[-1].weight.data = theta_orig
+            theta = theta_orig.clone()
+
+            # Record original inter-class distance
+            inter_dist_orig, _ = grad_confusion(self.model, all_features, wrong_cls, confused_classes,
+                                                self.testing_nn_label, self.testing_label, self.testing_nn_indices) # dD/dtheta
+            print("Original confusion: ", inter_dist_orig)
+
+            # Optimization
+            for _ in range(steps):
+                inter_dist, v = grad_confusion(self.model, all_features, wrong_cls, confused_classes,
+                                               self.testing_nn_label, self.testing_label, self.testing_nn_indices) # dD/dtheta
+                print("Confusion: ", inter_dist)
+                if inter_dist - inter_dist_orig >= 1.: # FIXME: stopping criteria threshold selection
+                    break
+                theta_new = theta + lr * v[0].to(theta.device) # gradient ascent
+                theta = theta_new
+                self.model.module[-1].weight.data = theta
+
+            theta_dict = {'theta': theta_orig, 'theta_hat': theta}
+            torch.save(theta_dict, "Influential_data/{}_{}_confusion_theta_test_{}.pth".format(self.dataset_name, self.loss_type, wrong_cls))
+
+        self.model.module[-1].weight.data = theta_orig
+
+    def agg_influence_func(self, pair_idx):
+        confusion_class_pairs = self.get_confusion_class_pairs()
+        pair = confusion_class_pairs[pair_idx]
+        self.viz_2cls(5, self.dl_ev, self.testing_label, pair[0][0], pair[0][1])  # visualize confusion classes
+
+        with open("Influential_data/{}_{}_confusion_grad4trainall_testpair{}.pkl".format(self.dataset_name, self.loss_type, pair_idx), "rb") as fp:  # Pickling
+            grad4train = pickle.load(fp)
+
+        influence_values = calc_influential_func_sample(grad4train)
+        influence_values = np.asarray(influence_values)
+        training_sample_by_influence = influence_values.argsort()  # ascending
+        self.viz_sample(self.dl_tr, training_sample_by_influence[:10])  # helpful
+        self.viz_sample(self.dl_tr, training_sample_by_influence[-10:])  # harmful
+
+        helpful_indices = np.where(influence_values < 0)[0] # cache all helpful
+        harmful_indices = np.where(influence_values > 0)[0] # cache all harmful
+        np.save("Influential_data/{}_{}_helpful_testcls{}".format(self.dataset_name, self.loss_type, pair_idx),
+                helpful_indices)
+        np.save("Influential_data/{}_{}_harmful_testcls{}".format(self.dataset_name, self.loss_type, pair_idx),
+                harmful_indices)
+
+    def single_get_theta(self, theta_orig, all_features, wrong_indices, confuse_indices):
+        # Revise back the weights
+        self.model.module[-1].weight.data = theta_orig
+        theta = theta_orig.clone()
+
+        # Record original inter-class distance
+        inter_dist_orig, _ = grad_confusion_pair(self.model, all_features, wrong_indices, confuse_indices)  # dD/dtheta
+        print("Original confusion: ", inter_dist_orig)
+
+        # Optimization
+        for _ in range(50):
+            inter_dist, v = grad_confusion_pair(self.model, all_features, wrong_indices, confuse_indices)  # dD/dtheta
+            print("Confusion: ", inter_dist)
+            if inter_dist - inter_dist_orig >= 1.:  # FIXME: stopping criteria threshold selection
+                break
+            theta_new = theta + 0.001 * v[0].to(theta.device)  # gradient ascent
+            theta = theta_new
+            self.model.module[-1].weight.data = theta
+
+        self.model.module[-1].weight.data = theta_orig
+        return theta
+
+    def single_influence_func(self, all_features, wrong_indices, confuse_indices):
+
+        '''Step 1: All confusion gradient to parameters'''
+        theta_orig = self.model.module[-1].weight.data
+        torch.cuda.empty_cache()
+        theta = self.single_get_theta(theta_orig, all_features, wrong_indices, confuse_indices)
+
+        '''Step 2: Training class loss changes'''
+        l_prev, l_cur = loss_change_train(self.model, self.criterion, self.dl_tr, theta_orig, theta)
+        grad_loss = {'l_prev': l_prev, 'l_cur': l_cur}
+
+        '''Step 3: Calc influence functions'''
+        # sanity check self.viz_2sample(self.dl_ev, wrong_indices[0], confuse_indices[0])
+        influence_values = calc_influential_func_sample(grad_loss)
+        influence_values = np.asarray(influence_values)
+        training_sample_by_influence = influence_values.argsort()  # ascending
+        print('Proportion of negative change: ', np.sum(influence_values < 0) / len(influence_values))
+        print('Proportion of zero change: ', np.sum(influence_values == 0) / len(influence_values))
+        print('Proportion of positive change: ', np.sum(influence_values > 0) / len(influence_values))
+        # sanity check self.viz_sample(self.dl_tr, training_sample_by_influence[:10])  # helpful
+        # sanity check self.viz_sample(self.dl_tr, training_sample_by_influence[-10:])  # harmful
+        return training_sample_by_influence, influence_values
+
+class OrigIF(BaseInfluenceFunction):
+    def __int__(self, dataset_name, seed, loss_type, config_name,
+                test_crop=False, sz_embedding=512, epoch=40):
+
+        super(BaseInfluenceFunction, self).__init__(dataset_name, seed, loss_type, config_name,
+                                         test_crop=False, sz_embedding=512, epoch=40)
+
+    def single_influence_func_orig(self, train_features, test_features, wrong_indices, confuse_indices):
+        inter_dist_pair, v = grad_confusion_pair(self.model, test_features, wrong_indices, confuse_indices)
+        ihvp = inverse_hessian_product(self.model, self.criterion, v, self.dl_tr, scale=500, damping=0.01)
+        influence_values = calc_influential_func_orig(IS=self, train_features=train_features, inverse_hvp_prod=ihvp)
+        influence_values = np.asarray(influence_values).flatten()
+
+        return influence_values

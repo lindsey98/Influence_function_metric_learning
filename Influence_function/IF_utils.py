@@ -8,30 +8,48 @@ from tqdm import tqdm
 from torch.autograd import Variable
 import numpy as np
 
-def grad_loss_relabel(model, criterion, all_features, all_labels, dl):
-    '''
-        Get dL/dtheta for all training
-    '''
-    grad_all = []
-    model.eval(); model.zero_grad()  # first zero out previous gradients
-    criterion.zero_grad(); criterion.proxies.requires_grad = False  # first zero out previous gradients, set proxies to be non-differentiable
-
-    for feat, t in zip(all_features, all_labels):
-        x = feat.cuda().unsqueeze(0)
-        x = torch.repeat_interleave(x, repeats=dl.dataset.nb_classes(), dim=0)
-        gradient_this = torch.tensor([])
-        # for y in torch.arange(dl.dataset.nb_classes()):
-        model.zero_grad()
-        m = model.module[-1](x)
-        # loss = criterion(m, None, y.view(1, -1))
-        y = torch.arange(dl.dataset.nb_classes()).cuda()
-        loss = criterion.debug(m, None, y)
-        params = model.module[-1].weight  # last linear layer weights
-        gradient = list(grad(loss, params, create_graph=False))[0].detach().cpu() # (512, 2048)
-        gradient_this = torch.cat([gradient_this, gradient.unsqueeze(0)], dim=0)  # (C, 512, 2048)
-        gradient_this = gradient_this - gradient_this[t.long().item()] # (C, 512, 2048)
-        grad_all.append(gradient_this) # (N_tr, C, 512, 2048)
-    return grad_all
+# def grad_loss_relabel(model, criterion, all_features, all_labels, dl):
+#     '''
+#         Get dL/dtheta for all training
+#     '''
+#     grad_all = []
+#     model.eval(); model.zero_grad()  # first zero out previous gradients
+#     criterion.zero_grad(); criterion.proxies.requires_grad = False  # first zero out previous gradients, set proxies to be non-differentiable
+#
+#     for feat, t in zip(all_features, all_labels):
+#         x = feat.cuda().unsqueeze(0)
+#         x = torch.repeat_interleave(x, repeats=dl.dataset.nb_classes(), dim=0)
+#         gradient_this = torch.tensor([])
+#         # for y in torch.arange(dl.dataset.nb_classes()):
+#         model.zero_grad()
+#         m = model.module[-1](x)
+#         # loss = criterion(m, None, y.view(1, -1))
+#         y = torch.arange(dl.dataset.nb_classes()).cuda()
+#         loss = criterion.debug(m, None, y)
+#         params = model.module[-1].weight  # last linear layer weights
+#         gradient = list(grad(loss, params, create_graph=False))[0].detach().cpu() # (512, 2048)
+#         gradient_this = torch.cat([gradient_this, gradient.unsqueeze(0)], dim=0)  # (C, 512, 2048)
+#         gradient_this = gradient_this - gradient_this[t.long().item()] # (C, 512, 2048)
+#         grad_all.append(gradient_this) # (N_tr, C, 512, 2048)
+#     return grad_all
+# def calc_influential_func_relabel(IS, train_features, inverse_hvp_prod):
+#     '''
+#         Calculate influential functions
+#         Arguments:
+#             inverse_hvp_prod: inverse hessian vector product, of shape (|theta|,)
+#             grad_alltrain: list of gradients for all training (N_train, |theta|)
+#         Returns:
+#             influence_values: list of influence values (N_train,)
+#     '''
+#     influence_values = []
+#     grad4train = grad_loss_relabel(IS.model, IS.criterion, train_features, IS.train_label, IS.dl_tr)
+#     for i in tqdm(range(len(train_features))):
+#         # influence = (-1) * grad(test)' H^-1 grad(train), dont forget the negative sign
+#         grad1train = grad4train[i]
+#         influence_thistrain = [(-1) * torch.dot(x.flatten().detach().cpu(), y.flatten()).item() \
+#                                for x, y in zip(inverse_hvp_prod * grad1train.size()[0], grad1train)] # (C, )
+#         influence_values.append(influence_thistrain) # (N_tr, C)
+#     return influence_values
 
 def grad_loss(model, criterion, all_features, all_labels):
     '''
@@ -39,32 +57,19 @@ def grad_loss(model, criterion, all_features, all_labels):
     '''
     grad_all = []
     for feat, t in zip(all_features, all_labels):
-        grad_this = jacobian(feat.unsqueeze(0), t.view(1, -1), model, criterion)
+        feat, t = feat.unsqueeze(0).cuda(), t.view(1, -1).cuda()
+        model.eval(); model.zero_grad()  # first zero out previous gradients
+        criterion.zero_grad(); criterion.proxies.requires_grad = False  # first zero out previous gradients, set proxies to be non-differentiable
+
+        m = model.module[-1](feat)  # get (sz_embed,) feature embedding
+        loss = criterion(m, None, t)
+
+        params = model.module[-1].weight  # last linear layer weights
+        grad_this = list(grad(loss, params, create_graph=True)) # gradient
         grad_this = [g.detach().cpu() for g in grad_this]
         grad_all.append(grad_this) # (N_tr, |\theta|)
     return grad_all
 
-def jacobian(feat, t, model, criterion):
-    """
-        Calculates the gradient z. One grad_z should be computed for each training sample.
-        Arguments:
-            z: torch tensor, training data points
-                e.g. an image sample (batch_size, 3, 256, 256)
-            t: torch tensor, training data labels
-            model: torch NN, model used to evaluate the dataset
-            criterion: loss
-        Returns:
-            grad_z: list of torch tensor, containing the gradients from model parameters to loss
-    """
-    model.eval(); model.zero_grad() # first zero out previous gradients
-    criterion.zero_grad(); criterion.proxies.requires_grad = False # first zero out previous gradients, set proxies to be non-differentiable
-    # initialize
-    feat, t = feat.cuda(), t.cuda()
-    m = model.module[-1](feat) # get (sz_embed,) feature embedding
-    loss = criterion(m, None, t)
-    # Compute sum of gradients from model parameters to loss
-    params = model.module[-1].weight # last linear layer weights
-    return list(grad(loss, params, create_graph=True))
 
 def inverse_hessian_product(model, criterion, v, dl_tr,
                             scale=500, damping=0.01):
@@ -144,24 +149,6 @@ def calc_influential_func_orig(IS, train_features, inverse_hvp_prod):
         influence_values.append(influence_thistrain)
     return influence_values
 
-def calc_influential_func_relabel(IS, train_features, inverse_hvp_prod):
-    '''
-        Calculate influential functions
-        Arguments:
-            inverse_hvp_prod: inverse hessian vector product, of shape (|theta|,)
-            grad_alltrain: list of gradients for all training (N_train, |theta|)
-        Returns:
-            influence_values: list of influence values (N_train,)
-    '''
-    influence_values = []
-    grad4train = grad_loss_relabel(IS.model, IS.criterion, train_features, IS.train_label, IS.dl_tr)
-    for i in tqdm(range(len(train_features))):
-        # influence = (-1) * grad(test)' H^-1 grad(train), dont forget the negative sign
-        grad1train = grad4train[i]
-        influence_thistrain = [(-1) * torch.dot(x.flatten().detach().cpu(), y.flatten()).item() \
-                               for x, y in zip(inverse_hvp_prod * grad1train.size()[0], grad1train)] # (C, )
-        influence_values.append(influence_thistrain) # (N_tr, C)
-    return influence_values
 
 
 

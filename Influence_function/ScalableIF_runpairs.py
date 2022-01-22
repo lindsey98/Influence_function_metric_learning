@@ -1,7 +1,7 @@
 
 import os
-from Influence_function.influential_sample import ScalableIF
-from Influence_function.influence_function import *
+from Influence_function.influence_function import ScalableIF
+from Influence_function.ScalableIF_utils import *
 from evaluation import assign_by_euclidian_at_k_indices
 os.environ['CUDA_VISIBLE_DEVICES'] = "1, 0"
 
