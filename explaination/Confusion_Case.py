@@ -107,7 +107,7 @@ class SampleRelabel(ScalableIF):
                           base_dir, pair_ind1, pair_ind2):
 
         assert isinstance(lookat_harmful, bool)
-        assert relabel_method in ['hard', 'soft_knn', 'soft_IF', 'soft_IF_orig']
+        assert relabel_method in ['hard', 'soft_knn', 'soft_IF']
         if lookat_harmful:
             top_harmful_indices = harmful_indices  # top_harmful_indices = influence_values.argsort()[-50:]
             top_harmful_nn_indices = train_nn_indices[top_harmful_indices]
@@ -148,17 +148,6 @@ class SampleRelabel(ScalableIF):
                     relabel_dict[top_harmful_indices[kk]] = prob_relabel[kk]
                 with open('./{}/Allrelabeldict_{}_{}_softIF.pkl'.format(base_dir, pair_ind1, pair_ind2), 'wb') as handle:
                     pickle.dump(relabel_dict, handle)
-
-            # elif relabel_method == 'soft_IF_orig':
-            #     relabel_dict = {}
-            #     train_features = self.get_train_features()
-            #     test_features = self.get_features()
-            #     inter_dist, v = grad_confusion_pair(self.model, test_features, [pair_ind1], [pair_ind2])  # dD/dtheta
-            #     ihvp = inverse_hessian_product(self.model, self.criterion, v, self.dl_tr, scale=500, damping=0.01)
-            #
-            #     influence_values = calc_influential_func_relabel(IS=self, train_features=train_features, inverse_hvp_prod=ihvp)
-            #     influence_values_harmful = influence_values[top_harmful_indices]
-            #     pass
 
             else:
                 raise NotImplemented
@@ -207,17 +196,6 @@ class SampleRelabel(ScalableIF):
                     relabel_dict[top_helpful_indices[kk]] = prob_relabel[kk]
                 with open('./{}/Allrelabeldict_{}_{}_softIF.pkl'.format(base_dir, pair_ind1, pair_ind2), 'wb') as handle:
                     pickle.dump(relabel_dict, handle)
-
-            # elif relabel_method == 'soft_IF_orig':
-            #     relabel_dict = {}
-            #     train_features = self.get_train_features()
-            #     test_features = self.get_features()
-            #     inter_dist, v = grad_confusion_pair(self.model, test_features, [pair_ind1], [pair_ind2])  # dD/dtheta
-            #     ihvp = inverse_hessian_product(self.model, self.criterion, v, self.dl_tr, scale=500, damping=0.01)
-            #
-            #     influence_values = calc_influential_func_relabel(IS=self, train_features=train_features, inverse_hvp_prod=ihvp)
-            #     influence_values_harmful = influence_values[top_helpful_indices]
-            #     pass  # FIXME
 
             else:
                 raise NotImplemented
