@@ -1,32 +1,40 @@
 
 import os
 import matplotlib.pyplot as plt
-import numpy as np
-import torch
 from torchvision.transforms.functional import to_pil_image
 from torchvision.io.image import read_image
-from PIL import Image
-from Influence_function.influential_sample import InfluentialSample
+from Influence_function.influential_sample import ScalableIF
 from explaination.CAM_methods import *
 from Influence_function.influence_function import *
-import utils
-import dataset
-from torchvision import transforms
-from dataset.utils import RGBAToRGB, ScaleIntensities
+from Influence_function.influence_function_orig import *
 from utils import overlay_mask
-from utils import predict_batchwise_debug
 from evaluation import assign_by_euclidian_at_k_indices, assign_diff_cls_neighbor, assign_same_cls_neighbor
 import sklearn
 import pickle
 os.environ['CUDA_VISIBLE_DEVICES'] = "1"
 
 
-class SampleRelabel(InfluentialSample):
+class SampleRelabel(ScalableIF):
     def __init__(self, dataset_name, seed, loss_type, config_name,
                  test_crop=False, sz_embedding=512, epoch=40):
 
         super().__init__(dataset_name, seed, loss_type, config_name,
                           test_crop, sz_embedding, epoch)
+
+
+    def getNN_indices(self, embedding, label):
+
+        # global 1st NN
+        nn_indices, nn_label = assign_by_euclidian_at_k_indices(embedding, label, 1)
+        nn_indices, nn_label = nn_indices.flatten(), nn_label.flatten()
+
+        # Same class 1st NN
+        distances = sklearn.metrics.pairwise.pairwise_distances(embedding)  # (N_train, N_train)
+        diff_cls_mask = (label[:, None] != label).detach().cpu().numpy().nonzero()
+        distances[diff_cls_mask[0], diff_cls_mask[1]] = distances.max() + 1
+        nn_indices_same_cls = np.argsort(distances, axis=1)[:, 1]
+
+        return nn_indices, nn_label, nn_indices_same_cls
 
     def GradAnalysis(self,
                      wrong_indices, confuse_indices, wrong_samecls_indices,
@@ -93,64 +101,19 @@ class SampleRelabel(InfluentialSample):
                                                    ind1, ind2))
             plt.close()
 
-    def VisTrainNN(self, pair_ind1, pair_ind2,
-                   anchor_ind, orig_NN_ind, orig_same_cls_NN_ind,
-                   model,
-                   dl,
-                   base_dir):
-
-        plt_dir = './{}/{}/{}_{}'.format(base_dir, self.dataset_name, pair_ind1, pair_ind2)
-        os.makedirs(plt_dir, exist_ok=True)
-        model.eval()
-
-        fig = plt.figure()
-        fig.subplots_adjust(top=0.8)
-
-        ax = fig.add_subplot(1, 3, 1)
-        ax.imshow(to_pil_image(read_image(dl.dataset.im_paths[anchor_ind])))
-        ax.title.set_text('Ind:{}, Class:{}'.format(anchor_ind, dl.dataset.ys[anchor_ind]))
-        plt.axis('off')
-
-        ax = fig.add_subplot(1, 3, 2)
-        ax.imshow(to_pil_image(read_image(dl.dataset.im_paths[orig_NN_ind])))
-
-        model.zero_grad()
-        emb1 = model(dl.dataset.__getitem__(anchor_ind)[0].unsqueeze(0).cuda())
-        emb2 = model(dl.dataset.__getitem__(orig_NN_ind)[0].unsqueeze(0).cuda())
-        d = calc_inter_dist_pair(emb1, emb2)
-
-        ax.title.set_size(7)
-        ax.title.set_text('Class:{}, D:{:.2f}'.format(dl.dataset.ys[orig_NN_ind], d))
-        plt.axis('off')
-
-        ax = fig.add_subplot(1, 3, 3)
-        ax.imshow(to_pil_image(read_image(dl.dataset.im_paths[orig_same_cls_NN_ind])))
-
-        model.zero_grad()
-        emb1 = model(dl.dataset.__getitem__(anchor_ind)[0].unsqueeze(0).cuda())
-        emb2 = model(dl.dataset.__getitem__(orig_same_cls_NN_ind)[0].unsqueeze(0).cuda())
-        d = calc_inter_dist_pair(emb1, emb2)
-
-        ax.title.set_size(7)
-        ax.title.set_text('Class:{}, D:{:.2f}'.format(dl.dataset.ys[orig_same_cls_NN_ind], d))
-        plt.axis('off')
-
-        # plt.show()
-        plt.savefig('./{}/{}.png'.format(plt_dir, anchor_ind))
-        plt.close()
 
     def calc_relabel_dict(self, lookat_harmful, relabel_method,
                           harmful_indices, helpful_indices, train_nn_indices, train_nn_indices_same_cls,
                           base_dir, pair_ind1, pair_ind2):
 
         assert isinstance(lookat_harmful, bool)
-        assert relabel_method in ['hard', 'soft_knn', 'soft_IF']
+        assert relabel_method in ['hard', 'soft_knn', 'soft_IF', 'soft_IF_orig']
         if lookat_harmful:
             top_harmful_indices = harmful_indices  # top_harmful_indices = influence_values.argsort()[-50:]
             top_harmful_nn_indices = train_nn_indices[top_harmful_indices]
             top_harmful_nn_samecls_indices = train_nn_indices_same_cls[top_harmful_indices]
 
-            if relabel_method == 'hard':
+            if relabel_method == 'hard': # relabel as its 1st NN
                 relabel_dict = {}
                 for kk in range(len(top_harmful_indices)):
                     if self.dl_tr.dataset.ys[top_harmful_nn_indices[kk]] != self.dl_tr.dataset.ys[top_harmful_nn_samecls_indices[kk]]: # inconsistent label between global NN and same class NN
@@ -159,32 +122,44 @@ class SampleRelabel(InfluentialSample):
                 with open('./{}/Allrelabeldict_{}_{}.pkl'.format(base_dir, pair_ind1, pair_ind2), 'wb') as handle:
                     pickle.dump(relabel_dict, handle)
 
-            elif relabel_method == 'soft_knn':
+            elif relabel_method == 'soft_knn': # relabel by weighted kNN
                 relabel_dict = {}
                 unique_labels, unique_counts = torch.unique(self.train_label, return_counts=True)
                 median_shots_percls = unique_counts.median().item()
-                _, pred_scores = kNN_label_pred(top_harmful_indices, self.train_embedding, self.train_label,
-                                                self.dl_tr.dataset.nb_classes(), median_shots_percls)
+                _, prob_relabel = kNN_label_pred(query_indices=top_harmful_indices, embeddings=self.train_embedding, labels=self.train_label,
+                                                nb_classes=self.dl_tr.dataset.nb_classes(), knn_k=median_shots_percls)
+
                 for kk in range(len(top_harmful_indices)):
-                    relabel_dict[top_harmful_indices[kk]] = pred_scores[kk]
+                    relabel_dict[top_harmful_indices[kk]] = prob_relabel[kk]
                 with open('./{}/Allrelabeldict_{}_{}_soft.pkl'.format(base_dir, pair_ind1, pair_ind2), 'wb') as handle:
                     pickle.dump(relabel_dict, handle)
 
-            elif relabel_method == 'soft_IF':
+            elif relabel_method == 'soft_IF': # relabel by scalable influence function
                 relabel_dict = {}
-                all_features = self.get_features()
+                test_features = self.get_features()
                 theta_orig = self.model.module[-1].weight.data
                 torch.cuda.empty_cache()
-                theta = self.single_get_theta(theta_orig, all_features, [pair_ind1], [pair_ind2])
+                theta = self.single_get_theta(theta_orig, test_features, [pair_ind1], [pair_ind2])
                 l_prev, l_cur = loss_change_train_relabel(self.model, self.criterion, self.dl_tr, theta_orig, theta, top_harmful_indices)
                 l_diff_harmful = l_cur - l_prev # (N_harmful, nb_classes)
                 l_diff_filtered = (l_diff_harmful < 0) * np.abs(l_diff_harmful)
-                l_diff_normalize = l_diff_filtered / np.sum(l_diff_filtered, axis=-1, keepdims=True)
+                prob_relabel = l_diff_filtered / np.sum(l_diff_filtered, axis=-1, keepdims=True)
                 for kk in range(len(top_harmful_indices)):
-                    relabel_dict[top_harmful_indices[kk]] = l_diff_normalize[kk]
+                    relabel_dict[top_harmful_indices[kk]] = prob_relabel[kk]
                 with open('./{}/Allrelabeldict_{}_{}_softIF.pkl'.format(base_dir, pair_ind1, pair_ind2), 'wb') as handle:
                     pickle.dump(relabel_dict, handle)
-                pass
+
+            # elif relabel_method == 'soft_IF_orig':
+            #     relabel_dict = {}
+            #     train_features = self.get_train_features()
+            #     test_features = self.get_features()
+            #     inter_dist, v = grad_confusion_pair(self.model, test_features, [pair_ind1], [pair_ind2])  # dD/dtheta
+            #     ihvp = inverse_hessian_product(self.model, self.criterion, v, self.dl_tr, scale=500, damping=0.01)
+            #
+            #     influence_values = calc_influential_func_relabel(IS=self, train_features=train_features, inverse_hvp_prod=ihvp)
+            #     influence_values_harmful = influence_values[top_harmful_indices]
+            #     pass
+
             else:
                 raise NotImplemented
 
@@ -206,57 +181,55 @@ class SampleRelabel(InfluentialSample):
                 relabel_dict = {}
                 unique_labels, unique_counts = torch.unique(self.train_label, return_counts=True)
                 median_shots_percls = unique_counts.median().item()
-                _, pred_scores = kNN_label_pred(top_helpful_indices, self.train_embedding,
+                _, prob_relabel = kNN_label_pred(top_helpful_indices, self.train_embedding,
                                                 self.train_label,
                                                 self.dl_tr.dataset.nb_classes(), median_shots_percls)
 
                 for kk in range(len(top_helpful_indices)):
-                    relabel_dict[top_helpful_indices[kk]] = pred_scores[kk]
+                    relabel_dict[top_helpful_indices[kk]] = prob_relabel[kk]
 
                 with open('./{}/Allrelabeldict_{}_{}_soft.pkl'.format(base_dir, pair_ind1, pair_ind2), 'wb') as handle:
                     pickle.dump(relabel_dict, handle)
 
             elif relabel_method == 'soft_IF':
                 relabel_dict = {}
-                all_features = self.get_features()
+                test_features = self.get_features()
                 theta_orig = self.model.module[-1].weight.data
                 torch.cuda.empty_cache()
-                theta = self.single_get_theta(theta_orig, all_features, [pair_ind1], [pair_ind2])
+                theta = self.single_get_theta(theta_orig, test_features, [pair_ind1], [pair_ind2])
                 l_prev, l_cur = loss_change_train_relabel(self.model, self.criterion, self.dl_tr, theta_orig, theta,
                                                           top_helpful_indices)
                 l_diff_helpful = l_cur - l_prev  # (N_harmful, nb_classes)
                 l_diff_filtered = (l_diff_helpful > 0) * np.abs(l_diff_helpful)
-                l_diff_normalize = l_diff_filtered / np.sum(l_diff_filtered, axis=-1, keepdims=True)
+                prob_relabel = l_diff_filtered / np.sum(l_diff_filtered, axis=-1, keepdims=True)
+
                 for kk in range(len(top_helpful_indices)):
-                    relabel_dict[top_helpful_indices[kk]] = l_diff_normalize[kk]
+                    relabel_dict[top_helpful_indices[kk]] = prob_relabel[kk]
                 with open('./{}/Allrelabeldict_{}_{}_softIF.pkl'.format(base_dir, pair_ind1, pair_ind2), 'wb') as handle:
                     pickle.dump(relabel_dict, handle)
-                pass
+
+            # elif relabel_method == 'soft_IF_orig':
+            #     relabel_dict = {}
+            #     train_features = self.get_train_features()
+            #     test_features = self.get_features()
+            #     inter_dist, v = grad_confusion_pair(self.model, test_features, [pair_ind1], [pair_ind2])  # dD/dtheta
+            #     ihvp = inverse_hessian_product(self.model, self.criterion, v, self.dl_tr, scale=500, damping=0.01)
+            #
+            #     influence_values = calc_influential_func_relabel(IS=self, train_features=train_features, inverse_hvp_prod=ihvp)
+            #     influence_values_harmful = influence_values[top_helpful_indices]
+            #     pass  # FIXME
+
             else:
                 raise NotImplemented
 
-
-    def getNN_indices(self, embedding, label):
-
-        # global 1st NN
-        nn_indices, nn_label = assign_by_euclidian_at_k_indices(embedding, label, 1)
-        nn_indices, nn_label = nn_indices.flatten(), nn_label.flatten()
-
-        # Same class 1st NN
-        distances = sklearn.metrics.pairwise.pairwise_distances(embedding)  # (N_train, N_train)
-        diff_cls_mask = (label[:, None] != label).detach().cpu().numpy().nonzero()
-        distances[diff_cls_mask[0], diff_cls_mask[1]] = distances.max() + 1
-        nn_indices_same_cls = np.argsort(distances, axis=1)[:, 1]
-
-        return nn_indices, nn_label, nn_indices_same_cls
 
 
 # knn monitor as in InstDisc https://arxiv.org/abs/1805.01978
 # implementation follows http://github.com/zhirongw/lemniscate.pytorch and https://github.com/leftthomas/SimCLR, https://github.com/PatrickHua/SimSiam/blob/main/tools/knn_monitor.py
 def kNN_label_pred(query_indices, embeddings, labels, nb_classes, knn_k):
 
-    distances = sklearn.metrics.pairwise.pairwise_distances(embeddings)
-    indices = np.argsort(distances, axis=1)[:, 1: knn_k + 1]
+    distances = sklearn.metrics.pairwise.pairwise_distances(embeddings) # (N, N)
+    indices = np.argsort(distances, axis=1)[:, 1: knn_k + 1] # (N, knn_k)
     query_nn_indices = indices[query_indices] # (B, knn_k)
     query_nn_labels = torch.gather(labels.expand(query_indices.shape[0], -1),
                                    dim=-1,
@@ -267,7 +240,7 @@ def kNN_label_pred(query_indices, embeddings, labels, nb_classes, knn_k):
     query2nn_dist_exp = (-torch.from_numpy(query2nn_dist)).exp() # (B, knn_k)
 
     one_hot_label = torch.zeros(query_indices.shape[0] * knn_k, nb_classes, device=query_nn_labels.device) # (B*knn_k, C)
-    one_hot_label = one_hot_label.scatter(dim=-1, index=query_nn_labels.view(-1, 1).type(torch.int64), value=1.0)
+    one_hot_label = one_hot_label.scatter(dim=-1, index=query_nn_labels.view(-1, 1).type(torch.int64), value=1.0) # (B*knn_k, C)
 
     raw_pred_scores = torch.sum(one_hot_label.view(query_indices.shape[0], -1, nb_classes) * query2nn_dist_exp.unsqueeze(dim=-1), dim=1) # (B, C)
     pred_scores = raw_pred_scores / torch.sum(raw_pred_scores, dim=-1, keepdim=True) # (B, C)
@@ -303,7 +276,7 @@ if __name__ == '__main__':
     '''Step 2: Identify influential training points for a specific pair'''
     pair_ind1, pair_ind2 = 35, 2555
     lookat_harmful = True
-    relabel_method = 'soft_IF'
+    relabel_method = 'soft_IF_orig'
     base_dir = 'Confuse_pair_influential_data/{}'.format(DF.dataset_name)
     os.makedirs(base_dir, exist_ok=True)
 

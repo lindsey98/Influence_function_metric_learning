@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 from torchvision.transforms.functional import normalize, resize, to_pil_image
 from torchvision.io.image import read_image
 from Influence_function.influence_function import *
+from Influence_function.influence_function_orig import *
 import pickle
 from utils import predict_batchwise_debug
 from collections import OrderedDict
@@ -17,7 +18,7 @@ import scipy.stats
 from evaluation import assign_by_euclidian_at_k_indices
 os.environ['CUDA_VISIBLE_DEVICES'] = "1"
 
-class InfluentialSample():
+class BaseInfluenceFunction():
     def __init__(self, dataset_name, seed, loss_type, config_name,
                  test_crop=False, sz_embedding=512, epoch=40):
 
@@ -180,6 +181,63 @@ class InfluentialSample():
 
         return confusion_class_pairs
 
+    def viz_cls(self, top_bottomk, dl, label, cls):
+        ind_cls = np.where(label.detach().cpu().numpy() == cls)[0]
+        for i in range(top_bottomk):
+            plt.subplot(1, top_bottomk, i + 1)
+            img = read_image(dl.dataset.im_paths[ind_cls[i]])
+            plt.imshow(to_pil_image(img))
+            plt.title('Class = {}'.format(cls))
+        plt.show()
+
+    def viz_2cls(self, top_bottomk, dl, label, cls1, cls2):
+        ind_cls1 = np.where(label.detach().cpu().numpy() == cls1)[0]
+        ind_cls2 = np.where(label.detach().cpu().numpy() == cls2)[0]
+
+        top_bottomk = min(top_bottomk, len(ind_cls1), len(ind_cls2))
+        for i in range(top_bottomk):
+            plt.subplot(2, top_bottomk, i + 1)
+            img = read_image(dl.dataset.im_paths[ind_cls1[i]])
+            plt.imshow(to_pil_image(img))
+            plt.title('Class = {}'.format(cls1))
+        for i in range(top_bottomk):
+            plt.subplot(2, top_bottomk, i + 1 + top_bottomk)
+            img = read_image(dl.dataset.im_paths[ind_cls2[i]])
+            plt.imshow(to_pil_image(img))
+            plt.title('Class = {}'.format(cls2))
+        plt.show()
+
+    def viz_sample(self, dl, indices):
+        classes = [dl.dataset.ys[x] for x in indices]
+        for i in range(10):
+            plt.subplot(2, 5, i + 1)
+            img = read_image(dl.dataset.im_paths[indices[i]])
+            plt.imshow(to_pil_image(img))
+            plt.title('Class = {}'.format(classes[i]))
+        plt.show()
+
+    def viz_2sample(self, dl, ind1, ind2):
+        class1 = dl.dataset.ys[ind1]
+        class2 = dl.dataset.ys[ind2]
+
+        plt.subplot(1, 2, 1)
+        img = read_image(dl.dataset.im_paths[ind1])
+        plt.imshow(to_pil_image(img))
+        plt.title('Class = {}'.format(class1))
+
+        plt.subplot(1, 2, 2)
+        img = read_image(dl.dataset.im_paths[ind2])
+        plt.imshow(to_pil_image(img))
+        plt.title('Class = {}'.format(class2))
+        plt.show()
+        plt.close()
+
+class ScalableIF(BaseInfluenceFunction):
+    def __int__(self, dataset_name, seed, loss_type, config_name,
+                 test_crop=False, sz_embedding=512, epoch=40):
+        super(ScalableIF, self).__init__(dataset_name, seed, loss_type, config_name,
+                                         test_crop=False, sz_embedding=512, epoch=40)
+
     def cache_grad_loss_train_all(self, theta, theta_hat, pair_idx):
         l_prev, l_cur = loss_change_train(self.model, self.criterion, self.dl_tr, theta, theta_hat)
         grad_loss = {'l_prev': l_prev, 'l_cur': l_cur}
@@ -288,56 +346,20 @@ class InfluentialSample():
         # sanity check self.viz_sample(self.dl_tr, training_sample_by_influence[-10:])  # harmful
         return training_sample_by_influence, influence_values
 
-    def viz_cls(self, top_bottomk, dl, label, cls):
-        ind_cls = np.where(label.detach().cpu().numpy() == cls)[0]
-        for i in range(top_bottomk):
-            plt.subplot(1, top_bottomk, i + 1)
-            img = read_image(dl.dataset.im_paths[ind_cls[i]])
-            plt.imshow(to_pil_image(img))
-            plt.title('Class = {}'.format(cls))
-        plt.show()
+class OrigIF(BaseInfluenceFunction):
+    def __int__(self, dataset_name, seed, loss_type, config_name,
+                test_crop=False, sz_embedding=512, epoch=40):
 
-    def viz_2cls(self, top_bottomk, dl, label, cls1, cls2):
-        ind_cls1 = np.where(label.detach().cpu().numpy() == cls1)[0]
-        ind_cls2 = np.where(label.detach().cpu().numpy() == cls2)[0]
+        super(BaseInfluenceFunction, self).__init__(dataset_name, seed, loss_type, config_name,
+                                         test_crop=False, sz_embedding=512, epoch=40)
 
-        top_bottomk = min(top_bottomk, len(ind_cls1), len(ind_cls2))
-        for i in range(top_bottomk):
-            plt.subplot(2, top_bottomk, i + 1)
-            img = read_image(dl.dataset.im_paths[ind_cls1[i]])
-            plt.imshow(to_pil_image(img))
-            plt.title('Class = {}'.format(cls1))
-        for i in range(top_bottomk):
-            plt.subplot(2, top_bottomk, i + 1 + top_bottomk)
-            img = read_image(dl.dataset.im_paths[ind_cls2[i]])
-            plt.imshow(to_pil_image(img))
-            plt.title('Class = {}'.format(cls2))
-        plt.show()
+    def single_influence_func_orig(self, train_features, test_features, wrong_indices, confuse_indices):
+        inter_dist_pair, v = grad_confusion_pair(self.model, test_features, wrong_indices, confuse_indices)
+        ihvp = inverse_hessian_product(self.model, self.criterion, v, self.dl_tr, scale=500, damping=0.01)
+        influence_values = calc_influential_func_orig(IS=self, train_features=train_features, inverse_hvp_prod=ihvp)
+        influence_values = np.asarray(influence_values).flatten()
 
-    def viz_sample(self, dl, indices):
-        classes = [dl.dataset.ys[x] for x in indices]
-        for i in range(10):
-            plt.subplot(2, 5, i + 1)
-            img = read_image(dl.dataset.im_paths[indices[i]])
-            plt.imshow(to_pil_image(img))
-            plt.title('Class = {}'.format(classes[i]))
-        plt.show()
-
-    def viz_2sample(self, dl, ind1, ind2):
-        class1 = dl.dataset.ys[ind1]
-        class2 = dl.dataset.ys[ind2]
-
-        plt.subplot(1, 2, 1)
-        img = read_image(dl.dataset.im_paths[ind1])
-        plt.imshow(to_pil_image(img))
-        plt.title('Class = {}'.format(class1))
-
-        plt.subplot(1, 2, 2)
-        img = read_image(dl.dataset.im_paths[ind2])
-        plt.imshow(to_pil_image(img))
-        plt.title('Class = {}'.format(class2))
-        plt.show()
-        plt.close()
+        return influence_values
 
 if __name__ == '__main__':
 
@@ -347,7 +369,7 @@ if __name__ == '__main__':
     # dataset_name = 'inshop'; config_name = 'inshop'; seed = 4
     dataset_name = 'sop'; config_name = 'sop'; seed = 3
 
-    IS = InfluentialSample(dataset_name, seed, loss_type, config_name, test_crop, sz_embedding, epoch)
+    IS = ScalableIF(dataset_name, seed, loss_type, config_name, test_crop, sz_embedding, epoch)
 
     '''Other: get confusion (before VS after)'''
     # FIXME: inter class distance should be computed based on original confusion pairs

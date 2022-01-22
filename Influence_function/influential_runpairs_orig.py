@@ -1,6 +1,6 @@
 
 import os
-from Influence_function.influential_sample import InfluentialSample
+from Influence_function.influential_sample import ScalableIF, OrigIF
 from Influence_function.influence_function_orig import *
 from Influence_function.influence_function import grad_confusion_pair
 from evaluation import assign_by_euclidian_at_k_indices
@@ -9,12 +9,12 @@ os.environ['CUDA_VISIBLE_DEVICES'] = "1, 0"
 if __name__ == '__main__':
 
     loss_type = 'ProxyNCA_prob_orig'; sz_embedding = 512; epoch = 40; test_crop = False
-    dataset_name = 'cub';  config_name = 'cub'; seed = 0
+    # dataset_name = 'cub';  config_name = 'cub'; seed = 0
     # dataset_name = 'cars'; config_name = 'cars'; seed = 3
-    # dataset_name = 'inshop'; config_name = 'inshop'; seed = 4
+    dataset_name = 'inshop'; config_name = 'inshop'; seed = 4
     # dataset_name = 'sop'; config_name = 'sop'; seed = 3
 
-    IS = InfluentialSample(dataset_name, seed, loss_type, config_name, test_crop)
+    IS = OrigIF(dataset_name, seed, loss_type, config_name, test_crop)
 
     '''Analyze confusing features for all confusion classes'''
     '''Step 1: Get all wrong pairs'''
@@ -38,10 +38,9 @@ if __name__ == '__main__':
             print('skip')
             continue
         # sanity check: IS.viz_2sample(IS.dl_ev, wrong_ind, confuse_ind)
-        inter_dist_pair, v = grad_confusion_pair(IS.model, test_features, [wrong_ind], [confuse_ind])
-        ihvp = inverse_hessian_product(IS.model, IS.criterion, v, IS.dl_tr, scale=500, damping=0.01)
-        influence_values = calc_influential_func(IS=IS, train_features=train_features, inverse_hvp_prod=ihvp)
-        influence_values = np.asarray(influence_values).flatten()
+        torch.cuda.empty_cache()
+        influence_values = IS.single_influence_func_orig(train_features=train_features, test_features=test_features,
+                                                         wrong_indices=[wrong_ind], confuse_indices=[confuse_ind])
 
         helpful_indices = np.where(influence_values > 0)[0]  # cache all helpful
         harmful_indices = np.where(influence_values < 0)[0]  # cache all harmful

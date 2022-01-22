@@ -10,5 +10,5 @@ if __name__ == '__main__':
         loss_type = 'SoftTriple'
         seed = 4
 
-        IS = InfluentialSample(dataset_name, seed, loss_type, config_name, test_crop, sz_embedding, epoch)
+        IS = ScalableIF(dataset_name, seed, loss_type, config_name, test_crop, sz_embedding, epoch)
         confusion_class_pairs = IS.get_confusion_class_pairs()

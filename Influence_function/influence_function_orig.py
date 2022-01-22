@@ -8,6 +8,30 @@ from tqdm import tqdm
 from torch.autograd import Variable
 import numpy as np
 
+def grad_loss_relabel(model, criterion, all_features, all_labels, dl):
+    '''
+        Get dL/dtheta for all training
+    '''
+    grad_all = []
+    model.eval(); model.zero_grad()  # first zero out previous gradients
+    criterion.zero_grad(); criterion.proxies.requires_grad = False  # first zero out previous gradients, set proxies to be non-differentiable
+
+    for feat, t in zip(all_features, all_labels):
+        x = feat.cuda().unsqueeze(0)
+        x = torch.repeat_interleave(x, repeats=dl.dataset.nb_classes(), dim=0)
+        gradient_this = torch.tensor([])
+        # for y in torch.arange(dl.dataset.nb_classes()):
+        model.zero_grad()
+        m = model.module[-1](x)
+        # loss = criterion(m, None, y.view(1, -1))
+        y = torch.arange(dl.dataset.nb_classes()).cuda()
+        loss = criterion.debug(m, None, y)
+        params = model.module[-1].weight  # last linear layer weights
+        gradient = list(grad(loss, params, create_graph=False))[0].detach().cpu() # (512, 2048)
+        gradient_this = torch.cat([gradient_this, gradient.unsqueeze(0)], dim=0)  # (C, 512, 2048)
+        gradient_this = gradient_this - gradient_this[t.long().item()] # (C, 512, 2048)
+        grad_all.append(gradient_this) # (N_tr, C, 512, 2048)
+    return grad_all
 
 def grad_loss(model, criterion, all_features, all_labels):
     '''
@@ -102,7 +126,7 @@ def hessian_vector_product(y, x, v):
     return_grads = grad(elemwise_products, x)
     return return_grads
 
-def calc_influential_func(IS, train_features, inverse_hvp_prod):
+def calc_influential_func_orig(IS, train_features, inverse_hvp_prod):
     '''
         Calculate influential functions
         Arguments:
@@ -120,6 +144,24 @@ def calc_influential_func(IS, train_features, inverse_hvp_prod):
         influence_values.append(influence_thistrain)
     return influence_values
 
+def calc_influential_func_relabel(IS, train_features, inverse_hvp_prod):
+    '''
+        Calculate influential functions
+        Arguments:
+            inverse_hvp_prod: inverse hessian vector product, of shape (|theta|,)
+            grad_alltrain: list of gradients for all training (N_train, |theta|)
+        Returns:
+            influence_values: list of influence values (N_train,)
+    '''
+    influence_values = []
+    grad4train = grad_loss_relabel(IS.model, IS.criterion, train_features, IS.train_label, IS.dl_tr)
+    for i in tqdm(range(len(train_features))):
+        # influence = (-1) * grad(test)' H^-1 grad(train), dont forget the negative sign
+        grad1train = grad4train[i]
+        influence_thistrain = [(-1) * torch.dot(x.flatten().detach().cpu(), y.flatten()).item() \
+                               for x, y in zip(inverse_hvp_prod * grad1train.size()[0], grad1train)] # (C, )
+        influence_values.append(influence_thistrain) # (N_tr, C)
+    return influence_values
 
 
 

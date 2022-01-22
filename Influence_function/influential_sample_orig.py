@@ -1,4 +1,4 @@
-from Influence_function.influential_sample import InfluentialSample
+from Influence_function.influential_sample import ScalableIF, OrigIF
 from Influence_function.influence_function import grad_confusion
 import os
 from Influence_function.influence_function_orig import *
@@ -11,7 +11,7 @@ if __name__ == '__main__':
     # dataset_name = 'inshop'; config_name = 'inshop'; seed = 4
     dataset_name = 'sop'; config_name = 'sop'; seed = 3
 
-    IS = InfluentialSample(dataset_name, seed, loss_type, config_name, test_crop, sz_embedding, epoch)
+    IS = OrigIF(dataset_name, seed, loss_type, config_name, test_crop, sz_embedding, epoch)
 
     # IS.model = IS._load_model()  # reload the original weights
     # features = IS.get_features()
@@ -55,6 +55,9 @@ if __name__ == '__main__':
     for pair_idx, pair in enumerate(confusion_class_pairs):
         wrong_cls = pair[0][0]
         confused_classes = [x[1] for x in pair]
+        if os.path.exists("Influential_data_baselines/{}_{}_helpful_testcls{}.npy".format(IS.dataset_name, IS.loss_type, pair_idx)):
+            print('skip')
+            continue
         inter_dist, v = grad_confusion(IS.model, test_features, wrong_cls, confused_classes,
                                        IS.testing_nn_label, IS.testing_label, IS.testing_nn_indices)  # dD/dtheta
         torch.save(v, os.path.join('Influential_data_baselines', 'grad_test_{}_{}_{}.pth'.format(IS.dataset_name, IS.loss_type, wrong_cls)))
@@ -63,7 +66,7 @@ if __name__ == '__main__':
         ihvp = inverse_hessian_product(IS.model, IS.criterion, v, IS.dl_tr, scale=500, damping=0.01)
 
         '''Step 3: Get influential indices, i.e. grad(test) H^-1 grad(train), save'''
-        influence_values = calc_influential_func(IS=IS, train_features=train_features, inverse_hvp_prod=ihvp)
+        influence_values = calc_influential_func_orig(IS=IS, train_features=train_features, inverse_hvp_prod=ihvp)
         influence_values = np.asarray(influence_values).flatten()
         training_sample_by_influence = influence_values.argsort()  # ascending
         # IS.viz_sample(IS.dl_tr, training_sample_by_influence[:10])  # harmful
