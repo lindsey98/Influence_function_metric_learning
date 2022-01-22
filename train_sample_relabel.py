@@ -36,10 +36,9 @@ parser.add_argument('--mode', default='trainval', choices=['train', 'trainval', 
                     help='train with train data or train with trainval')
 parser.add_argument('--batch-size', default = 32, type=int, dest = 'sz_batch')
 parser.add_argument('--no_warmup', default=True, action='store_true')
-parser.add_argument('--model_dir', default='models/dvi_data_{}_{}_lossProxyNCA_pfix/ResNet_512_Model'.format('cub', 4), type=str)
-parser.add_argument('--loss-type', default='ProxyNCA_pfix_softlabel_{}_{}_continue_soft'.format(722, 735), type=str)
-parser.add_argument('--relabel_dict', default='./{}/Allrelabeldict_{}_{}_soft.pkl'.format('Confuse_pair_influential_data/{}'.format('cub'),
-                                                                                          722, 735), type=str)
+parser.add_argument('--model_dir', required=True, type=str)
+parser.add_argument('--loss-type', required=True, type=str)
+parser.add_argument('--relabel_dict', required=True, type=str)
 parser.add_argument('--workers', default=2, type=int, dest = 'nb_workers')
 
 args = parser.parse_args()
@@ -63,7 +62,6 @@ def find_samples_label(y, nb_classes, indices):
         if ind.item() in args.relabel_dict.keys():
             relabel_prob = args.relabel_dict[ind.item()].detach().cpu().numpy()
             relabel_label = np.random.choice(nb_classes, 1, p=relabel_prob/relabel_prob.sum())
-            # T[i, relabel_label[1]] = 1.
             T[i, relabel_label] = 1.
         else:
             T[i, y[i]] = 1.
