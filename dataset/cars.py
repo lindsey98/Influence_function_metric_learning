@@ -38,6 +38,33 @@ class Cars(BaseDatasetMod):
                 self.I += [index]
                 index += 1
 
+
+class CarsNoisy(BaseDatasetMod):
+    def __init__(self, root, source, classes, transform = None, seed=0):
+        BaseDatasetMod.__init__(self, root, source, classes, transform)
+        annos_fn = 'cars_annos.mat'
+        cars = scipy.io.loadmat(os.path.join(root, annos_fn))
+        ys = [int(a[5][0] - 1) for a in cars['annotations'][0]]
+        im_paths = [a[0][0] for a in cars['annotations'][0]]
+        index = 0
+        for im_path, y in zip(im_paths, ys):
+            if y in classes: # choose only specified classes
+                self.im_paths.append(os.path.join(root, im_path))
+                self.ys.append(y)
+                self.I += [index]
+                index += 1
+
+        # noisy data injection 5% mislabelled data
+        np.random.seed(seed)
+        self.noisy_indices = np.random.choice(self.I, int(0.05 * len(self.I)), replace=False)
+        for ind in self.noisy_indices:
+            orig_y = self.ys[ind]
+            if orig_y + 5 > max(self.classes):
+                self.ys[ind] = orig_y - 5
+            else:
+                self.ys[ind] = orig_y + 5  # cannot exceeds the training classes range
+
+
 class Cars_hdf5(BaseDataset_hdf5):
     def __init__(self, root, source, classes, transform = None):
         BaseDataset_hdf5.__init__(self, root, source, classes, transform)

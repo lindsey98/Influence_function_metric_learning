@@ -18,6 +18,35 @@ class CUBirds(BaseDatasetMod):
                 self.im_paths.append(i[0])
                 index += 1
 
+
+class CUBirdsNoisy(BaseDatasetMod):
+    def __init__(self, root, source, classes, transform = None, seed=0):
+        BaseDatasetMod.__init__(self, root, source, classes, transform)
+        index = 0
+        for i in torchvision.datasets.ImageFolder(root = os.path.join(root, 'images')).imgs:
+            # i[1]: label, i[0]: root
+            y = i[1]
+            # fn needed for removing non-images starting with `._`
+            fn = os.path.split(i[0])[1]
+            if y in self.classes and fn[:2] != '._':
+                self.ys += [y]
+                self.I += [index]
+                # self.im_paths.append(os.path.join(root, i[0]))
+                self.im_paths.append(i[0])
+                index += 1
+
+        # noisy data injection 5% mislabelled data
+        np.random.seed(seed)
+        self.noisy_indices = np.random.choice(self.I, int(0.05*len(self.I)), replace=False)
+        for ind in self.noisy_indices:
+            orig_y = self.ys[ind]
+            if orig_y + 5 > max(self.classes):
+                self.ys[ind] = orig_y - 5
+            else:
+                self.ys[ind] = orig_y + 5 # cannot exceeds the training classes range
+        pass
+
+
 class CUBirdsRemoval(BaseDatasetMod):
     def __init__(self, root, source, classes, transform = None):
         BaseDatasetMod.__init__(self, root, source, classes, transform)

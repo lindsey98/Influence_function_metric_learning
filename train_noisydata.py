@@ -6,44 +6,40 @@ import os
 import torch
 import numpy as np
 import matplotlib
-matplotlib.use('agg', force=True)
 import time
 import argparse
 import json
+import random
 from tqdm import tqdm
 from torch.utils.data import Dataset, DataLoader
-import random
-import pickle
-os.environ["CUDA_VISIBLE_DEVICES"]="0, 1"
+
+os.environ["CUDA_VISIBLE_DEVICES"]="1,0"
 
 parser = argparse.ArgumentParser(description='Training ProxyNCA++')
+parser.add_argument('--epochs', default = 40, type=int, dest = 'nb_epochs')
 parser.add_argument('--log-filename', default = 'example')
 parser.add_argument('--lr_steps', default=[1000], nargs='+', type=int)
 parser.add_argument('--source_dir', default='', type=str)
 parser.add_argument('--root_dir', default='', type=str)
-parser.add_argument('--eval_nmi', default=False, action='store_true')
 parser.add_argument('--recall', default=[1, 2, 4, 8], nargs='+', type=int)
 parser.add_argument('--init_eval', default=False, action='store_true')
 parser.add_argument('--apex', default=False, action='store_true')
 parser.add_argument('--warmup_k', default=5, type=int)
 
-parser.add_argument('--dataset', default='cub')
-parser.add_argument('--seed', default=4, type=int)
+parser.add_argument('--dataset', default='cub_noisy')
+parser.add_argument('--seed', default=0, type=int)
+parser.add_argument('--eval_nmi', default=True, action='store_true')
 parser.add_argument('--embedding-size', default = 512, type=int, dest = 'sz_embedding')
-parser.add_argument('--config', default='config/cub_relabel.json')
-parser.add_argument('--mode', default='trainval', choices=['train', 'trainval', 'test',
-                                                           'testontrain', 'testontrain_super'],
+parser.add_argument('--config', default='config/cub.json')
+parser.add_argument('--mode', default='trainval', choices=['train', 'trainval',
+                                                           'test', 'testontrain'],
                     help='train with train data or train with trainval')
 parser.add_argument('--batch-size', default = 32, type=int, dest = 'sz_batch')
-parser.add_argument('--no_warmup', default=True, action='store_true')
-parser.add_argument('--model_dir', required=True, type=str)
-parser.add_argument('--loss-type', required=True, type=str)
-parser.add_argument('--relabel_dict', required=True, type=str)
-parser.add_argument('--workers', default=2, type=int, dest = 'nb_workers')
+parser.add_argument('--no_warmup', default=False, action='store_true')
+parser.add_argument('--loss-type', default='ProxyNCA_prob_orig_noisy', type=str)
+parser.add_argument('--workers', default = 4, type=int, dest = 'nb_workers')
 
 args = parser.parse_args()
-with open(args.relabel_dict, 'rb') as handle:
-    args.relabel_dict = pickle.load(handle)
 
 def save_best_checkpoint(model):
     torch.save(model.state_dict(), 'results/' + args.log_filename + '.pt')
@@ -55,17 +51,6 @@ def load_best_checkpoint(model):
         model.load_state_dict(torch.load('results/' + args.log_filename + '.pth'))
     model = model.cuda()
     return model
-
-def find_samples_label(y, nb_classes, indices):
-    T = torch.zeros((len(y), nb_classes))
-    for i, ind in enumerate(indices):
-        if ind.item() in args.relabel_dict.keys():
-            relabel_prob = args.relabel_dict[ind.item()]
-            relabel_label = np.random.choice(nb_classes, 1, p = relabel_prob/relabel_prob.sum())
-            T[i, relabel_label] = 1.
-        else:
-            T[i, y[i]] = 1.
-    return T
 
 if __name__ == '__main__':
 
@@ -127,6 +112,7 @@ if __name__ == '__main__':
                                                                args.mode, args.sz_embedding,
                                                                args.seed,
                                                                args.loss_type)
+
         if os.path.exists(train_results_fn):
             with open(train_results_fn, 'r') as f:
                 train_results = json.load(f)
@@ -135,7 +121,7 @@ if __name__ == '__main__':
 
     train_transform = dataset.utils.make_transform(
                 **dataset_config[transform_key]
-            )
+    )
     print('best_epoch', best_epoch)
 
     results = {}
@@ -143,25 +129,24 @@ if __name__ == '__main__':
     if ('inshop' not in args.dataset ):
         dl_ev = torch.utils.data.DataLoader(
             dataset.load(
-                name = args.dataset,
+                name = args.dataset.split('_noisy')[0],
                 root = dataset_config['dataset'][args.dataset]['root'],
                 source = dataset_config['dataset'][args.dataset]['source'],
                 classes = dataset_config['dataset'][args.dataset]['classes']['eval'],
                 transform = dataset.utils.make_transform(
                     **dataset_config[transform_key],
                     is_train = False
-                )
+                ),
             ),
             batch_size = args.sz_batch,
             shuffle = False,
             num_workers = args.nb_workers,
-            #pin_memory = True
         )
     else:
         #inshop trainval mode
         dl_query = torch.utils.data.DataLoader(
             dataset.load_inshop(
-                name = args.dataset,
+                name = args.dataset.split('_noisy')[0],
                 root = dataset_config['dataset'][args.dataset]['root'],
                 source = dataset_config['dataset'][args.dataset]['source'],
                 classes = dataset_config['dataset'][args.dataset]['classes']['eval'],
@@ -178,7 +163,7 @@ if __name__ == '__main__':
         )
         dl_gallery = torch.utils.data.DataLoader(
             dataset.load_inshop(
-                name = args.dataset,
+                name = args.dataset.split('_noisy')[0],
                 root = dataset_config['dataset'][args.dataset]['root'],
                 source = dataset_config['dataset'][args.dataset]['source'],
                 classes = dataset_config['dataset'][args.dataset]['classes']['eval'],
@@ -203,25 +188,48 @@ if __name__ == '__main__':
         ]
     )
 
-    if args.mode == 'train':
-        tr_dataset = dataset.load(
-                name = args.dataset,
-                root = dataset_config['dataset'][args.dataset]['root'],
-                source = dataset_config['dataset'][args.dataset]['source'],
-                classes = dataset_config['dataset'][args.dataset]['classes']['train'],
-                transform = train_transform
-            )
-
-    elif args.mode == 'trainval' or args.mode == 'test' \
-            or args.mode == 'testontrain':
-        # print(dataset_config['dataset'][args.dataset]['root'])
-        tr_dataset = dataset.load(
+    if 'inshop' not in args.dataset:
+        tr_dataset_clean = dataset.load(
+            name=args.dataset.split('_noisy')[0],
+            root=dataset_config['dataset'][args.dataset]['root'],
+            source=dataset_config['dataset'][args.dataset]['source'],
+            classes=dataset_config['dataset'][args.dataset]['classes']['trainval'],
+            transform=train_transform,
+        )
+        tr_dataset = dataset.load_noisy(
                 name = args.dataset,
                 root = dataset_config['dataset'][args.dataset]['root'],
                 source = dataset_config['dataset'][args.dataset]['source'],
                 classes = dataset_config['dataset'][args.dataset]['classes']['trainval'],
-                transform = train_transform
-            )
+                transform = train_transform,
+                seed = args.seed
+        )
+        tr_dataset_check = dataset.load_noisy(
+                name = args.dataset,
+                root = dataset_config['dataset'][args.dataset]['root'],
+                source = dataset_config['dataset'][args.dataset]['source'],
+                classes = dataset_config['dataset'][args.dataset]['classes']['trainval'],
+                transform = train_transform,
+                seed = args.seed
+        )
+    else:
+        tr_dataset_clean = dataset.load_inshop(
+            name=args.dataset.split('_noisy')[0],
+            root=dataset_config['dataset'][args.dataset]['root'],
+            source=dataset_config['dataset'][args.dataset]['source'],
+            classes=dataset_config['dataset'][args.dataset]['classes']['trainval'],
+            transform=train_transform,
+            dset_type='train'
+        )
+        tr_dataset = dataset.load_noisy_inshop(
+            name=args.dataset,
+            root=dataset_config['dataset'][args.dataset]['root'],
+            source=dataset_config['dataset'][args.dataset]['source'],
+            classes=dataset_config['dataset'][args.dataset]['classes']['trainval'],
+            transform=train_transform,
+            seed=args.seed,
+            dset_type='train'
+        )
 
     num_class_per_batch = config['num_class_per_batch']
     num_gradcum = config['num_gradcum']
@@ -241,41 +249,23 @@ if __name__ == '__main__':
     )
 
     # training dataloader without shuffling and without transformation
-    dl_tr_noshuffle = torch.utils.data.DataLoader(
-            dataset=dataset.load(
-                    name=args.dataset,
-                    root=dataset_config['dataset'][args.dataset]['root'],
-                    source=dataset_config['dataset'][args.dataset]['source'],
-                    classes=dataset_config['dataset'][args.dataset]['classes']['trainval'],
-                    transform=dataset.utils.make_transform(
-                        **dataset_config[transform_key],
-                        is_train=False
-                    )
-                ),
-            num_workers = args.nb_workers,
-            shuffle=False,
-            batch_size=64,
-    )
-
+    # dl_tr_noshuffle = torch.utils.data.DataLoader(
+    #         dataset=dataset.load(
+    #                 name=args.dataset,
+    #                 root=dataset_config['dataset'][args.dataset]['root'],
+    #                 source=dataset_config['dataset'][args.dataset]['source'],
+    #                 classes=dataset_config['dataset'][args.dataset]['classes']['trainval'],
+    #                 transform=dataset.utils.make_transform(
+    #                     **dataset_config[transform_key],
+    #                     is_train=False
+    #                 )
+    #             ),
+    #         num_workers = args.nb_workers,
+    #         shuffle=False,
+    #         batch_size=64,
+    # )
 
     print("===")
-    if args.mode == 'train':
-        dl_val = torch.utils.data.DataLoader(
-            dataset.load(
-                name = args.dataset,
-                root = dataset_config['dataset'][args.dataset]['root'],
-                source = dataset_config['dataset'][args.dataset]['source'],
-                classes = dataset_config['dataset'][args.dataset]['classes']['val'],
-                transform = dataset.utils.make_transform(
-                    **dataset_config[transform_key],
-                    is_train = False
-                )
-            ),
-            batch_size = args.sz_batch,
-            shuffle = False,
-            num_workers = args.nb_workers,
-        )
-
     '''Model'''
     feat = config['model']['type']()
     feat.eval()
@@ -285,27 +275,13 @@ if __name__ == '__main__':
     model = torch.nn.Sequential(feat, emb)
     model = torch.nn.DataParallel(model)
     model = model.cuda()
-    model.load_state_dict(torch.load('{}/Epoch_{}/{}_{}_trainval_{}_{}.pth'.format(args.model_dir, 40, args.dataset, args.dataset,
-                                                                                   args.sz_embedding, args.seed)))
-    # disable batchnorm training
-    for module in model.modules():
-        if isinstance(module, torch.nn.BatchNorm2d):
-            if hasattr(module, 'weight'):
-                module.weight.requires_grad_(False)
-            if hasattr(module, 'bias'):
-                module.bias.requires_grad_(False)
-            module.eval()
 
     '''Loss'''
     criterion = config['criterion']['type'](
         nb_classes = dl_tr.dataset.nb_classes(),
         sz_embed = args.sz_embedding,
         **config['criterion']['args']
-    )
-    proxies = torch.load('{}/Epoch_{}/proxy.pth'.format(args.model_dir, 40), map_location='cpu')['proxies'].detach()
-    criterion.proxies.data = proxies
-    criterion.proxies.requires_grad = False
-    criterion.cuda()
+    ).cuda()
 
     opt_warmup = config['opt']['type'](
         [
@@ -322,6 +298,13 @@ if __name__ == '__main__':
                 **config['opt']['args']['embedding']
 
             },
+
+            {
+                **{'params': criterion.proxies}
+                ,
+                **config['opt']['args']['proxynca']
+
+            },
         ],
         **config['opt']['args']['base']
     )
@@ -329,17 +312,22 @@ if __name__ == '__main__':
     # options for model and loss
     opt = config['opt']['type'](
         [
-            # {
-            #     **{'params': list(feat.parameters()
-            #         )
-            #     },
-            #     **config['opt']['args']['backbone']
-            # },
+            {
+                **{'params': list(feat.parameters()
+                    )
+                },
+                **config['opt']['args']['backbone']
+            },
             {
                 **{'params': list(emb.parameters()
                     )
                 },
                 **config['opt']['args']['embedding']
+            },
+
+            {
+                **{'params': criterion.proxies},
+                **config['opt']['args']['proxynca']
             },
         ],
         **config['opt']['args']['base']
@@ -355,17 +343,6 @@ if __name__ == '__main__':
                 utils.evaluate(model, dl_ev, args.eval_nmi, args.recall)
         exit() # exit the program
 
-    if args.mode == 'testontrain':
-        with torch.no_grad():
-            logging.info("**Evaluating...(test mode, test on training set)**")
-            model = load_best_checkpoint(model)
-            utils.evaluate(model, dl_tr_noshuffle, args.eval_nmi, args.recall)
-        exit() # exit the program
-
-    if args.mode == 'train':
-        scheduler = config['lr_scheduler']['type'](
-            opt, **config['lr_scheduler']['args']
-        )
     elif args.mode == 'trainval':
         scheduler = config['lr_scheduler2']['type'](
             opt,
@@ -376,7 +353,6 @@ if __name__ == '__main__':
 
     logging.info("Training parameters: {}".format(vars(args)))
     logging.info("Training for {} epochs.".format(args.nb_epochs))
-    logging.info("Number of relabelled items: {}".format(len(args.relabel_dict)))
     losses = []
     scores = []
     scores_tr = []
@@ -386,11 +362,7 @@ if __name__ == '__main__':
     if args.init_eval:
         logging.info("**Evaluating initial model...**")
         with torch.no_grad():
-            if args.mode == 'train':
-                c_dl = dl_val
-            else:
-                c_dl = dl_ev
-
+            c_dl = dl_ev
             utils.evaluate(model, c_dl, args.eval_nmi, args.recall) #dl_val
 
     it = 0
@@ -411,7 +383,6 @@ if __name__ == '__main__':
     lr_steps = []
 
     logging.info('Number of training: {}'.format(len(dl_tr.dataset)))
-    logging.info('Number of original training: {}'.format(len(dl_tr_noshuffle.dataset)))
     if 'inshop' not in args.dataset:
         logging.info('Number of testing: {}'.format(len(dl_ev.dataset)))
     else:
@@ -423,11 +394,10 @@ if __name__ == '__main__':
         #warm up training for 5 epochs
         logging.info("**warm up for %d epochs.**" % args.warmup_k)
         for e in range(0, args.warmup_k):
-            for ct, (x, y, indices) in tqdm(enumerate(dl_tr)):
+            for ct, (x, y, _) in tqdm(enumerate(dl_tr)):
                 opt_warmup.zero_grad()
                 m = model(x.cuda())
-                T = find_samples_label(y, dl_tr.dataset.nb_classes(), indices).cuda(); T = T.detach()
-                loss = criterion(m, indices, T)
+                loss = criterion(m, None, y.cuda())
                 loss.backward()
                 torch.nn.utils.clip_grad_value_(model.parameters(), 10)
                 opt_warmup.step()
@@ -437,17 +407,6 @@ if __name__ == '__main__':
     '''training loop'''
     for e in range(0, args.nb_epochs):
 
-        # FIXME freeze in training
-        feat.requires_grad = False
-        emb.bias.requires_grad = False
-
-        if args.mode == 'train':
-            curr_lr = opt.param_groups[0]['lr']
-            print(prev_lr, curr_lr)
-            if curr_lr != prev_lr:
-                prev_lr = curr_lr
-                lr_steps.append(e)
-
         time_per_epoch_1 = time.time()
         losses_per_epoch = []
         tnmi = []
@@ -456,9 +415,8 @@ if __name__ == '__main__':
             it += 1
             x, y = x.cuda(), y.cuda()
             m = model(x)
-            T = find_samples_label(y, dl_tr.dataset.nb_classes(), indices).cuda(); T = T.detach()
+            loss = criterion(m, indices, y)
             opt.zero_grad()
-            loss = criterion(m, indices, T)
             loss.backward() # backprop
             torch.nn.utils.clip_grad_value_(model.parameters(), 10) # clip gradient?
             opt.step() # gradient descent
@@ -485,63 +443,11 @@ if __name__ == '__main__':
         if e == best_epoch:
             break
 
-        if args.mode == 'train':
-            with torch.no_grad():
-                logging.info("**Validation...**")
-                nmi, recall, map_R = utils.evaluate(model, dl_val, args.eval_nmi, args.recall)
-
-            chmean = (2 * nmi * recall[0]) / (nmi + recall[0])
-
-            scheduler.step(chmean)
-
-            if chmean > best_val_hmean:
-                best_val_hmean = chmean
-                best_val_nmi = nmi
-                best_val_r1 = recall[0]
-                best_val_r2 = recall[1]
-                best_val_r4 = recall[2]
-                best_val_r8 = recall[3]
-                best_val_mapr = map_R
-                best_val_epoch = e
-                best_tnmi = torch.Tensor(tnmi).mean()
-
-            if e == (args.nb_epochs - 1):
-                #saving last epoch
-                results['last_NMI'] = nmi
-                results['last_hmean'] = chmean
-                results['best_epoch'] = best_val_epoch
-                results['last_R1'] = recall[0]
-                results['last_R2'] = recall[1]
-                results['last_R4'] = recall[2]
-                results['last_R8'] = recall[3]
-                results['last_mapr'] = map_R
-
-
-                #saving best epoch
-                results['best_NMI'] = best_val_nmi
-                results['best_hmean'] = best_val_hmean
-                results['best_R1'] = best_val_r1
-                results['best_R2'] = best_val_r2
-                results['best_R4'] = best_val_r4
-                results['best_R8'] = best_val_r8
-                results['best_mapr'] = best_val_mapr
-
-
-            logging.info('Best val epoch: %s', str(best_val_epoch))
-            logging.info('Best val hmean: %s', str(best_val_hmean))
-            logging.info('Best val nmi: %s', str(best_val_nmi))
-            logging.info('Best val r1: %s', str(best_val_r1))
-            logging.info('Best val MAP@R: %s', str(best_val_mapr))
-
-            logging.info(str(lr_steps))
-
         if e == args.nb_epochs-1:
             save_dir = 'models/dvi_data_{}_{}_loss{}/ResNet_{}_Model'.format(args.dataset, args.seed,
                                                                       args.loss_type, str(args.sz_embedding))
             os.makedirs('{}'.format(save_dir), exist_ok=True)
             os.makedirs('{}/Epoch_{}'.format(save_dir, e+1), exist_ok=True)
-            with open('{}/Epoch_{}/index.json'.format(save_dir, e + 1), 'wt') as handle:
-                handle.write(json.dumps(list(range(len(dl_tr_noshuffle.dataset)))))
             torch.save(model.state_dict(), '{}/Epoch_{}/{}_{}_{}_{}_{}.pth'.format(save_dir, e+1, args.dataset,
                                                                                    args.dataset, args.mode,
                                                                                    str(args.sz_embedding), str(args.seed)))

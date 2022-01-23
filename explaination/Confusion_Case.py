@@ -11,6 +11,7 @@ from utils import overlay_mask
 from evaluation import assign_by_euclidian_at_k_indices
 import sklearn
 import pickle
+from utils import evaluate
 os.environ['CUDA_VISIBLE_DEVICES'] = "0, 1"
 
 # knn monitor as in InstDisc https://arxiv.org/abs/1805.01978
@@ -155,7 +156,7 @@ class SampleRelabel(ScalableIF):
             for kk in range(len(top_indices)):
                 relabel_dict[top_indices[kk]] = prob_relabel[kk].detach().cpu().numpy()
 
-            with open('./{}/Allrelabeldict_{}_{}_soft.pkl'.format(base_dir, pair_ind1, pair_ind2), 'wb') as handle:
+            with open('./{}/Allrelabeldict_{}_{}_soft_knn.pkl'.format(base_dir, pair_ind1, pair_ind2), 'wb') as handle:
                 pickle.dump(relabel_dict, handle)
 
         elif relabel_method == 'soft_IF': # relabel by scalable influence function
@@ -175,7 +176,7 @@ class SampleRelabel(ScalableIF):
             prob_relabel = l_diff_filtered / np.sum(l_diff_filtered, axis=-1, keepdims=True)
             for kk in range(len(top_indices)):
                 relabel_dict[top_indices[kk]] = prob_relabel[kk]
-            with open('./{}/Allrelabeldict_{}_{}_softIF.pkl'.format(base_dir, pair_ind1, pair_ind2), 'wb') as handle:
+            with open('./{}/Allrelabeldict_{}_{}_soft_IF.pkl'.format(base_dir, pair_ind1, pair_ind2), 'wb') as handle:
                 pickle.dump(relabel_dict, handle)
 
         else:
@@ -185,8 +186,8 @@ class SampleRelabel(ScalableIF):
 if __name__ == '__main__':
 
     loss_type = 'ProxyNCA_prob_orig'; sz_embedding = 512; epoch = 40; test_crop = False
-    dataset_name = 'cub';  config_name = 'cub'; seed = 0
-    # dataset_name = 'cars'; config_name = 'cars'; seed = 3
+    # dataset_name = 'cub';  config_name = 'cub'; seed = 0
+    dataset_name = 'cars'; config_name = 'cars'; seed = 3
     # dataset_name = 'inshop'; config_name = 'inshop'; seed = 4
     # dataset_name = 'sop'; config_name = 'sop'; seed = 3
 
@@ -211,66 +212,68 @@ if __name__ == '__main__':
     '''Step 2: Identify influential training points for a specific pair'''
     lines = open('explaination/{}_{}'.format(IS.dataset_name, 'ModelS_HumanD_pairs')).readlines()
     lookat_harmful = True
-    relabel_method = 'soft_IF'
+    relabel_method = 'soft_knn'
     base_dir = 'Confuse_pair_influential_data/{}'.format(IS.dataset_name)
     os.makedirs(base_dir, exist_ok=True)
-    all_features = IS.get_features()
 
-    for line in tqdm(lines):
-        pair_ind1, pair_ind2 = line.strip().split(',')
-        pair_ind1, pair_ind2 = int(pair_ind1), int(pair_ind2)
-        if not os.path.exists('./{}/All_influence_{}_{}.npy'.format(base_dir, pair_ind1, pair_ind2)):
-            # sanity check: # IS.viz_2sample(IS.dl_ev, pair_ind1, pair_ind2)
-            training_sample_by_influence, influence_values = IS.single_influence_func(all_features, [pair_ind1], [pair_ind2])
-            helpful_indices = np.where(influence_values < 0)[0]
-            harmful_indices = np.where(influence_values > 0)[0]
-            np.save('./{}/Allhelpful_indices_{}_{}'.format(base_dir, pair_ind1, pair_ind2), helpful_indices)
-            np.save('./{}/Allharmful_indices_{}_{}'.format(base_dir, pair_ind1, pair_ind2), harmful_indices)
-            np.save('./{}/All_influence_{}_{}'.format(base_dir, pair_ind1, pair_ind2), influence_values)
-        else:
-            helpful_indices = np.load('./{}/Allhelpful_indices_{}_{}.npy'.format(base_dir, pair_ind1, pair_ind2))
-            harmful_indices = np.load('./{}/Allharmful_indices_{}_{}.npy'.format(base_dir, pair_ind1, pair_ind2))
-            influence_values = np.load('./{}/All_influence_{}_{}.npy'.format(base_dir, pair_ind1, pair_ind2))
-
-        # Global 1st NN
-        train_nn_indices, train_nn_label, train_nn_indices_same_cls = IS.getNN_indices(IS.train_embedding, IS.train_label)
-        assert len(train_nn_indices_same_cls) == len(train_nn_indices)
-        assert len(IS.train_label) == len(train_nn_indices)
-
-        '''Step 3: Save harmful indices as well as its neighboring indices'''
-        IS.calc_relabel_dict(lookat_harmful=lookat_harmful, relabel_method=relabel_method,
-                             harmful_indices=harmful_indices, helpful_indices=helpful_indices,
-                             train_nn_indices=train_nn_indices, train_nn_indices_same_cls=train_nn_indices_same_cls,
-                             base_dir=base_dir, pair_ind1=pair_ind1, pair_ind2=pair_ind2)
-    exit()
+    # all_features = IS.get_features()
+    # for line in tqdm(lines):
+    #     pair_ind1, pair_ind2 = line.strip().split(',')
+    #     pair_ind1, pair_ind2 = int(pair_ind1), int(pair_ind2)
+    #     if not os.path.exists('./{}/All_influence_{}_{}.npy'.format(base_dir, pair_ind1, pair_ind2)):
+    #         # sanity check: # IS.viz_2sample(IS.dl_ev, pair_ind1, pair_ind2)
+    #         training_sample_by_influence, influence_values = IS.single_influence_func(all_features, [pair_ind1], [pair_ind2])
+    #         helpful_indices = np.where(influence_values < 0)[0]
+    #         harmful_indices = np.where(influence_values > 0)[0]
+    #         np.save('./{}/Allhelpful_indices_{}_{}'.format(base_dir, pair_ind1, pair_ind2), helpful_indices)
+    #         np.save('./{}/Allharmful_indices_{}_{}'.format(base_dir, pair_ind1, pair_ind2), harmful_indices)
+    #         np.save('./{}/All_influence_{}_{}'.format(base_dir, pair_ind1, pair_ind2), influence_values)
+    #     else:
+    #         helpful_indices = np.load('./{}/Allhelpful_indices_{}_{}.npy'.format(base_dir, pair_ind1, pair_ind2))
+    #         harmful_indices = np.load('./{}/Allharmful_indices_{}_{}.npy'.format(base_dir, pair_ind1, pair_ind2))
+    #         influence_values = np.load('./{}/All_influence_{}_{}.npy'.format(base_dir, pair_ind1, pair_ind2))
+    #
+    #     # Global 1st NN
+    #     train_nn_indices, train_nn_label, train_nn_indices_same_cls = IS.getNN_indices(IS.train_embedding, IS.train_label)
+    #     assert len(train_nn_indices_same_cls) == len(train_nn_indices)
+    #     assert len(IS.train_label) == len(train_nn_indices)
+    #
+    #     '''Step 3: Save harmful indices as well as its neighboring indices'''
+    #     IS.calc_relabel_dict(lookat_harmful=lookat_harmful, relabel_method=relabel_method,
+    #                          harmful_indices=harmful_indices, helpful_indices=helpful_indices,
+    #                          train_nn_indices=train_nn_indices, train_nn_indices_same_cls=train_nn_indices_same_cls,
+    #                          base_dir=base_dir, pair_ind1=pair_ind1, pair_ind2=pair_ind2)
+    # exit()
 
     '''Step 4: Train with relabelled data'''
     for line in tqdm(lines):
+        torch.cuda.empty_cache()
         pair_ind1, pair_ind2 = line.strip().split(',')
         pair_ind1, pair_ind2 = int(pair_ind1), int(pair_ind2)
         #  training with relabelled data
         os.system("python train_sample_relabel.py --dataset {} \
                     --loss-type ProxyNCA_prob_orig_{}_relabel_{}_{} \
-                    --relabel_dict Confuse_pair_influential_data/{}/Allrelabeldict_{}_{}_soft.pkl \
+                    --relabel_dict Confuse_pair_influential_data/{}/Allrelabeldict_{}_{}_{}.pkl \
                     --model_dir {} \
                     --seed {} --config config/{}_relabel.json".format(IS.dataset_name,
                                                                        relabel_method,
                                                                        pair_ind1, pair_ind2,
                                                                        IS.dataset_name,
-                                                                       pair_ind1, pair_ind2,
+                                                                       pair_ind1, pair_ind2, relabel_method,
                                                                        IS.model_dir,
                                                                        IS.seed,
                                                                        IS.dataset_name))
-
     exit()
 
     '''Step 5: Verify that the model after training is better?'''
-    for line in tqdm(lines):
+    new_features = IS.get_features()
+    _, recall, _ = evaluate(IS.model, IS.dl_ev, eval_nmi=False)
+    print(recall)
+    for line in lines:
         pair_ind1, pair_ind2 = line.strip().split(',')
         pair_ind1, pair_ind2 = int(pair_ind1), int(pair_ind2)
         print('For pair: ', pair_ind1, pair_ind2)
         IS.model = IS._load_model()  # reload the original weights
-        new_features = IS.get_features()
         inter_dist_orig, _ = grad_confusion_pair(IS.model, new_features, [pair_ind1], [pair_ind2])
         print('Original distance: ', inter_dist_orig)
 
@@ -282,6 +285,8 @@ if __name__ == '__main__':
                             dataset_name,
                             512, seed)  # reload weights as new
         IS.model.load_state_dict(torch.load(new_weight_path))
+        _, recall, _ = evaluate(IS.model, IS.dl_ev, eval_nmi=False)
+        print('After recall:', recall)
         inter_dist_after, _ = grad_confusion_pair(IS.model, new_features, [pair_ind1], [pair_ind2])
         print('After distance: ', inter_dist_after)
 

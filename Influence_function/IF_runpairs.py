@@ -53,6 +53,7 @@ if __name__ == '__main__':
     for kk in tqdm(range(min(len(wrong_indices), 50))):
         wrong_ind = wrong_indices[kk]
         confuse_ind = confuse_indices[kk]
+        torch.cuda.empty_cache()
         #  Normal training
         os.system("python train_sample_reweight.py --dataset {} \
                         --loss-type ProxyNCA_prob_orig_confusion_{}_{}_Allsamples_baseline \
