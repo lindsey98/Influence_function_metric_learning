@@ -243,7 +243,7 @@ class ScalableIF(BaseInfluenceFunction):
         with open("Influential_data/{}_{}_confusion_grad4trainall_testpair{}.pkl".format(self.dataset_name, self.loss_type, pair_idx), "wb") as fp:  # Pickling
             pickle.dump(grad_loss, fp)
 
-    def agg_get_theta(self, classes, steps=50, lr=0.001):
+    def agg_get_theta(self, classes, steps=50, lr=0.001, save=True):
 
         theta_orig = self.model.module[-1].weight.data
         torch.cuda.empty_cache()
@@ -275,11 +275,16 @@ class ScalableIF(BaseInfluenceFunction):
                 self.model.module[-1].weight.data = theta
 
             theta_dict = {'theta': theta_orig, 'theta_hat': theta}
-            torch.save(theta_dict, "Influential_data/{}_{}_confusion_theta_test_{}.pth".format(self.dataset_name, self.loss_type, wrong_cls))
+            if save:
+                torch.save(theta_dict, "Influential_data/{}_{}_confusion_theta_test_{}.pth".format(self.dataset_name, self.loss_type, wrong_cls))
 
         self.model.module[-1].weight.data = theta_orig
+        if not save:
+            return theta_dict
+        else:
+            return
 
-    def agg_influence_func(self, pair_idx):
+    def agg_influence_func(self, pair_idx, save=True):
         confusion_class_pairs = self.get_confusion_class_pairs()
         pair = confusion_class_pairs[pair_idx]
         self.viz_2cls(5, self.dl_ev, self.testing_label, pair[0][0], pair[0][1])  # visualize confusion classes
@@ -295,10 +300,13 @@ class ScalableIF(BaseInfluenceFunction):
 
         helpful_indices = np.where(influence_values < 0)[0] # cache all helpful
         harmful_indices = np.where(influence_values > 0)[0] # cache all harmful
-        np.save("Influential_data/{}_{}_helpful_testcls{}".format(self.dataset_name, self.loss_type, pair_idx),
-                helpful_indices)
-        np.save("Influential_data/{}_{}_harmful_testcls{}".format(self.dataset_name, self.loss_type, pair_idx),
-                harmful_indices)
+        if save:
+            np.save("Influential_data/{}_{}_helpful_testcls{}".format(self.dataset_name, self.loss_type, pair_idx),
+                    helpful_indices)
+            np.save("Influential_data/{}_{}_harmful_testcls{}".format(self.dataset_name, self.loss_type, pair_idx),
+                    harmful_indices)
+        else:
+            return helpful_indices, harmful_indices, influence_values
 
     def single_get_theta(self, theta_orig, all_features, wrong_indices, confuse_indices):
         # Revise back the weights

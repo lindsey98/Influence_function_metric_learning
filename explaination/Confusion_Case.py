@@ -210,8 +210,8 @@ if __name__ == '__main__':
     # exit()
 
     '''Step 2: Identify influential training points for a specific pair'''
-    lines = open('explaination/{}_{}'.format(IS.dataset_name, 'ModelS_HumanD_pairs')).readlines()
-    lookat_harmful = True
+    lines = open('explaination/{}_{}'.format(IS.dataset_name, 'ModelD_HumanS_pairs')).readlines()
+    lookat_harmful = False
     relabel_method = 'soft_knn'
     base_dir = 'Confuse_pair_influential_data/{}'.format(IS.dataset_name)
     os.makedirs(base_dir, exist_ok=True)

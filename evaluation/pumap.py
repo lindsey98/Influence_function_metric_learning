@@ -100,7 +100,7 @@ def prepare_data(data_name='cub',
             # use this dataloader if you want to visualize (without resizing and cropping)
             dl_ev = torch.utils.data.DataLoader(
                 dataset.load(
-                    name=data_name,
+                    name=data_name.split('_noisy')[0],
                     root=dataset_config['dataset'][data_name]['root'],
                     source=dataset_config['dataset'][data_name]['source'],
                     classes=dataset_config['dataset'][data_name]['classes']['eval'],
@@ -122,7 +122,7 @@ def prepare_data(data_name='cub',
         else: # inshop
             dl_ev = torch.utils.data.DataLoader(
                 dataset.load_inshop(
-                    name=data_name,
+                    name=data_name.split('_noisy')[0],
                     root=dataset_config['dataset'][data_name]['root'],
                     source=dataset_config['dataset'][data_name]['source'],
                     classes=dataset_config['dataset'][data_name]['classes']['eval'],
@@ -163,7 +163,7 @@ def prepare_data(data_name='cub',
         if not 'inshop' in data_name:
             dl_ev = torch.utils.data.DataLoader(
                 dataset.load(
-                    name=data_name,
+                    name=data_name.split('_noisy')[0],
                     root=dataset_config['dataset'][data_name]['root'],
                     source=dataset_config['dataset'][data_name]['source'],
                     classes=dataset_config['dataset'][data_name]['classes']['eval'],
@@ -179,7 +179,7 @@ def prepare_data(data_name='cub',
         else:
             dl_ev = torch.utils.data.DataLoader(
                 dataset.load_inshop(
-                    name=data_name,
+                    name=data_name.split('_noisy')[0],
                     root=dataset_config['dataset'][data_name]['root'],
                     source=dataset_config['dataset'][data_name]['source'],
                     classes=dataset_config['dataset'][data_name]['classes']['eval'],
