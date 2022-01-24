@@ -1,11 +1,12 @@
 import os
 from explaination.Confusion_Case import SampleRelabel
 import torch
-from .ScalableIF_utils import grad_confusion, loss_change_train, calc_influential_func_sample
-from .IF_utils import inverse_hessian_product, calc_influential_func_orig
-from .influence_function import ScalableIF, OrigIF
+from Influence_function.ScalableIF_utils import grad_confusion, loss_change_train, calc_influential_func_sample
+from Influence_function.IF_utils import inverse_hessian_product, calc_influential_func_orig
+from Influence_function.influence_function import ScalableIF, OrigIF
 import numpy as np
-
+import matplotlib.pyplot as plt
+os.environ['CUDA_VISIBLE_DEVICES'] = "1"
 
 if __name__ == '__main__':
     loss_type = 'ProxyNCA_prob_orig_noisy'; sz_embedding = 512; epoch = 40; test_crop = False
@@ -23,7 +24,7 @@ if __name__ == '__main__':
     if os.path.exists("{}/{}_{}_helpful_testcls{}_SIF.npy".format(basedir, IS.dataset_name, IS.loss_type, 0)):
         helpful_indices = np.load("{}/{}_{}_helpful_testcls{}_SIF.npy".format(basedir, IS.dataset_name, IS.loss_type, 0))
         harmful_indices = np.load("{}/{}_{}_harmful_testcls{}_SIF.npy".format(basedir, IS.dataset_name, IS.loss_type, 0))
-        influence_values = np.save("{}/{}_{}_influence_values_testcls{}_SIF.npy".format(basedir, IS.dataset_name, IS.loss_type, 0))
+        influence_values = np.load("{}/{}_{}_influence_values_testcls{}_SIF.npy".format(basedir, IS.dataset_name, IS.loss_type, 0))
     else:
         test_features = IS.get_features()  # (N, 2048)
         confusion_class_pairs = IS.get_confusion_class_pairs()
@@ -48,6 +49,12 @@ if __name__ == '__main__':
         np.save("{}/{}_{}_influence_values_testcls{}_SIF".format(basedir, IS.dataset_name, IS.loss_type, 0), influence_values)
 
     training_sample_by_influence = influence_values.argsort()  # ascending, harmful first
+    # mislabelled indices ground-truth
+    gt_mislabelled_indices = IS.dl_tr.dataset.noisy_indices
+    overlap = np.isin(training_sample_by_influence, gt_mislabelled_indices)
+    cum_overlap = np.cumsum(overlap)
+    plt.scatter(range(len(overlap)), cum_overlap, label='EIF')
+    pass
     # TODO climbing plot
 
     '''Relabelled data accuracy (only relabel harmful)'''
@@ -63,7 +70,7 @@ if __name__ == '__main__':
     if os.path.exists("{}/{}_{}_helpful_testcls{}_IF.npy".format(basedir, IS.dataset_name, IS.loss_type, 0)):
         helpful_indices = np.load("{}/{}_{}_helpful_testcls{}_IF.npy".format(basedir, IS.dataset_name, IS.loss_type, 0))
         harmful_indices = np.load("{}/{}_{}_harmful_testcls{}_IF.npy".format(basedir, IS.dataset_name, IS.loss_type, 0))
-        influence_values = np.save("{}/{}_{}_influence_values_testcls{}_IF.npy".format(basedir, IS.dataset_name, IS.loss_type, 0))
+        influence_values = np.load("{}/{}_{}_influence_values_testcls{}_IF.npy".format(basedir, IS.dataset_name, IS.loss_type, 0))
     else:
         train_features = IS.get_train_features()
         test_features = IS.get_features()  # (N, 2048)
@@ -94,7 +101,18 @@ if __name__ == '__main__':
 
     training_sample_by_influence = influence_values.argsort()  # ascending, harmful first
     # TODO climbing plot
+    # mislabelled indices ground-truth
+    gt_mislabelled_indices = IS.dl_tr.dataset.noisy_indices
+    overlap = np.isin(training_sample_by_influence, gt_mislabelled_indices)
+    cum_overlap = np.cumsum(overlap)
+    plt.scatter(range(len(overlap)), cum_overlap, label='IF')
+    plt.legend()
 
     '''Relabelled data accuracy (only relabel harmful)'''
     # TODO climbing plot
+    overlap = np.isin(np.arange(len(IS.dl_tr.dataset)), gt_mislabelled_indices)
+    cum_overlap = np.cumsum(overlap)
+    plt.scatter(range(len(overlap)), cum_overlap, label='random')
+    plt.legend()
+    plt.show()
 
