@@ -315,23 +315,29 @@ def bipartite_matching(embeddingX, embeddingY):
     return gapD
 
 
-def inter_proxy_dist(proxies, cosine=True, neighbor_only=False):
-    D, IP = pairwise_distance(proxies, squared=True)
-    if cosine:
-        upper_triu = torch.triu(IP, diagonal=1)
-    else:
-        upper_triu = torch.triu(-D, diagonal=1)
-    if not neighbor_only:
-        reduced_mean = upper_triu.mean()
-        reduced_std = torch.std(upper_triu)
-    else:
-        k = 5
-        values, indices = torch.sort(IP, dim=-1, descending=True) # remove itself
-        neighboring_IP = values[:, 1:(k+1)]
-        reduced_mean = neighboring_IP.mean()
-        reduced_std = torch.std(neighboring_IP)
+def inter_dist(thetas, prev_thetas, cosine=True):
+    D, IP = pairwise_distance(
+             torch.cat(
+                [thetas, prev_thetas]
+            ), squared=True)
 
-    return reduced_mean, reduced_std
+    Dinter, IPinter = D[:len(thetas), :len(thetas)], IP[:len(thetas), :len(thetas)]
+    D2prev, IP2prev = D[len(thetas):, len(thetas):], IP[len(thetas):, len(thetas):]
+
+    if cosine:
+        upper_triu_inter = torch.triu(IPinter, diagonal=1)
+        upper_triu2prev = torch.triu(IP2prev, diagonal=1)
+    else:
+        upper_triu_inter = torch.triu(-Dinter, diagonal=1)
+        upper_triu2prev = torch.triu(-D2prev, diagonal=1)
+
+    reduced_mean_inter = upper_triu_inter.mean()
+    reduced_std_inter = torch.std(upper_triu_inter)
+    reduced_mean2prev = upper_triu2prev.mean()
+    reduced_std2prev = torch.std(upper_triu2prev)
+
+    return reduced_mean_inter, reduced_std_inter, \
+           reduced_mean2prev, reduced_std2prev
 
 
 def inter_proxy_dist_super(proxies, super_class):

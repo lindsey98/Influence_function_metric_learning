@@ -23,7 +23,9 @@ def calc_loss_train_relabel(model, dl, criterion, indices=None):
             l_this_all.extend(l.detach().cpu().numpy().tolist())
         l_all.append(np.asarray(l_this_all))
     if indices is not None:
-        l_all = l_all[indices]
+        l_all = np.asarray(l_all)[indices]
+    else:
+        l_all = np.asarray(l_all)
     return l_all # (N, nb_classes)
 
 def loss_change_train_relabel(model, criterion, dl_tr, params_prev, params_cur, indices):
@@ -36,7 +38,7 @@ def loss_change_train_relabel(model, criterion, dl_tr, params_prev, params_cur, 
     l_cur = calc_loss_train_relabel(model, dl_tr, criterion, indices) # (N, nb_classes)
 
     model.module[-1].weight.data = weight_orig # dont forget to revise the weights back to the original
-    return np.asarray(l_prev), np.asarray(l_cur)
+    return l_prev, l_cur
 
 @torch.no_grad()
 def calc_loss_train(model, dl, criterion, indices=None):
