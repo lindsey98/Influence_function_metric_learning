@@ -246,15 +246,21 @@ class MCScalableIF(BaseInfluenceFunction):
     def get_theta_by_newton_step(self, all_features, wrong_cls, confused_classes,
                                  theta_orig,
                                  inter_dist_orig, descent=False):
+        _, v = grad_confusion(self.model, all_features, wrong_cls, confused_classes,
+                                       self.testing_nn_label, self.testing_label, self.testing_nn_indices)  # dD/dtheta
 
-        inter_dist, v = grad_confusion(self.model, all_features, wrong_cls, confused_classes,
-                            self.testing_nn_label, self.testing_label, self.testing_nn_indices) # dD/dtheta
-        v = F.normalize(v[0].to(theta_orig.device).flatten(), p=2) # L2 normalization
+        v = F.normalize(v[0].to(theta_orig.device).flatten(), p=2, dim=0) # L2 normalization
 
         if not descent:
             theta_steepest = theta_orig + v # gradient ascent, deconfusion
         else:
             theta_steepest = theta_orig - v  # gradient descent, confusion
+
+        model_copy = self._load_model()
+        model_copy.module[-1].weight.data = theta_steepest
+        inter_dist, _ = grad_confusion(model_copy, all_features, wrong_cls, confused_classes,
+                          self.testing_nn_label, self.testing_label, self.testing_nn_indices)  # dD/dtheta
+        model_copy.module[-1].weight.data = theta_orig
 
         grad_loss = self.get_grad_loss_train_all(theta_orig.reshape(self.model.module[-1].weight.data.shape[0],
                                                                     self.model.module[-1].weight.data.shape[1]),
@@ -321,6 +327,7 @@ class MCScalableIF(BaseInfluenceFunction):
                                                                inter_dist_orig, descent=False)
                 deltaD_deltaL.append(deltaD / (deltaL + 1e-8))
                 theta_list = torch.cat([theta_list, theta_new])
+                pass
 
             elif kk == 1:
                 '''second theta is the steepest descent direction'''
