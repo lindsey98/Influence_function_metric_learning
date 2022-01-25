@@ -316,6 +316,9 @@ def bipartite_matching(embeddingX, embeddingY):
 
 
 def inter_dist(thetas, prev_thetas, cosine=True):
+    thetas = thetas.reshape(len(thetas), -1)
+    prev_thetas = prev_thetas.reshape(len(prev_thetas), -1)
+
     D, IP = pairwise_distance(
              torch.cat(
                 [thetas, prev_thetas]

@@ -26,11 +26,11 @@ parser.add_argument('--init_eval', default=False, action='store_true')
 parser.add_argument('--apex', default=False, action='store_true')
 parser.add_argument('--warmup_k', default=5, type=int)
 
-parser.add_argument('--dataset', default='cub_noisy')
-parser.add_argument('--seed', default=0, type=int)
+parser.add_argument('--dataset', default='inshop_noisy')
+parser.add_argument('--seed', default=4, type=int)
 parser.add_argument('--eval_nmi', default=True, action='store_true')
 parser.add_argument('--embedding-size', default = 512, type=int, dest = 'sz_embedding')
-parser.add_argument('--config', default='config/cub.json')
+parser.add_argument('--config', default='config/inshop.json')
 parser.add_argument('--mode', default='trainval', choices=['train', 'trainval',
                                                            'test', 'testontrain'],
                     help='train with train data or train with trainval')

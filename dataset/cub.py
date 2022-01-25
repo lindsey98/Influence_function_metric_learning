@@ -37,7 +37,7 @@ class CUBirdsNoisy(BaseDatasetMod):
 
         # noisy data injection 5% mislabelled data
         np.random.seed(seed)
-        self.noisy_indices = np.random.choice(self.I, int(0.05*len(self.I)), replace=False)
+        self.noisy_indices = np.random.choice(self.I, int(0.1*len(self.I)), replace=False)
         for ind in self.noisy_indices:
             orig_y = self.ys[ind]
             if orig_y + 5 > max(self.classes):
