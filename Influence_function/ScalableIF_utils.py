@@ -5,37 +5,34 @@ from tqdm import tqdm
 import numpy as np
 import torch.nn.functional as F
 import math
-@torch.no_grad()
-def calc_loss_train_relabel(model, dl, criterion, indices=None):
-    l_all = []
-    C = dl.dataset.nb_classes()
-    model.eval()
-    for ct, (x, t, _) in tqdm(enumerate(dl)):
-        torch.cuda.empty_cache()
-        x = x.expand(C, x.size()[1], x.size()[2], x.size()[3])
-        y = torch.arange(C)
-        l_this_all = []; chunk_size = 32
-        for i in range(0, math.ceil(C/chunk_size)):
-            x_chunk = x[(i*chunk_size):min((i+1)*chunk_size, len(y))].cuda()
-            y_chunk = y[(i*chunk_size):min((i+1)*chunk_size, len(y))].cuda()
-            m = model(x_chunk)
-            l = criterion.debug(m, None, y_chunk) # (nb_classes, )
-            l_this_all.extend(l.detach().cpu().numpy().tolist())
-        l_all.append(np.asarray(l_this_all))
-    if indices is not None:
-        l_all = np.asarray(l_all)[indices]
-    else:
-        l_all = np.asarray(l_all)
-    return l_all # (N, nb_classes)
 
-def loss_change_train_relabel(model, criterion, dl_tr, params_prev, params_cur, indices):
+@torch.no_grad()
+def calc_loss_train_relabel(model, dl, relabel_candidate, criterion, indices=None):
+    l_all = {}
+    model.eval()
+    for ct, (x, t, ind) in tqdm(enumerate(dl)):
+        torch.cuda.empty_cache()
+        if ind.item() in indices:
+            y = relabel_candidate[ind.item()]
+            x = x.expand(len(y), x.size()[1], x.size()[2], x.size()[3])
+            m = model(x)
+            l = criterion.debug(m, None, y) # (nb_classes, )
+            l_all[ind.item()] = l.detach().cpu().numpy()
+            pass
+    l_final = []
+    for ind in indices:
+        l_final.append(l_all[ind])
+    l_final = np.asarray(l_final)
+    return l_final # (N, nb_classes)
+
+def loss_change_train_relabel(model, criterion, dl_tr, relabel_candidate, params_prev, params_cur, indices):
 
     weight_orig = model.module[-1].weight.data # cache original parameters
     model.module[-1].weight.data = params_prev
-    l_prev = calc_loss_train_relabel(model, dl_tr, criterion, indices) # (N, nb_classes)
+    l_prev = calc_loss_train_relabel(model, dl_tr, relabel_candidate, criterion, indices) # (N, nb_classes)
 
     model.module[-1].weight.data = params_cur
-    l_cur = calc_loss_train_relabel(model, dl_tr, criterion, indices) # (N, nb_classes)
+    l_cur = calc_loss_train_relabel(model, dl_tr, relabel_candidate, criterion, indices) # (N, nb_classes)
 
     model.module[-1].weight.data = weight_orig # dont forget to revise the weights back to the original
     return l_prev, l_cur

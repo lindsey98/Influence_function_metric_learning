@@ -284,41 +284,54 @@ class MCScalableIF(BaseInfluenceFunction):
                                        theta_orig,
                                        inter_dist_orig):
 
-        theta_directions = torch.randn((num_thetas, prev_thetas.shape[1], prev_thetas.shape[2]), requires_grad=True)
-        theta_orig.to(theta_directions.device); theta_orig.requires_grad = False
-        prev_thetas.to(theta_directions.device); prev_thetas.requires_grad = False
-        length_scale = torch.norm(prev_thetas, dim=-1).mean().item()
+        # theta_directions = torch.randn((num_thetas, prev_thetas.shape[1], prev_thetas.shape[2]), requires_grad=True)
+        # theta_orig.to(theta_directions.device); theta_orig.requires_grad = False
+        # prev_thetas.to(theta_directions.device); prev_thetas.requires_grad = False
+        # length_scale = torch.norm(prev_thetas, dim=-1).mean().item()
+        # deltaL_deltaD = []
+        # _optimizer = torch.optim.Adam(params={theta_directions}, lr=0.1)
+        # for _ in tqdm(range(50), desc="Orthogonalizing the thetas"):
+        #
+        #     new_thetas = theta_orig.to(theta_directions.device) + theta_directions
+        #     new_thetas = F.normalize(new_thetas, p=2, dim=-1)
+        #     new_thetas = new_thetas * length_scale
+        #
+        #     meaninter, varinter, means2prev, var2prev = utils.inter_dist(new_thetas, prev_thetas)
+        #     _loss = meaninter + varinter + means2prev + var2prev
+        #     _optimizer.zero_grad()
+        #     _loss.backward()
+        #     _optimizer.step()
+        # new_thetas = new_thetas.cuda()
+        # for this_theta in new_thetas:
+        #     model_copy = self._load_model()
+        #     model_copy.module[-1].weight.data = this_theta
+        #     inter_dist, _ = grad_confusion(model_copy, all_features, wrong_cls, confused_classes,
+        #                                    self.testing_nn_label, self.testing_label, self.testing_nn_indices)
+        #     model_copy.module[-1].weight.data = theta_orig
+        #
+        #     grad_loss = self.get_grad_loss_train_all(theta_orig, this_theta)
+        #     deltaD = inter_dist - inter_dist_orig  # scalar
+        #     l_prev = grad_loss['l_prev']; l_cur = grad_loss['l_cur']
+        #     deltaL = np.stack(l_cur) - np.stack(l_prev)  # (N, )
+        #     deltaL_deltaD.append(deltaL / (deltaD + 1e-8))
+        #
+
         deltaL_deltaD = []
+        new_theta = torch.mean(prev_thetas, dim=0) # middle direction
+        new_theta = new_theta.cuda()
+        model_copy = self._load_model()
+        model_copy.module[-1].weight.data = new_theta
+        inter_dist, _ = grad_confusion(model_copy, all_features, wrong_cls, confused_classes,
+                                       self.testing_nn_label, self.testing_label, self.testing_nn_indices)
+        model_copy.module[-1].weight.data = theta_orig
 
-        _optimizer = torch.optim.Adam(params={theta_directions}, lr=0.1)
-        for _ in tqdm(range(50), desc="Orthogonalizing the thetas"):
+        grad_loss = self.get_grad_loss_train_all(theta_orig, new_theta)
+        deltaD = inter_dist - inter_dist_orig  # scalar
+        l_prev = grad_loss['l_prev']; l_cur = grad_loss['l_cur']
+        deltaL = np.stack(l_cur) - np.stack(l_prev)  # (N, )
+        deltaL_deltaD.append(deltaL / (deltaD + 1e-8))
 
-            new_thetas = theta_orig.to(theta_directions.device) + theta_directions
-            new_thetas = F.normalize(new_thetas, p=2, dim=-1)
-            new_thetas = new_thetas * length_scale
-
-            meaninter, varinter, means2prev, var2prev = utils.inter_dist(new_thetas, prev_thetas)
-            _loss = meaninter + varinter + means2prev + var2prev
-            _optimizer.zero_grad()
-            _loss.backward()
-            _optimizer.step()
-
-        new_thetas = new_thetas.cuda()
-
-        for this_theta in new_thetas:
-            model_copy = self._load_model()
-            model_copy.module[-1].weight.data = this_theta
-            inter_dist, _ = grad_confusion(model_copy, all_features, wrong_cls, confused_classes,
-                                           self.testing_nn_label, self.testing_label, self.testing_nn_indices)
-            model_copy.module[-1].weight.data = theta_orig
-
-            grad_loss = self.get_grad_loss_train_all(theta_orig, this_theta)
-            deltaD = inter_dist - inter_dist_orig  # scalar
-            l_prev = grad_loss['l_prev']; l_cur = grad_loss['l_cur']
-            deltaL = np.stack(l_cur) - np.stack(l_prev)  # (N, )
-            deltaL_deltaD.append(deltaL / (deltaD + 1e-8))
-
-        return new_thetas, deltaL_deltaD
+        return new_theta.unsqueeze(0), deltaL_deltaD
 
     def MC_estimate(self, pair, num_thetas=2):
 
@@ -351,7 +364,7 @@ class MCScalableIF(BaseInfluenceFunction):
 
             else:
                 '''If more thetas are needed'''
-                theta_new, deltaL_deltaD_more = self.get_theta_by_orthogonalization(num_thetas=num_thetas-2, prev_thetas=theta_list,
+                theta_new, deltaL_deltaD_more = self.get_theta_by_orthogonalization(num_thetas=1, prev_thetas=theta_list,
                                                                                     all_features=all_features,
                                                                                     wrong_cls=wrong_cls, confused_classes=confused_classes,
                                                                                     theta_orig=theta_orig,

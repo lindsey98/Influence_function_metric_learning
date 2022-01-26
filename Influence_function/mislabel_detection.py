@@ -10,51 +10,54 @@ os.environ['CUDA_VISIBLE_DEVICES'] = "0"
 
 if __name__ == '__main__':
     loss_type = 'ProxyNCA_prob_orig_noisy'; sz_embedding = 512; epoch = 40; test_crop = False
-    # dataset_name = 'cub_noisy';  config_name = 'cub'; seed = 0
+    dataset_name = 'cub_noisy';  config_name = 'cub'; seed = 0
     # dataset_name = 'cars_noisy'; config_name = 'cars'; seed = 3
-    dataset_name = 'inshop_noisy'; config_name = 'inshop'; seed = 4
+    # dataset_name = 'inshop_noisy'; config_name = 'inshop'; seed = 4
     # dataset_name = 'sop_noisy'; config_name = 'sop'; seed = 3
 
     '''============ Our Influence function =================='''
     IS = MCScalableIF(dataset_name, seed, loss_type, config_name, test_crop)
     basedir = 'MislabelExp_Influential_data'
-    num_thetas = 5
     os.makedirs(basedir, exist_ok=True)
 
-    '''Mislabelled data detection'''
-    if os.path.exists("{}/{}_{}_helpful_testcls{}_SIF_theta{}.npy".format(basedir, IS.dataset_name, IS.loss_type, 0, num_thetas)):
-        helpful_indices = np.load("{}/{}_{}_helpful_testcls{}_SIF_theta{}.npy".format(basedir, IS.dataset_name, IS.loss_type, 0, num_thetas))
-        harmful_indices = np.load("{}/{}_{}_harmful_testcls{}_SIF_theta{}.npy".format(basedir, IS.dataset_name, IS.loss_type, 0, num_thetas))
-        influence_values = np.load("{}/{}_{}_influence_values_testcls{}_SIF_theta{}.npy".format(basedir, IS.dataset_name, IS.loss_type, 0, num_thetas))
-    else:
-        confusion_class_pairs = IS.get_confusion_class_pairs()
+    for num_thetas in [1, 2, 3]:
 
-        '''Step 1: Get deltaD_deltaL'''
-        mean_deltaD_deltaL = IS.MC_estimate(confusion_class_pairs[0], num_thetas=num_thetas)
+        '''Mislabelled data detection'''
+        if os.path.exists("{}/{}_{}_helpful_testcls{}_SIF_theta{}.npy".format(basedir, IS.dataset_name, IS.loss_type, 0, num_thetas)):
+            helpful_indices = np.load("{}/{}_{}_helpful_testcls{}_SIF_theta{}.npy".format(basedir, IS.dataset_name, IS.loss_type, 0, num_thetas))
+            harmful_indices = np.load("{}/{}_{}_harmful_testcls{}_SIF_theta{}.npy".format(basedir, IS.dataset_name, IS.loss_type, 0, num_thetas))
+            influence_values = np.load("{}/{}_{}_influence_values_testcls{}_SIF_theta{}.npy".format(basedir, IS.dataset_name, IS.loss_type, 0, num_thetas))
+        else:
+            confusion_class_pairs = IS.get_confusion_class_pairs()
 
-        '''Step 2: Calc influence functions'''
-        influence_values = np.asarray(mean_deltaD_deltaL)
-        training_sample_by_influence = influence_values.argsort()  # ascending
-        IS.viz_sample(IS.dl_tr, training_sample_by_influence[:10])  # helpful
-        IS.viz_sample(IS.dl_tr, training_sample_by_influence[-10:])  # harmful
+            '''Step 1: Get deltaD_deltaL'''
+            mean_deltaD_deltaL = IS.MC_estimate(confusion_class_pairs[0], num_thetas=num_thetas)
 
-        helpful_indices = np.where(influence_values < 0)[0]  # cache all helpful
-        harmful_indices = np.where(influence_values > 0)[0]  # cache all harmful
-        np.save("{}/{}_{}_helpful_testcls{}_SIF_theta{}".format(basedir, IS.dataset_name, IS.loss_type, 0, num_thetas), helpful_indices)
-        np.save("{}/{}_{}_harmful_testcls{}_SIF_theta{}".format(basedir, IS.dataset_name, IS.loss_type, 0, num_thetas), harmful_indices)
-        np.save("{}/{}_{}_influence_values_testcls{}_SIF_theta{}".format(basedir, IS.dataset_name, IS.loss_type, 0, num_thetas), influence_values)
+            '''Step 2: Calc influence functions'''
+            influence_values = np.asarray(mean_deltaD_deltaL)
+            training_sample_by_influence = influence_values.argsort()  # ascending
+            IS.viz_sample(IS.dl_tr, training_sample_by_influence[:10])  # helpful
+            IS.viz_sample(IS.dl_tr, training_sample_by_influence[-10:])  # harmful
 
-    training_sample_by_influence = influence_values.argsort()  # ascending, harmful first
-    # mislabelled indices ground-truth
-    gt_mislabelled_indices = IS.dl_tr.dataset.noisy_indices
-    overlap = np.isin(training_sample_by_influence, gt_mislabelled_indices)
-    cum_overlap = np.cumsum(overlap)
-    ticks_pos = np.arange(0, 1.2, 0.2)
-    fraction_data_scanned = [int(x) for x in ticks_pos*len(training_sample_by_influence)]
-    fraction_mislabelled_detected = [int(x) for x in ticks_pos*len(gt_mislabelled_indices)]
-    plt.plot(cum_overlap, label='EIF')
-    plt.xticks(fraction_data_scanned, [round(x, 1) for x in ticks_pos])
-    plt.yticks(fraction_mislabelled_detected, [round(x, 1) for x in ticks_pos])
+            helpful_indices = np.where(influence_values < 0)[0]  # cache all helpful
+            harmful_indices = np.where(influence_values > 0)[0]  # cache all harmful
+            np.save("{}/{}_{}_helpful_testcls{}_SIF_theta{}".format(basedir, IS.dataset_name, IS.loss_type, 0, num_thetas), helpful_indices)
+            np.save("{}/{}_{}_harmful_testcls{}_SIF_theta{}".format(basedir, IS.dataset_name, IS.loss_type, 0, num_thetas), harmful_indices)
+            np.save("{}/{}_{}_influence_values_testcls{}_SIF_theta{}".format(basedir, IS.dataset_name, IS.loss_type, 0, num_thetas), influence_values)
+
+        training_sample_by_influence = influence_values.argsort()  # ascending, harmful first
+        # mislabelled indices ground-truth
+        gt_mislabelled_indices = IS.dl_tr.dataset.noisy_indices
+        overlap = np.isin(training_sample_by_influence, gt_mislabelled_indices)
+        cum_overlap = np.cumsum(overlap)
+        ticks_pos = np.arange(0, 1.2, 0.2)
+        fraction_data_scanned = [int(x) for x in ticks_pos*len(training_sample_by_influence)]
+        fraction_mislabelled_detected = [int(x) for x in ticks_pos*len(gt_mislabelled_indices)]
+        plt.plot(cum_overlap, label='EIF with N_theta = {}'.format(num_thetas))
+        plt.xlabel("Fraction of training data checked", fontdict={'fontsize': 15})
+        plt.ylabel("Fraction of mislabelled data detected", fontdict={'fontsize': 15})
+        plt.xticks(fraction_data_scanned, [round(x, 1) for x in ticks_pos])
+        plt.yticks(fraction_mislabelled_detected, [round(x, 1) for x in ticks_pos])
 
     '''Relabelled data accuracy (only relabel harmful)'''
     # TODO climbing plot
