@@ -10,7 +10,7 @@ import math
 def calc_loss_train_relabel(model, dl, relabel_candidate, criterion, indices=None):
     l_all = {}
     model.eval()
-    for ct, (x, t, ind) in tqdm(enumerate(dl)):
+    for ct, (x, t, ind) in enumerate(dl):
         torch.cuda.empty_cache()
         if ind.item() in indices:
             y = relabel_candidate[ind.item()]

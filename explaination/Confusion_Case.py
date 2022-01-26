@@ -12,7 +12,7 @@ from evaluation import assign_by_euclidian_at_k_indices
 import sklearn
 import pickle
 from utils import evaluate
-os.environ['CUDA_VISIBLE_DEVICES'] = "0, 1"
+os.environ['CUDA_VISIBLE_DEVICES'] = "1, 0"
 
 # knn monitor as in InstDisc https://arxiv.org/abs/1805.01978
 # implementation follows http://github.com/zhirongw/lemniscate.pytorch and https://github.com/leftthomas/SimCLR, https://github.com/PatrickHua/SimSiam/blob/main/tools/knn_monitor.py
@@ -200,8 +200,8 @@ class SampleRelabel(ScalableIF):
 if __name__ == '__main__':
 
     loss_type = 'ProxyNCA_prob_orig'; sz_embedding = 512; epoch = 40; test_crop = False
-    dataset_name = 'cub';  config_name = 'cub'; seed = 0
-    # dataset_name = 'cars'; config_name = 'cars'; seed = 3
+    # dataset_name = 'cub';  config_name = 'cub'; seed = 0
+    dataset_name = 'cars'; config_name = 'cars'; seed = 3
     # dataset_name = 'inshop'; config_name = 'inshop'; seed = 4
     # dataset_name = 'sop'; config_name = 'sop'; seed = 3
 

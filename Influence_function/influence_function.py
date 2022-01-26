@@ -33,6 +33,10 @@ class BaseInfluenceFunction():
                                               config_name=self.config_name,
                                               batch_size=1,
                                               test_crop=test_crop)
+        self.dl_tr_clean, _ = prepare_data(data_name=dataset_name.split('_noisy')[0],
+                                              config_name=self.config_name,
+                                              batch_size=1,
+                                              test_crop=test_crop)
         self.dataset_name = dataset_name
         self.seed = seed
         self.loss_type = loss_type
@@ -243,6 +247,34 @@ class MCScalableIF(BaseInfluenceFunction):
         l_prev, l_cur = loss_change_train(self.model, self.criterion, self.dl_tr, theta, theta_hat)
         grad_loss = {'l_prev': l_prev, 'l_cur': l_cur}
         return grad_loss
+
+    def agg_get_theta(self, all_features, wrong_cls, confused_classes, steps=1, lr=0.001):
+
+        theta_orig = self.model.module[-1].weight.data
+        torch.cuda.empty_cache()
+
+        # revise back the weights
+        theta = theta_orig.clone()
+
+        # Record original inter-class distance
+        inter_dist_orig, _ = grad_confusion(self.model, all_features, wrong_cls, confused_classes, self.testing_nn_label, self.testing_label, self.testing_nn_indices) # dD/dtheta
+        print("Original confusion: ", inter_dist_orig)
+
+        # Optimization
+        for _ in range(steps):
+            inter_dist, v = grad_confusion(self.model, all_features, wrong_cls, confused_classes,
+                                           self.testing_nn_label, self.testing_label, self.testing_nn_indices) # dD/dtheta
+            print("Confusion: ", inter_dist)
+            if inter_dist - inter_dist_orig >= 1.: # FIXME: stopping criteria threshold selection
+                break
+            theta_new = theta + lr * v[0].to(theta.device) # gradient ascent
+            theta = theta_new
+            self.model.module[-1].weight.data = theta
+
+        theta_dict = {'theta': theta_orig, 'theta_hat': theta}
+
+        self.model.module[-1].weight.data = theta_orig
+        return theta_dict
 
     def get_theta_newton_step(self, all_features, wrong_cls, confused_classes,
                               steps=1, lr=0.001, descent=False):
