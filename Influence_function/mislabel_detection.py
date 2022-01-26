@@ -10,9 +10,9 @@ os.environ['CUDA_VISIBLE_DEVICES'] = "0"
 
 if __name__ == '__main__':
     loss_type = 'ProxyNCA_prob_orig_noisy'; sz_embedding = 512; epoch = 40; test_crop = False
-    dataset_name = 'cub_noisy';  config_name = 'cub'; seed = 0
+    # dataset_name = 'cub_noisy';  config_name = 'cub'; seed = 0
     # dataset_name = 'cars_noisy'; config_name = 'cars'; seed = 3
-    # dataset_name = 'inshop_noisy'; config_name = 'inshop'; seed = 4
+    dataset_name = 'inshop_noisy'; config_name = 'inshop'; seed = 4
     # dataset_name = 'sop_noisy'; config_name = 'sop'; seed = 3
 
     '''============ Our Influence function =================='''
