@@ -6,13 +6,13 @@ from Influence_function.IF_utils import inverse_hessian_product, calc_influentia
 from Influence_function.influence_function import ScalableIF, OrigIF, MCScalableIF
 import numpy as np
 import matplotlib.pyplot as plt
-os.environ['CUDA_VISIBLE_DEVICES'] = "1"
+os.environ['CUDA_VISIBLE_DEVICES'] = "0"
 
 if __name__ == '__main__':
     loss_type = 'ProxyNCA_prob_orig_noisy'; sz_embedding = 512; epoch = 40; test_crop = False
-    dataset_name = 'cub_noisy';  config_name = 'cub'; seed = 0
+    # dataset_name = 'cub_noisy';  config_name = 'cub'; seed = 0
     # dataset_name = 'cars_noisy'; config_name = 'cars'; seed = 3
-    # dataset_name = 'inshop_noisy'; config_name = 'inshop'; seed = 4
+    dataset_name = 'inshop_noisy'; config_name = 'inshop'; seed = 4
     # dataset_name = 'sop_noisy'; config_name = 'sop'; seed = 3
 
     '''============ Our Influence function =================='''
@@ -99,7 +99,6 @@ if __name__ == '__main__':
         np.save("{}/{}_{}_influence_values_testcls{}_IF".format(basedir, IS.dataset_name, IS.loss_type, 0), influence_values)
 
     training_sample_by_influence = influence_values.argsort()  # ascending, harmful first
-    # TODO climbing plot
     # mislabelled indices ground-truth
     gt_mislabelled_indices = IS.dl_tr.dataset.noisy_indices
     overlap = np.isin(training_sample_by_influence, gt_mislabelled_indices)
@@ -108,7 +107,6 @@ if __name__ == '__main__':
     plt.plot(cum_overlap, label='IF')
 
     '''Relabelled data accuracy (only relabel harmful)'''
-    # TODO climbing plot
     overlap = np.isin(np.arange(len(IS.dl_tr.dataset)), gt_mislabelled_indices)
     cum_overlap = np.cumsum(overlap)
 

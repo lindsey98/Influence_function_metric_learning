@@ -186,7 +186,7 @@ class InShop(BaseDatasetMod):
                     self.ys.append(y)
                     self.I.append(ii)
 
-class InShopNoisy(BaseDatasetMod):
+class InShopNoisy(BaseDatasetModNoisy):
     """
     For the In-Shop Clothes Retrieval dataset, we use the predefined
     25, 882 training images of 3,997 classes for training. The test
