@@ -32,7 +32,7 @@ if __name__ == '__main__':
             confusion_class_pairs = IS.get_confusion_class_pairs()
 
             '''Step 1: Get deltaD_deltaL'''
-            mean_deltaD_deltaL = IS.MC_estimate(confusion_class_pairs[0], num_thetas=num_thetas)
+            mean_deltaD_deltaL = IS.MC_estimate_group(confusion_class_pairs[0], num_thetas=num_thetas)
 
             '''Step 2: Calc influence functions'''
             influence_values = np.asarray(mean_deltaD_deltaL)

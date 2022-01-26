@@ -271,13 +271,11 @@ class MCScalableIF(BaseInfluenceFunction):
             theta = theta_new
             self.model.module[-1].weight.data = theta
 
-        theta_dict = {'theta': theta_orig, 'theta_hat': theta}
-
         self.model.module[-1].weight.data = theta_orig
-        return theta_dict
+        return theta
 
-    def get_theta_newton_step(self, all_features, wrong_cls, confused_classes,
-                              steps=1, lr=0.001, descent=False):
+    def get_theta_newton_step_group(self, all_features, wrong_cls, confused_classes,
+                                    steps=1, lr=0.001, descent=False):
 
         theta_orig = self.model.module[-1].weight.data
         torch.cuda.empty_cache(); theta = theta_orig.clone()
@@ -311,10 +309,44 @@ class MCScalableIF(BaseInfluenceFunction):
         self.model.module[-1].weight.data = theta_orig
         return deltaD, deltaL, theta
 
-    def get_theta_by_orthogonalization(self, num_thetas, prev_thetas,
-                                       all_features, wrong_cls, confused_classes,
-                                       theta_orig,
-                                       inter_dist_orig):
+    def get_theta_newton_step_single(self, all_features, pair1_indices, pair2_indices,
+                                    steps=1, lr=0.001, descent=False):
+
+        theta_orig = self.model.module[-1].weight.data
+        torch.cuda.empty_cache(); theta = theta_orig.clone()
+
+        # Record original inter-class distance
+        inter_dist_orig, _ = grad_confusion_pair(self.model, all_features, pair1_indices, pair2_indices) # dD/dtheta
+        print("Original confusion: ", inter_dist_orig)
+
+        # Optimization
+        for _ in range(steps):
+            inter_dist, v = grad_confusion_pair(self.model, all_features, pair1_indices, pair2_indices) # dD/dtheta
+            print("Confusion: ", inter_dist)
+            if abs(inter_dist - inter_dist_orig) >= 1.: # FIXME: stopping criteria threshold selection
+                break
+            if descent:
+                theta_new = theta - lr * v[0].to(theta.device)  # gradient ascent
+            else:
+                theta_new = theta + lr * v[0].to(theta.device) # gradient ascent
+            theta = theta_new
+            self.model.module[-1].weight.data = theta
+
+        # deltaD, deltaL
+        grad_loss = self.get_grad_loss_train_all(theta_orig, theta)
+        inter_dist, _ = grad_confusion_pair(self.model, all_features, pair1_indices, pair2_indices)  # dD/dtheta
+        deltaD = inter_dist - inter_dist_orig  # scalar
+        l_prev = grad_loss['l_prev']; l_cur = grad_loss['l_cur']
+        deltaL = np.stack(l_cur) - np.stack(l_prev)  # (N, )
+
+        # revise back the weights
+        self.model.module[-1].weight.data = theta_orig
+        return deltaD, deltaL, theta
+
+    def get_theta_by_orthogonalization_group(self, num_thetas, prev_thetas,
+                                             all_features, wrong_cls, confused_classes,
+                                             theta_orig,
+                                             inter_dist_orig):
 
         # theta_directions = torch.randn((num_thetas, prev_thetas.shape[1], prev_thetas.shape[2]), requires_grad=True)
         # theta_orig.to(theta_directions.device); theta_orig.requires_grad = False
@@ -365,7 +397,28 @@ class MCScalableIF(BaseInfluenceFunction):
 
         return new_theta.unsqueeze(0), deltaL_deltaD
 
-    def MC_estimate(self, pair, num_thetas=2):
+    def get_theta_by_orthogonalization_single(self, num_thetas, prev_thetas,
+                                             all_features, pair1_indices, pair2_indices,
+                                             theta_orig,
+                                             inter_dist_orig):
+
+        deltaL_deltaD = []
+        new_theta = torch.mean(prev_thetas, dim=0) # middle direction
+        new_theta = new_theta.cuda()
+        model_copy = self._load_model()
+        model_copy.module[-1].weight.data = new_theta
+        inter_dist, _ = grad_confusion_pair(model_copy, all_features, pair1_indices, pair2_indices)
+        model_copy.module[-1].weight.data = theta_orig
+
+        grad_loss = self.get_grad_loss_train_all(theta_orig, new_theta)
+        deltaD = inter_dist - inter_dist_orig  # scalar
+        l_prev = grad_loss['l_prev']; l_cur = grad_loss['l_cur']
+        deltaL = np.stack(l_cur) - np.stack(l_prev)  # (N, )
+        deltaL_deltaD.append(deltaL / (deltaD + 1e-8))
+
+        return new_theta.unsqueeze(0), deltaL_deltaD
+
+    def MC_estimate_group(self, pair, num_thetas=2):
 
         theta_orig = self.model.module[-1].weight.data # original theta
         torch.cuda.empty_cache()
@@ -382,26 +435,26 @@ class MCScalableIF(BaseInfluenceFunction):
 
             if kk == 0:
                 ''' first theta is the steepest ascent direction '''
-                deltaD, deltaL, theta_new = self.get_theta_newton_step(all_features, wrong_cls, confused_classes,
-                                                                       descent=False)
+                deltaD, deltaL, theta_new = self.get_theta_newton_step_group(all_features, wrong_cls, confused_classes,
+                                                                             descent=False)
                 deltaL_deltaD.append(deltaL / (deltaD+ 1e-8))
                 theta_list = torch.cat([theta_list, theta_new.detach().cpu().unsqueeze(0)], dim=0)
 
             elif kk == 1:
                 '''second theta is the steepest descent direction'''
-                deltaD, deltaL, theta_new = self.get_theta_newton_step(all_features, wrong_cls, confused_classes,
-                                                                       descent=True)
+                deltaD, deltaL, theta_new = self.get_theta_newton_step_group(all_features, wrong_cls, confused_classes,
+                                                                             descent=True)
                 deltaL_deltaD.append(deltaL / (deltaD + 1e-8))
                 theta_list = torch.cat([theta_list, theta_new.detach().cpu().unsqueeze(0)], dim=0)
 
             else:
                 '''If more thetas are needed'''
-                theta_new, deltaL_deltaD_more = self.get_theta_by_orthogonalization(num_thetas=1, prev_thetas=theta_list,
-                                                                                    all_features=all_features,
-                                                                                    wrong_cls=wrong_cls, confused_classes=confused_classes,
-                                                                                    theta_orig=theta_orig,
-                                                                                    inter_dist_orig=inter_dist_orig
-                                                                                    )
+                theta_new, deltaL_deltaD_more = self.get_theta_by_orthogonalization_group(num_thetas=1, prev_thetas=theta_list,
+                                                                                          all_features=all_features,
+                                                                                          wrong_cls=wrong_cls, confused_classes=confused_classes,
+                                                                                          theta_orig=theta_orig,
+                                                                                          inter_dist_orig=inter_dist_orig
+                                                                                          )
                 theta_list = torch.cat([theta_list, theta_new.detach().cpu()], dim=0)
                 deltaL_deltaD.extend(deltaL_deltaD_more)
                 break
@@ -411,6 +464,50 @@ class MCScalableIF(BaseInfluenceFunction):
         mean_deltaD_deltaL = np.mean(np.stack(deltaL_deltaD), axis=0)
         return mean_deltaD_deltaL
 
+    def MC_estimate_pair(self, pair, num_thetas=2):
+
+        theta_orig = self.model.module[-1].weight.data # original theta
+        torch.cuda.empty_cache()
+        all_features = self.get_features() # test features (N, 2048)
+        deltaL_deltaD = []
+        theta_list = torch.tensor([])
+
+        pairidx1 = pair[0] # look at pairs associated with top-1 wrong class
+        pairidx2 = pair[1]
+        inter_dist_orig, _ = grad_confusion_pair(self.model, all_features, [pairidx1], [pairidx2]) # original D
+
+        for kk in range(num_thetas):
+
+            if kk == 0:
+                ''' first theta is the steepest ascent direction '''
+                deltaD, deltaL, theta_new = self.get_theta_newton_step_single(all_features, [pairidx1], [pairidx2],
+                                                                             descent=False)
+                deltaL_deltaD.append(deltaL / (deltaD+ 1e-8))
+                theta_list = torch.cat([theta_list, theta_new.detach().cpu().unsqueeze(0)], dim=0)
+
+            elif kk == 1:
+                '''second theta is the steepest descent direction'''
+                deltaD, deltaL, theta_new = self.get_theta_newton_step_single(all_features, [pairidx1], [pairidx2],
+                                                                             descent=True)
+                deltaL_deltaD.append(deltaL / (deltaD + 1e-8))
+                theta_list = torch.cat([theta_list, theta_new.detach().cpu().unsqueeze(0)], dim=0)
+
+            else:
+                '''If more thetas are needed'''
+                theta_new, deltaL_deltaD_more = self.get_theta_by_orthogonalization_single(num_thetas=1, prev_thetas=theta_list,
+                                                                                          all_features=all_features,
+                                                                                          pair1_indices=[pairidx1], pair2_indices=[pairidx2],
+                                                                                          theta_orig=theta_orig,
+                                                                                          inter_dist_orig=inter_dist_orig
+                                                                                          )
+                theta_list = torch.cat([theta_list, theta_new.detach().cpu()], dim=0)
+                deltaL_deltaD.extend(deltaL_deltaD_more)
+                break
+
+        self.model.module[-1].weight.data = theta_orig
+        # Take average deltaD_deltaL
+        mean_deltaD_deltaL = np.mean(np.stack(deltaL_deltaD), axis=0)
+        return mean_deltaD_deltaL
 
 class ScalableIF(BaseInfluenceFunction):
     def __int__(self, dataset_name, seed, loss_type, config_name,
