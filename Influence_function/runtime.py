@@ -1,5 +1,5 @@
 import os
-from Influence_function.ScalableIF_utils import grad_confusion_pair
+from Influence_function.EIF_utils import grad_confusion_pair
 from Influence_function.IF_utils import inverse_hessian_product, calc_influential_func_orig
 from Influence_function.influence_function import MCScalableIF
 import numpy as np

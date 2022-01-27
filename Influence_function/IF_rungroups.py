@@ -1,5 +1,5 @@
 from Influence_function.influence_function import OrigIF
-from Influence_function.ScalableIF_utils import grad_confusion
+from Influence_function.EIF_utils import grad_confusion
 import os
 from Influence_function.IF_utils import *
 os.environ['CUDA_VISIBLE_DEVICES'] = "0"

@@ -1,9 +1,9 @@
 import os
 import torch
-from Influence_function.ScalableIF_utils import grad_confusion, loss_change_train_relabel
+from Influence_function.EIF_utils import grad_confusion, loss_change_train_relabel
 from Influence_function.IF_utils import inverse_hessian_product, calc_influential_func_orig
 from Influence_function.influence_function import OrigIF, MCScalableIF
-from Influence_function.Sample_relabel import kNN_label_pred
+from Influence_function.sample_relabel import kNN_label_pred
 import numpy as np
 import matplotlib.pyplot as plt
 os.environ['CUDA_VISIBLE_DEVICES'] = "0"

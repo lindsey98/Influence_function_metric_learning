@@ -10,7 +10,7 @@ import os
 import matplotlib.pyplot as plt
 from torchvision.transforms.functional import normalize, resize, to_pil_image
 from torchvision.io.image import read_image
-from Influence_function.ScalableIF_utils import *
+from Influence_function.EIF_utils import *
 from Influence_function.IF_utils import *
 import pickle
 from utils import predict_batchwise_debug

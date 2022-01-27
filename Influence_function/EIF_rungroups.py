@@ -1,6 +1,6 @@
 
 import os
-from Influence_function.ScalableIF_utils import *
+from Influence_function.EIF_utils import *
 from Influence_function.IF_utils import *
 from Influence_function.influence_function import MCScalableIF
 os.environ['CUDA_VISIBLE_DEVICES'] = "1"

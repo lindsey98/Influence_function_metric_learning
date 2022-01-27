@@ -2,7 +2,7 @@
 import os
 from Influence_function.influence_function import OrigIF
 from Influence_function.IF_utils import *
-from Influence_function.ScalableIF_utils import grad_confusion_pair
+from Influence_function.EIF_utils import grad_confusion_pair
 from evaluation import assign_by_euclidian_at_k_indices
 os.environ['CUDA_VISIBLE_DEVICES'] = "0, 1"
 
