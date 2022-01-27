@@ -37,8 +37,8 @@ if __name__ == '__main__':
             '''Step 2: Calc influence functions'''
             influence_values = np.asarray(mean_deltaD_deltaL)
             training_sample_by_influence = influence_values.argsort()  # ascending
-            IS.viz_sample(IS.dl_tr, training_sample_by_influence[:10])  # helpful
-            IS.viz_sample(IS.dl_tr, training_sample_by_influence[-10:])  # harmful
+            IS.viz_samples(IS.dl_tr, training_sample_by_influence[:10])  # helpful
+            IS.viz_samples(IS.dl_tr, training_sample_by_influence[-10:])  # harmful
 
             helpful_indices = np.where(influence_values < 0)[0]  # cache all helpful
             harmful_indices = np.where(influence_values > 0)[0]  # cache all harmful
@@ -146,8 +146,8 @@ if __name__ == '__main__':
         influence_values = calc_influential_func_orig(IS=IS, train_features=train_features, inverse_hvp_prod=ihvp)
         influence_values = np.asarray(influence_values).flatten()
         training_sample_by_influence = influence_values.argsort()  # ascending
-        IS.viz_sample(IS.dl_tr, training_sample_by_influence[:10])  # harmful
-        IS.viz_sample(IS.dl_tr, training_sample_by_influence[-10:])  # helpful
+        IS.viz_samples(IS.dl_tr, training_sample_by_influence[:10])  # harmful
+        IS.viz_samples(IS.dl_tr, training_sample_by_influence[-10:])  # helpful
 
         helpful_indices = np.where(influence_values > 0)[0]  # cache all helpful
         harmful_indices = np.where(influence_values < 0)[0]  # cache all harmful

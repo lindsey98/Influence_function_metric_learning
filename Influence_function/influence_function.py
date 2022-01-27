@@ -195,9 +195,9 @@ class BaseInfluenceFunction():
             plt.title('Class = {}'.format(cls))
         plt.show()
 
-    def viz_2cls(self, top_bottomk, dl, label, cls1, cls2):
-        ind_cls1 = np.where(label.detach().cpu().numpy() == cls1)[0]
-        ind_cls2 = np.where(label.detach().cpu().numpy() == cls2)[0]
+    def viz_2cls(self, top_bottomk, dl, cls1, cls2):
+        ind_cls1 = np.where(np.asarray(dl.dataset.ys) == cls1)[0]
+        ind_cls2 = np.where(np.asarray(dl.dataset.ys) == cls2)[0]
 
         top_bottomk = min(top_bottomk, len(ind_cls1), len(ind_cls2))
         for i in range(top_bottomk):
@@ -210,15 +210,25 @@ class BaseInfluenceFunction():
             img = read_image(dl.dataset.im_paths[ind_cls2[i]])
             plt.imshow(to_pil_image(img))
             plt.title('Class = {}'.format(cls2))
+        plt.tight_layout()
         plt.show()
 
-    def viz_sample(self, dl, indices):
+    def viz_samples(self, dl, indices):
         classes = [dl.dataset.ys[x] for x in indices]
         for i in range(10):
             plt.subplot(2, 5, i + 1)
             img = read_image(dl.dataset.im_paths[indices[i]])
             plt.imshow(to_pil_image(img))
             plt.title('Class = {}'.format(classes[i]))
+        plt.tight_layout()
+        plt.show()
+
+    def viz_1sample(self, dl, ind):
+        cls = dl.dataset.ys[ind]
+        img = read_image(dl.dataset.im_paths[ind])
+        plt.imshow(to_pil_image(img))
+        plt.title('Class = {}'.format(cls))
+        plt.tight_layout()
         plt.show()
 
     def viz_2sample(self, dl, ind1, ind2):
@@ -565,7 +575,7 @@ class ScalableIF(BaseInfluenceFunction):
     def agg_influence_func(self, pair_idx, save=True):
         confusion_class_pairs = self.get_confusion_class_pairs()
         pair = confusion_class_pairs[pair_idx]
-        self.viz_2cls(5, self.dl_ev, self.testing_label, pair[0][0], pair[0][1])  # visualize confusion classes
+        self.viz_2cls(5, self.dl_ev, pair[0][0], pair[0][1])  # visualize confusion classes
 
         with open("Influential_data/{}_{}_confusion_grad4trainall_testpair{}.pkl".format(self.dataset_name, self.loss_type, pair_idx), "rb") as fp:  # Pickling
             grad4train = pickle.load(fp)
@@ -573,8 +583,8 @@ class ScalableIF(BaseInfluenceFunction):
         influence_values = calc_influential_func_sample(grad4train)
         influence_values = np.asarray(influence_values)
         training_sample_by_influence = influence_values.argsort()  # ascending
-        self.viz_sample(self.dl_tr, training_sample_by_influence[:10])  # helpful
-        self.viz_sample(self.dl_tr, training_sample_by_influence[-10:])  # harmful
+        self.viz_samples(self.dl_tr, training_sample_by_influence[:10])  # helpful
+        self.viz_samples(self.dl_tr, training_sample_by_influence[-10:])  # harmful
 
         helpful_indices = np.where(influence_values < 0)[0] # cache all helpful
         harmful_indices = np.where(influence_values > 0)[0] # cache all harmful

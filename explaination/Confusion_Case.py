@@ -209,56 +209,100 @@ if __name__ == '__main__':
 
     '''Analyze pairs with generalization error'''
     '''Step 1: Visualize all pairs (confuse), Find interesting pairs'''
-    test_nn_indices, test_nn_label, test_nn_indices_same_cls = IS.getNN_indices(IS.testing_embedding, IS.testing_label)
-    wrong_indices = (test_nn_label != IS.testing_label.detach().cpu().numpy().flatten()).nonzero()[0]
-    confuse_indices = test_nn_indices[wrong_indices]
-    print(len(confuse_indices))
-    assert len(wrong_indices) == len(confuse_indices)
-
-    # Same class 1st NN
-    wrong_test_nn_indices_same_cls = test_nn_indices_same_cls[wrong_indices]
-    assert len(wrong_indices) == len(wrong_test_nn_indices_same_cls)
-
-    IS.GradAnalysis( wrong_indices, confuse_indices, wrong_test_nn_indices_same_cls,
-                     IS.dl_ev, base_dir='Confuse_Vis')
-    exit()
+    # test_nn_indices, test_nn_label, test_nn_indices_same_cls = IS.getNN_indices(IS.testing_embedding, IS.testing_label)
+    # wrong_indices = (test_nn_label != IS.testing_label.detach().cpu().numpy().flatten()).nonzero()[0]
+    # confuse_indices = test_nn_indices[wrong_indices]
+    # print(len(confuse_indices))
+    # assert len(wrong_indices) == len(confuse_indices)
+    #
+    # # Same class 1st NN
+    # wrong_test_nn_indices_same_cls = test_nn_indices_same_cls[wrong_indices]
+    # assert len(wrong_indices) == len(wrong_test_nn_indices_same_cls)
+    #
+    # IS.GradAnalysis( wrong_indices, confuse_indices, wrong_test_nn_indices_same_cls,
+    #                  IS.dl_ev, base_dir='Confuse_Vis')
+    # exit()
 
     '''Step 2: Identify influential training points for a specific pair'''
     lines = open('explaination/{}_{}'.format(IS.dataset_name, 'ModelD_HumanS_pairs')).readlines()
     lookat_harmful = False
-    relabel_method = 'soft_IF'
+    relabel_method = 'soft_knn'
     base_dir = 'Confuse_pair_influential_data/{}'.format(IS.dataset_name)
-    os.makedirs(base_dir, exist_ok=True)
+    # os.makedirs(base_dir, exist_ok=True)
+    # all_features = IS.get_features()
+    # for line in tqdm(lines):
+    #     pair_ind1, pair_ind2 = line.strip().split(',')
+    #     pair_ind1, pair_ind2 = int(pair_ind1), int(pair_ind2)
+    #     if not os.path.exists('./{}/All_influence_{}_{}.npy'.format(base_dir, pair_ind1, pair_ind2)):
+    #         # sanity check: # IS.viz_2sample(IS.dl_ev, pair_ind1, pair_ind2)
+    #         training_sample_by_influence, influence_values = IS.single_influence_func(all_features, [pair_ind1], [pair_ind2])
+    #         helpful_indices = np.where(influence_values < 0)[0]
+    #         harmful_indices = np.where(influence_values > 0)[0]
+    #         np.save('./{}/Allhelpful_indices_{}_{}'.format(base_dir, pair_ind1, pair_ind2), helpful_indices)
+    #         np.save('./{}/Allharmful_indices_{}_{}'.format(base_dir, pair_ind1, pair_ind2), harmful_indices)
+    #         np.save('./{}/All_influence_{}_{}'.format(base_dir, pair_ind1, pair_ind2), influence_values)
+    #     else:
+    #         helpful_indices = np.load('./{}/Allhelpful_indices_{}_{}.npy'.format(base_dir, pair_ind1, pair_ind2))
+    #         harmful_indices = np.load('./{}/Allharmful_indices_{}_{}.npy'.format(base_dir, pair_ind1, pair_ind2))
+    #         influence_values = np.load('./{}/All_influence_{}_{}.npy'.format(base_dir, pair_ind1, pair_ind2))
+    #
+    #     # Global 1st NN
+    #     train_nn_indices, train_nn_label, train_nn_indices_same_cls = IS.getNN_indices(IS.train_embedding, IS.train_label)
+    #     assert len(train_nn_indices_same_cls) == len(train_nn_indices)
+    #     assert len(IS.train_label) == len(train_nn_indices)
+    #
+    #     '''Step 3: Save harmful indices as well as its neighboring indices'''
+    #     IS.calc_relabel_dict(lookat_harmful=lookat_harmful, relabel_method=relabel_method,
+    #                          harmful_indices=harmful_indices, helpful_indices=helpful_indices,
+    #                          train_nn_indices=train_nn_indices, train_nn_indices_same_cls=train_nn_indices_same_cls,
+    #                          base_dir=base_dir, pair_ind1=pair_ind1, pair_ind2=pair_ind2)
+    # exit()
 
-    all_features = IS.get_features()
+    # Visualize harmful/helpful training
+
+    vis_dir = 'Case_study/{}'.format(IS.dataset_name)
+    os.makedirs(vis_dir, exist_ok=True)
     for line in tqdm(lines):
         pair_ind1, pair_ind2 = line.strip().split(',')
         pair_ind1, pair_ind2 = int(pair_ind1), int(pair_ind2)
-        if not os.path.exists('./{}/All_influence_{}_{}.npy'.format(base_dir, pair_ind1, pair_ind2)):
-            # sanity check: # IS.viz_2sample(IS.dl_ev, pair_ind1, pair_ind2)
-            training_sample_by_influence, influence_values = IS.single_influence_func(all_features, [pair_ind1], [pair_ind2])
-            helpful_indices = np.where(influence_values < 0)[0]
-            harmful_indices = np.where(influence_values > 0)[0]
-            np.save('./{}/Allhelpful_indices_{}_{}'.format(base_dir, pair_ind1, pair_ind2), helpful_indices)
-            np.save('./{}/Allharmful_indices_{}_{}'.format(base_dir, pair_ind1, pair_ind2), harmful_indices)
-            np.save('./{}/All_influence_{}_{}'.format(base_dir, pair_ind1, pair_ind2), influence_values)
-        else:
-            helpful_indices = np.load('./{}/Allhelpful_indices_{}_{}.npy'.format(base_dir, pair_ind1, pair_ind2))
-            harmful_indices = np.load('./{}/Allharmful_indices_{}_{}.npy'.format(base_dir, pair_ind1, pair_ind2))
-            influence_values = np.load('./{}/All_influence_{}_{}.npy'.format(base_dir, pair_ind1, pair_ind2))
+        os.makedirs('./{}/{}_{}/'.format(vis_dir, pair_ind1, pair_ind2), exist_ok=True)
+        with open('./{}/Allrelabeldict_{}_{}_soft_knn.pkl'.format(base_dir, pair_ind1, pair_ind2), 'rb') as handle:
+            relabel_dict = pickle.load(handle)
 
-        # Global 1st NN
-        train_nn_indices, train_nn_label, train_nn_indices_same_cls = IS.getNN_indices(IS.train_embedding, IS.train_label)
-        assert len(train_nn_indices_same_cls) == len(train_nn_indices)
-        assert len(IS.train_label) == len(train_nn_indices)
+        for ind in relabel_dict.keys():
+            orig_cls = IS.dl_tr.dataset.ys[ind]
+            recommend_cls = relabel_dict[ind].argsort()[::-1][0]
+            if recommend_cls != orig_cls:
+                fig = plt.figure(figsize=(30, 15))
+                plt.subplot(2, 6, 1)
+                img = read_image(IS.dl_tr.dataset.im_paths[ind])
+                plt.imshow(to_pil_image(img))
+                plt.axis('off')
+                plt.title('Harmful Training', fontdict={'fontsize': 20})
 
-        '''Step 3: Save harmful indices as well as its neighboring indices'''
-        IS.calc_relabel_dict(lookat_harmful=lookat_harmful, relabel_method=relabel_method,
-                             harmful_indices=harmful_indices, helpful_indices=helpful_indices,
-                             train_nn_indices=train_nn_indices, train_nn_indices_same_cls=train_nn_indices_same_cls,
-                             base_dir=base_dir, pair_ind1=pair_ind1, pair_ind2=pair_ind2)
-    exit()
+                # sample images
+                orig_cls_indices = np.where(np.asarray(IS.dl_tr.dataset.ys) == orig_cls)[0]
+                recom_cls_indices = np.where(np.asarray(IS.dl_tr.dataset.ys) == recommend_cls)[0]
+                for i in range(5):
+                    plt.subplot(2, 6, i + 2)
+                    img = read_image(IS.dl_tr.dataset.im_paths[orig_cls_indices[i]])
+                    plt.imshow(to_pil_image(img))
+                    plt.axis('off')
+                    if i == 2:
+                        plt.title('Original Class = {}'.format(orig_cls), fontdict={'fontsize': 20})
 
+                for i in range(5):
+                    plt.subplot(2, 6, i + 3 + 5)
+                    img = read_image(IS.dl_tr.dataset.im_paths[recom_cls_indices[i]])
+                    plt.imshow(to_pil_image(img))
+                    plt.axis('off')
+                    if i == 2:
+                        plt.title('Recommend Class = {}'.format(recommend_cls), fontdict={'fontsize': 20})
+                plt.tight_layout()
+                # plt.show()
+                plt.savefig('./{}/{}_{}/harmful{}_{}.png'.format(vis_dir, pair_ind1, pair_ind2, lookat_harmful, ind))
+
+        break
     '''Step 4: Train with relabelled data'''
     # for line in tqdm(lines):
     #     torch.cuda.empty_cache()
@@ -280,28 +324,28 @@ if __name__ == '__main__':
     # exit()
 
     '''Step 5: Verify that the model after training is better?'''
-    new_features = IS.get_features()
-    _, recall, _ = evaluate(IS.model, IS.dl_ev, eval_nmi=False)
-    print(recall)
-    for line in lines:
-        pair_ind1, pair_ind2 = line.strip().split(',')
-        pair_ind1, pair_ind2 = int(pair_ind1), int(pair_ind2)
-        print('For pair: ', pair_ind1, pair_ind2)
-        IS.model = IS._load_model()  # reload the original weights
-        inter_dist_orig, _ = grad_confusion_pair(IS.model, new_features, [pair_ind1], [pair_ind2])
-        print('Original distance: ', inter_dist_orig)
-
-        new_weight_path = 'models/dvi_data_{}_{}_loss{}/ResNet_512_Model/Epoch_{}/{}_{}_trainval_{}_{}.pth'.format(
-                            dataset_name,
-                            seed,
-                            'ProxyNCA_prob_orig_{}_relabel_{}_{}'.format(relabel_method, pair_ind1, pair_ind2),
-                            5, dataset_name,
-                            dataset_name,
-                            512, seed)  # reload weights as new
-        IS.model.load_state_dict(torch.load(new_weight_path))
-        _, recall, _ = evaluate(IS.model, IS.dl_ev, eval_nmi=False)
-        print('After recall:', recall)
-        inter_dist_after, _ = grad_confusion_pair(IS.model, new_features, [pair_ind1], [pair_ind2])
-        print('After distance: ', inter_dist_after)
-
-
+    # new_features = IS.get_features()
+    # _, recall, _ = evaluate(IS.model, IS.dl_ev, eval_nmi=False)
+    # print(recall)
+    # for line in lines:
+    #     pair_ind1, pair_ind2 = line.strip().split(',')
+    #     pair_ind1, pair_ind2 = int(pair_ind1), int(pair_ind2)
+    #     print('For pair: ', pair_ind1, pair_ind2)
+    #     IS.model = IS._load_model()  # reload the original weights
+    #     inter_dist_orig, _ = grad_confusion_pair(IS.model, new_features, [pair_ind1], [pair_ind2])
+    #     print('Original distance: ', inter_dist_orig)
+    #
+    #     new_weight_path = 'models/dvi_data_{}_{}_loss{}/ResNet_512_Model/Epoch_{}/{}_{}_trainval_{}_{}.pth'.format(
+    #                         dataset_name,
+    #                         seed,
+    #                         'ProxyNCA_prob_orig_{}_relabel_{}_{}'.format(relabel_method, pair_ind1, pair_ind2),
+    #                         5, dataset_name,
+    #                         dataset_name,
+    #                         512, seed)  # reload weights as new
+    #     IS.model.load_state_dict(torch.load(new_weight_path))
+    #     _, recall, _ = evaluate(IS.model, IS.dl_ev, eval_nmi=False)
+    #     print('After recall:', recall)
+    #     inter_dist_after, _ = grad_confusion_pair(IS.model, new_features, [pair_ind1], [pair_ind2])
+    #     print('After distance: ', inter_dist_after)
+    #
+    #
