@@ -78,46 +78,46 @@ class SampleRelabel(ScalableIF):
             img2 = to_pil_image(read_image(dl.dataset.im_paths[ind2]))
             img3 = to_pil_image(read_image(dl.dataset.im_paths[ind3]))
 
-            cam_extractor1._hooks_enabled = True
-            model_copy.zero_grad()
-            emb1 = model_copy(dl.dataset.__getitem__(ind1)[0].unsqueeze(0).cuda())
-            emb2 = model_copy(dl.dataset.__getitem__(ind2)[0].unsqueeze(0).cuda())
-            activation_map2 = cam_extractor1(torch.dot(emb1.detach().squeeze(0), emb2.squeeze(0)))
-            result2, _ = overlay_mask(img2, to_pil_image(activation_map2[0].detach().cpu(), mode='F'), alpha=0.5)
-
-            cam_extractor2._hooks_enabled = True
-            model_copy.zero_grad()
-            emb1 = model_copy(dl.dataset.__getitem__(ind1)[0].unsqueeze(0).cuda())
-            emb3 = model_copy(dl.dataset.__getitem__(ind3)[0].unsqueeze(0).cuda())
-            activation_map3 = cam_extractor2(torch.dot(emb1.detach().squeeze(0), emb3.squeeze(0)))
-            result3, _ = overlay_mask(img3, to_pil_image(activation_map3[0].detach().cpu(), mode='F'), alpha=0.5)
+            # cam_extractor1._hooks_enabled = True
+            # model_copy.zero_grad()
+            # emb1 = model_copy(dl.dataset.__getitem__(ind1)[0].unsqueeze(0).cuda())
+            # emb2 = model_copy(dl.dataset.__getitem__(ind2)[0].unsqueeze(0).cuda())
+            # activation_map2 = cam_extractor1(torch.dot(emb1.detach().squeeze(0), emb2.squeeze(0)))
+            # result2, _ = overlay_mask(img2, to_pil_image(activation_map2[0].detach().cpu(), mode='F'), alpha=0.5)
+            #
+            # cam_extractor2._hooks_enabled = True
+            # model_copy.zero_grad()
+            # emb1 = model_copy(dl.dataset.__getitem__(ind1)[0].unsqueeze(0).cuda())
+            # emb3 = model_copy(dl.dataset.__getitem__(ind3)[0].unsqueeze(0).cuda())
+            # activation_map3 = cam_extractor2(torch.dot(emb1.detach().squeeze(0), emb3.squeeze(0)))
+            # result3, _ = overlay_mask(img3, to_pil_image(activation_map3[0].detach().cpu(), mode='F'), alpha=0.5)
 
             # Display it
             fig = plt.figure()
             fig.subplots_adjust(top=0.8)
 
-            ax = fig.add_subplot(2, 3, 1)
+            ax = fig.add_subplot(1, 3, 1)
             ax.imshow(img1)
-            ax.title.set_text('Ind = {}, Class = {}'.format(ind1, dl.dataset.ys[ind1]))
+            ax.title.set_text('Ind = {} \n Class = {}'.format(ind1, dl.dataset.ys[ind1]))
             plt.axis('off')
 
-            ax = fig.add_subplot(2, 3, 2)
+            ax = fig.add_subplot(1, 3, 2)
             ax.imshow(img2)
-            ax.title.set_text('Ind = {}, Class = {}'.format(ind2, dl.dataset.ys[ind2]))
+            ax.title.set_text('Ind = {} \n Class = {}'.format(ind2, dl.dataset.ys[ind2]))
             plt.axis('off')
 
-            ax = fig.add_subplot(2, 3, 3)
+            ax = fig.add_subplot(1, 3, 3)
             ax.imshow(img3)
-            ax.title.set_text('Ind = {}, Class = {}'.format(ind3, dl.dataset.ys[ind3]))
+            ax.title.set_text('Ind = {} \n Class = {}'.format(ind3, dl.dataset.ys[ind3]))
             plt.axis('off')
 
-            ax=fig.add_subplot(2, 3, 5)
-            ax.imshow(result2)
-            plt.axis('off')
-
-            ax=fig.add_subplot(2, 3, 6)
-            ax.imshow(result3)
-            plt.axis('off')
+            # ax=fig.add_subplot(2, 3, 5)
+            # ax.imshow(result2)
+            # plt.axis('off')
+            #
+            # ax=fig.add_subplot(2, 3, 6)
+            # ax.imshow(result3)
+            # plt.axis('off')
             # plt.show()
             plt.savefig('./{}/{}/{}_{}.png'.format(base_dir, self.dataset_name,
                                                    ind1, ind2))
@@ -200,8 +200,8 @@ class SampleRelabel(ScalableIF):
 if __name__ == '__main__':
 
     loss_type = 'ProxyNCA_prob_orig'; sz_embedding = 512; epoch = 40; test_crop = False
-    # dataset_name = 'cub';  config_name = 'cub'; seed = 0
-    dataset_name = 'cars'; config_name = 'cars'; seed = 3
+    dataset_name = 'cub';  config_name = 'cub'; seed = 0
+    # dataset_name = 'cars'; config_name = 'cars'; seed = 3
     # dataset_name = 'inshop'; config_name = 'inshop'; seed = 4
     # dataset_name = 'sop'; config_name = 'sop'; seed = 3
 
@@ -209,19 +209,19 @@ if __name__ == '__main__':
 
     '''Analyze pairs with generalization error'''
     '''Step 1: Visualize all pairs (confuse), Find interesting pairs'''
-    # test_nn_indices, test_nn_label, test_nn_indices_same_cls = DF.getNN_indices(DF.testing_embedding, DF.testing_label)
-    # wrong_indices = (test_nn_label != DF.testing_label.detach().cpu().numpy().flatten()).nonzero()[0]
-    # confuse_indices = test_nn_indices[wrong_indices]
-    # print(len(confuse_indices))
-    # assert len(wrong_indices) == len(confuse_indices)
-    #
-    # # Same class 1st NN
-    # wrong_test_nn_indices_same_cls = test_nn_indices_same_cls[wrong_indices]
-    # assert len(wrong_indices) == len(wrong_test_nn_indices_same_cls)
-    #
-    # DF.GradAnalysis( wrong_indices, confuse_indices, wrong_test_nn_indices_same_cls,
-    #                  DF.dl_ev, base_dir='Confuse_Vis')
-    # exit()
+    test_nn_indices, test_nn_label, test_nn_indices_same_cls = IS.getNN_indices(IS.testing_embedding, IS.testing_label)
+    wrong_indices = (test_nn_label != IS.testing_label.detach().cpu().numpy().flatten()).nonzero()[0]
+    confuse_indices = test_nn_indices[wrong_indices]
+    print(len(confuse_indices))
+    assert len(wrong_indices) == len(confuse_indices)
+
+    # Same class 1st NN
+    wrong_test_nn_indices_same_cls = test_nn_indices_same_cls[wrong_indices]
+    assert len(wrong_indices) == len(wrong_test_nn_indices_same_cls)
+
+    IS.GradAnalysis( wrong_indices, confuse_indices, wrong_test_nn_indices_same_cls,
+                     IS.dl_ev, base_dir='Confuse_Vis')
+    exit()
 
     '''Step 2: Identify influential training points for a specific pair'''
     lines = open('explaination/{}_{}'.format(IS.dataset_name, 'ModelD_HumanS_pairs')).readlines()
