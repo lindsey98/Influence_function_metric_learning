@@ -1,12 +1,8 @@
 import os
-from explaination.Confusion_Case import SampleRelabel
-import torch
-from Influence_function.ScalableIF_utils import grad_confusion, loss_change_train, calc_influential_func_sample, loss_change_train_relabel, grad_confusion_pair
+from Influence_function.ScalableIF_utils import grad_confusion_pair
 from Influence_function.IF_utils import inverse_hessian_product, calc_influential_func_orig
-from Influence_function.influence_function import ScalableIF, OrigIF, MCScalableIF
-from explaination.Confusion_Case import kNN_label_pred
+from Influence_function.influence_function import MCScalableIF
 import numpy as np
-import matplotlib.pyplot as plt
 import time
 os.environ['CUDA_VISIBLE_DEVICES'] = "0"
 
