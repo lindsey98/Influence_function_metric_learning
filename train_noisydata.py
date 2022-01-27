@@ -26,17 +26,18 @@ parser.add_argument('--init_eval', default=False, action='store_true')
 parser.add_argument('--apex', default=False, action='store_true')
 parser.add_argument('--warmup_k', default=5, type=int)
 
-parser.add_argument('--dataset', default='inshop_noisy')
-parser.add_argument('--seed', default=4, type=int)
+parser.add_argument('--dataset', default='cub_noisy')
+parser.add_argument('--seed', default=0, type=int)
 parser.add_argument('--eval_nmi', default=True, action='store_true')
 parser.add_argument('--embedding-size', default = 512, type=int, dest = 'sz_embedding')
-parser.add_argument('--config', default='config/inshop.json')
+parser.add_argument('--config', default='config/cub.json')
 parser.add_argument('--mode', default='trainval', choices=['train', 'trainval',
                                                            'test', 'testontrain'],
                     help='train with train data or train with trainval')
 parser.add_argument('--batch-size', default = 32, type=int, dest = 'sz_batch')
 parser.add_argument('--no_warmup', default=False, action='store_true')
-parser.add_argument('--loss-type', default='ProxyNCA_prob_orig_noisy', type=str)
+parser.add_argument('--mislabel_percentage', default=0.01, type=float)
+parser.add_argument('--loss-type', default='ProxyNCA_prob_orig_noisy_0.01', type=str)
 parser.add_argument('--workers', default = 4, type=int, dest = 'nb_workers')
 
 args = parser.parse_args()
@@ -189,38 +190,16 @@ if __name__ == '__main__':
     )
 
     if 'inshop' not in args.dataset:
-        tr_dataset_clean = dataset.load(
-            name=args.dataset.split('_noisy')[0],
-            root=dataset_config['dataset'][args.dataset]['root'],
-            source=dataset_config['dataset'][args.dataset]['source'],
-            classes=dataset_config['dataset'][args.dataset]['classes']['trainval'],
-            transform=train_transform,
-        )
         tr_dataset = dataset.load_noisy(
                 name = args.dataset,
                 root = dataset_config['dataset'][args.dataset]['root'],
                 source = dataset_config['dataset'][args.dataset]['source'],
                 classes = dataset_config['dataset'][args.dataset]['classes']['trainval'],
                 transform = train_transform,
-                seed = args.seed
-        )
-        tr_dataset_check = dataset.load_noisy(
-                name = args.dataset,
-                root = dataset_config['dataset'][args.dataset]['root'],
-                source = dataset_config['dataset'][args.dataset]['source'],
-                classes = dataset_config['dataset'][args.dataset]['classes']['trainval'],
-                transform = train_transform,
-                seed = args.seed
+                seed = args.seed,
+                mislabel_percentage=args.mislabel_percentage
         )
     else:
-        tr_dataset_clean = dataset.load_inshop(
-            name=args.dataset.split('_noisy')[0],
-            root=dataset_config['dataset'][args.dataset]['root'],
-            source=dataset_config['dataset'][args.dataset]['source'],
-            classes=dataset_config['dataset'][args.dataset]['classes']['trainval'],
-            transform=train_transform,
-            dset_type='train'
-        )
         tr_dataset = dataset.load_noisy_inshop(
             name=args.dataset,
             root=dataset_config['dataset'][args.dataset]['root'],
@@ -228,7 +207,8 @@ if __name__ == '__main__':
             classes=dataset_config['dataset'][args.dataset]['classes']['trainval'],
             transform=train_transform,
             seed=args.seed,
-            dset_type='train'
+            dset_type='train',
+            mislabel_percentage=args.mislabel_percentage
         )
 
     num_class_per_batch = config['num_class_per_batch']
@@ -248,22 +228,6 @@ if __name__ == '__main__':
         num_workers = args.nb_workers,
     )
 
-    # training dataloader without shuffling and without transformation
-    # dl_tr_noshuffle = torch.utils.data.DataLoader(
-    #         dataset=dataset.load(
-    #                 name=args.dataset,
-    #                 root=dataset_config['dataset'][args.dataset]['root'],
-    #                 source=dataset_config['dataset'][args.dataset]['source'],
-    #                 classes=dataset_config['dataset'][args.dataset]['classes']['trainval'],
-    #                 transform=dataset.utils.make_transform(
-    #                     **dataset_config[transform_key],
-    #                     is_train=False
-    #                 )
-    #             ),
-    #         num_workers = args.nb_workers,
-    #         shuffle=False,
-    #         batch_size=64,
-    # )
 
     print("===")
     '''Model'''

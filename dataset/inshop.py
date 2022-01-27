@@ -193,7 +193,7 @@ class InShopNoisy(BaseDatasetModNoisy):
     set is partitioned into a query set (14,218 images of 3,985 classes)
     and a gallery set (12, 612 images of 3, 985 classes)
     """
-    def __init__(self, root, source, classes, transform, dset_type='train', seed=0):
+    def __init__(self, root, source, classes, transform, dset_type='train', seed=0, mislabel_percentage=0.01):
         BaseDatasetMod.__init__(self, root, source, classes, transform)
 
         with open(
@@ -302,7 +302,7 @@ class InShopNoisy(BaseDatasetModNoisy):
 
             # noisy data injection 5% mislabelled data
             np.random.seed(seed)
-            self.noisy_indices = np.random.choice(self.I, int(0.05 * len(self.I)), replace=False)
+            self.noisy_indices = np.random.choice(self.I, int(mislabel_percentage * len(self.I)), replace=False)
             for ind in self.noisy_indices:
                 orig_y = self.ys[ind]
                 if orig_y + 5 > max(self.classes):

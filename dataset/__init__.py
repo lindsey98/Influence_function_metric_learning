@@ -23,14 +23,16 @@ _type = {
 
 }
 
-def load_noisy(name, root, source, classes, transform = None, seed=0):
-    return _type[name](root = root, source = source, classes = classes, transform = transform, seed=seed)
+def load_noisy(name, root, source, classes, transform = None, seed=0, mislabel_percentage=0.01):
+    return _type[name](root = root, source = source, classes = classes, transform = transform, seed=seed,
+                       mislabel_percentage=mislabel_percentage)
 
-def load_noisy_inshop(name, root, source, classes, transform = None, dset_type='train', seed=0):
+def load_noisy_inshop(name, root, source, classes, transform = None, dset_type='train', seed=0, mislabel_percentage=0.01):
     return _type[name](root=root, source=source, classes=classes,
                        transform=transform,
                        dset_type=dset_type,
-                       seed=seed)
+                       seed=seed,
+                       mislabel_percentage=mislabel_percentage)
 
 def load(name, root, source, classes, transform = None):
     return _type[name](root = root, source = source, classes = classes, transform = transform)

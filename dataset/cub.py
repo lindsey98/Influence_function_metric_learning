@@ -20,7 +20,7 @@ class CUBirds(BaseDatasetMod):
 
 
 class CUBirdsNoisy(BaseDatasetMod):
-    def __init__(self, root, source, classes, transform = None, seed=0):
+    def __init__(self, root, source, classes, transform = None, seed=0, mislabel_percentage=0.01):
         BaseDatasetMod.__init__(self, root, source, classes, transform)
         index = 0
         for i in torchvision.datasets.ImageFolder(root = os.path.join(root, 'images')).imgs:
@@ -37,7 +37,7 @@ class CUBirdsNoisy(BaseDatasetMod):
 
         # noisy data injection 5% mislabelled data
         np.random.seed(seed)
-        self.noisy_indices = np.random.choice(self.I, int(0.1*len(self.I)), replace=False)
+        self.noisy_indices = np.random.choice(self.I, int(mislabel_percentage*len(self.I)), replace=False)
         for ind in self.noisy_indices:
             orig_y = self.ys[ind]
             if orig_y + 5 > max(self.classes):
