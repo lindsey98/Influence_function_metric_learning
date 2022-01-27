@@ -3,7 +3,7 @@ import os
 import matplotlib.pyplot as plt
 from torchvision.transforms.functional import to_pil_image
 from torchvision.io.image import read_image
-from Influence_function.influence_function import ScalableIF
+from Influence_function.influence_function import MCScalableIF
 from explaination.CAM_methods import *
 from Influence_function.ScalableIF_utils import *
 from Influence_function.IF_utils import *
@@ -12,7 +12,7 @@ from evaluation import assign_by_euclidian_at_k_indices
 import sklearn
 import pickle
 from utils import evaluate
-os.environ['CUDA_VISIBLE_DEVICES'] = "1, 0"
+os.environ['CUDA_VISIBLE_DEVICES'] = "0"
 
 # knn monitor as in InstDisc https://arxiv.org/abs/1805.01978
 # implementation follows http://github.com/zhirongw/lemniscate.pytorch and https://github.com/leftthomas/SimCLR, https://github.com/PatrickHua/SimSiam/blob/main/tools/knn_monitor.py
@@ -37,7 +37,7 @@ def kNN_label_pred(query_indices, embeddings, labels, nb_classes, knn_k):
     pred_labels = torch.argsort(pred_scores, dim=-1, descending=True) # (B, C)
     return pred_labels, pred_scores
 
-class SampleRelabel(ScalableIF):
+class SampleRelabel(MCScalableIF):
     def __init__(self, dataset_name, seed, loss_type, config_name,
                  test_crop=False, sz_embedding=512, epoch=40):
 
@@ -45,11 +45,9 @@ class SampleRelabel(ScalableIF):
                           test_crop, sz_embedding, epoch)
 
     def getNN_indices(self, embedding, label):
-
         # global 1st NN
         nn_indices, nn_label = assign_by_euclidian_at_k_indices(embedding, label, 1)
         nn_indices, nn_label = nn_indices.flatten(), nn_label.flatten()
-
         # Same class 1st NN
         distances = sklearn.metrics.pairwise.pairwise_distances(embedding)  # (N_train, N_train)
         diff_cls_mask = (label[:, None] != label).detach().cpu().numpy().nonzero()
@@ -123,7 +121,6 @@ class SampleRelabel(ScalableIF):
                                                    ind1, ind2))
             plt.close()
 
-
     def calc_relabel_dict(self, lookat_harmful, relabel_method,
                           harmful_indices, helpful_indices, train_nn_indices, train_nn_indices_same_cls,
                           base_dir, pair_ind1, pair_ind2):
@@ -164,12 +161,12 @@ class SampleRelabel(ScalableIF):
             theta_orig = self.model.module[-1].weight.data
             test_features = self.get_features()
             torch.cuda.empty_cache()
-            theta = self.single_get_theta(theta_orig, test_features, [pair_ind1], [pair_ind2])
+            theta = self.get_theta_newton_step_single(theta_orig, test_features, [pair_ind1], [pair_ind2], descent=False)
 
             unique_labels, unique_counts = torch.unique(self.train_label, return_counts=True)
             median_shots_percls = unique_counts.median().item()
             pred_label, _ = kNN_label_pred(query_indices=top_indices, embeddings=self.train_embedding, labels=self.train_label,
-                                             nb_classes=self.dl_tr.dataset.nb_classes(), knn_k=median_shots_percls)
+                                           nb_classes=self.dl_tr.dataset.nb_classes(), knn_k=median_shots_percls)
             pred_label = pred_label[:, :5] # top 5 relabel candidate
             relabel_candidate = {}
             for i, kk in enumerate(top_indices):
@@ -188,7 +185,6 @@ class SampleRelabel(ScalableIF):
             for kk in range(len(top_indices)):
                 relabel_dict[top_indices[kk]] = np.zeros(self.dl_tr.dataset.nb_classes())
                 relabel_dict[top_indices[kk]][pred_label[kk].long()] = prob_relabel[kk]
-                pass
 
             with open('./{}/Allrelabeldict_{}_{}_soft_IF.pkl'.format(base_dir, pair_ind1, pair_ind2), 'wb') as handle:
                 pickle.dump(relabel_dict, handle)
@@ -200,9 +196,9 @@ class SampleRelabel(ScalableIF):
 if __name__ == '__main__':
 
     loss_type = 'ProxyNCA_prob_orig'; sz_embedding = 512; epoch = 40; test_crop = False
-    dataset_name = 'cub';  config_name = 'cub'; seed = 0
+    # dataset_name = 'cub';  config_name = 'cub'; seed = 0
     # dataset_name = 'cars'; config_name = 'cars'; seed = 3
-    # dataset_name = 'inshop'; config_name = 'inshop'; seed = 4
+    dataset_name = 'inshop'; config_name = 'inshop'; seed = 4
     # dataset_name = 'sop'; config_name = 'sop'; seed = 3
 
     IS = SampleRelabel(dataset_name, seed, loss_type, config_name, test_crop)
@@ -278,12 +274,15 @@ if __name__ == '__main__':
                 img = read_image(IS.dl_tr.dataset.im_paths[ind])
                 plt.imshow(to_pil_image(img))
                 plt.axis('off')
-                plt.title('Harmful Training', fontdict={'fontsize': 20})
+                if lookat_harmful:
+                    plt.title('Harmful Training', fontdict={'fontsize': 20})
+                else:
+                    plt.title('Helpful Training', fontdict={'fontsize': 20})
 
                 # sample images
                 orig_cls_indices = np.where(np.asarray(IS.dl_tr.dataset.ys) == orig_cls)[0]
                 recom_cls_indices = np.where(np.asarray(IS.dl_tr.dataset.ys) == recommend_cls)[0]
-                for i in range(5):
+                for i in range(min(5, len(orig_cls_indices))):
                     plt.subplot(2, 6, i + 2)
                     img = read_image(IS.dl_tr.dataset.im_paths[orig_cls_indices[i]])
                     plt.imshow(to_pil_image(img))
@@ -291,7 +290,7 @@ if __name__ == '__main__':
                     if i == 2:
                         plt.title('Original Class = {}'.format(orig_cls), fontdict={'fontsize': 20})
 
-                for i in range(5):
+                for i in range(min(5, len(recom_cls_indices))):
                     plt.subplot(2, 6, i + 3 + 5)
                     img = read_image(IS.dl_tr.dataset.im_paths[recom_cls_indices[i]])
                     plt.imshow(to_pil_image(img))
@@ -303,6 +302,7 @@ if __name__ == '__main__':
                 plt.savefig('./{}/{}_{}/harmful{}_{}.png'.format(vis_dir, pair_ind1, pair_ind2, lookat_harmful, ind))
 
         break
+
     '''Step 4: Train with relabelled data'''
     # for line in tqdm(lines):
     #     torch.cuda.empty_cache()
@@ -347,5 +347,3 @@ if __name__ == '__main__':
     #     print('After recall:', recall)
     #     inter_dist_after, _ = grad_confusion_pair(IS.model, new_features, [pair_ind1], [pair_ind2])
     #     print('After distance: ', inter_dist_after)
-    #
-    #

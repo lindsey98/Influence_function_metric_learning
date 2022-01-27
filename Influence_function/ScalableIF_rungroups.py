@@ -2,7 +2,7 @@
 import os
 from Influence_function.ScalableIF_utils import *
 from Influence_function.IF_utils import *
-from Influence_function.influence_function import ScalableIF
+from Influence_function.influence_function import MCScalableIF
 os.environ['CUDA_VISIBLE_DEVICES'] = "1"
 
 if __name__ == '__main__':
@@ -13,7 +13,7 @@ if __name__ == '__main__':
     # dataset_name = 'inshop'; config_name = 'inshop'; seed = 4
     dataset_name = 'sop'; config_name = 'sop'; seed = 3
 
-    IS = ScalableIF(dataset_name, seed, loss_type, config_name, test_crop, sz_embedding, epoch)
+    IS = MCScalableIF(dataset_name, seed, loss_type, config_name, test_crop, sz_embedding, epoch)
 
     '''Other: get confusion (before VS after)'''
     # FIXME: inter class distance should be computed based on original confusion pairs
@@ -60,7 +60,7 @@ if __name__ == '__main__':
     #
     '''Step 1: Cache all confusion gradient to parameters'''
     confusion_class_pairs = IS.get_confusion_class_pairs()
-    IS.agg_get_theta(confusion_class_pairs)
+    IS.cache_agg_get_theta(confusion_class_pairs)
 
     '''Step 2: Cache training class loss changes'''
     for cls_idx in range(len(confusion_class_pairs)):
@@ -68,10 +68,10 @@ if __name__ == '__main__':
         theta_dict = torch.load("Influential_data/{}_{}_confusion_theta_test_{}.pth".format(IS.dataset_name, IS.loss_type, i))
         theta = theta_dict['theta']
         theta_hat = theta_dict['theta_hat']
-        IS.cache_grad_loss_train_all(theta, theta_hat, cls_idx)
+        IS.get_grad_loss_train_all(theta, theta_hat, cls_idx, save=True)
 
     '''Step 3: Calc influence functions'''
     for cls_idx in range(len(confusion_class_pairs)):
-        IS.agg_influence_func(cls_idx)
+        IS.group_influence_func(cls_idx)
     exit()
 

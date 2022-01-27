@@ -1,6 +1,6 @@
 
 import os
-from Influence_function.influence_function import ScalableIF
+from Influence_function.influence_function import MCScalableIF
 from Influence_function.ScalableIF_utils import *
 from evaluation import assign_by_euclidian_at_k_indices
 os.environ['CUDA_VISIBLE_DEVICES'] = "1, 0"
@@ -13,7 +13,7 @@ if __name__ == '__main__':
     # dataset_name = 'inshop'; config_name = 'inshop'; seed = 4
     dataset_name = 'sop'; config_name = 'sop'; seed = 3
 
-    IS = ScalableIF(dataset_name, seed, loss_type, config_name, test_crop)
+    IS = MCScalableIF(dataset_name, seed, loss_type, config_name, test_crop)
 
     '''Analyze confusing features for all confusion classes'''
     '''Step 1: Get all wrong pairs'''

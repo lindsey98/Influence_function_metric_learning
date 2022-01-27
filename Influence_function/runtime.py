@@ -39,7 +39,7 @@ if __name__ == '__main__':
         print(pair)
         '''============ Our Influence function =================='''
         start_time = time.time()
-        mean_deltaD_deltaL = IS.MC_estimate_pair(pair, num_thetas=1)
+        mean_deltaD_deltaL = IS.MC_estimate_single(pair, num_thetas=1)
         influence_values = np.asarray(mean_deltaD_deltaL)
         print('EIF runtime:', time.time() - start_time)
 
