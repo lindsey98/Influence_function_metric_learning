@@ -2,8 +2,13 @@
     "name": "str('example')",
     "gpu_id": "int(0)",
     "criterion": {
-        "type": "loss.ProxyAnchor_reweight",
+        "type": "loss.SoftTriple_reweight",
         "args": {
+            "la": "20",
+            "gamma": "0.1",
+            "tau": "0.2",
+            "margin": "0.01",
+            "K": "1"
         }
     },
     "lr_scheduler": {

@@ -234,12 +234,13 @@ class ProxyAnchor_reweight(torch.nn.Module):
         self.alpha = alpha
 
     def forward(self, X, indices, T, weights):
-        P = self.proxies
-        P = F.normalize(P, p=2, dim=-1)
+        P = F.normalize(self.proxies, p=2, dim=-1)
         X = F.normalize(X, p=2, dim=-1)
 
-        cos = F.linear(X, P)  # Calcluate cosine similarity
-        P_one_hot = binarize_and_smooth_labels(T=T, nb_classes=self.nb_classes)
+        cos = F.linear(X, P)  # Calcluate cosine similarity (N, C)
+        P_one_hot = binarize_and_smooth_labels(
+                    T=T,
+                    nb_classes=self.nb_classes)
         N_one_hot = 1 - P_one_hot
 
         pos_exp = weights.unsqueeze(-1) * torch.exp(-self.alpha * (cos - self.mrg)) # (N, C)
@@ -287,15 +288,18 @@ class SoftTriple(torch.nn.Module):
         simClass = torch.sum(prob * simStruc, dim=2) # (B, nb_classes)
 
         marginM = torch.zeros(simClass.shape).cuda()
-        marginM[torch.arange(0, marginM.shape[0]), T] = self.margin # (B, nb_classes)
-        loss = F.cross_entropy(self.la * (simClass-marginM), T) # scalar
+        marginM[torch.arange(0, marginM.shape[0]), T.long()] = self.margin # (B, nb_classes)
+        T = binarize_and_smooth_labels(
+            T=T, nb_classes=len(P), smoothing_const=0
+        )
+        loss = torch.sum(- T * F.log_softmax(self.la * (simClass - marginM), -1), -1)
 
         if self.tau > 0 and self.K > 1:
             simCenter = P.matmul(P.t()) # (nb_classes*K, nb_classes*K)
             reg = torch.sum(torch.sqrt(2.0 + 1e-5 - 2.*simCenter[self.weight])) / (self.nb_classes * self.K * (self.K-1.))
-            return loss + self.tau * reg
+            return loss.mean() + self.tau * reg
         else:
-            return loss
+            return loss.mean()
 
 class SoftTriple_reweight(torch.nn.Module):
     def __init__(self, la, gamma, tau, margin, K,
@@ -327,12 +331,16 @@ class SoftTriple_reweight(torch.nn.Module):
         simClass = torch.sum(prob * simStruc, dim=2) # (B, nb_classes)
 
         marginM = torch.zeros(simClass.shape).cuda()
-        marginM[torch.arange(0, marginM.shape[0]), T] = self.margin # (B, nb_classes)
+
+        marginM[torch.arange(0, marginM.shape[0]), T.long()] = self.margin # (B, nb_classes)
+        T = binarize_and_smooth_labels(
+            T=T, nb_classes=len(P), smoothing_const=0
+        )
         loss = weights * torch.sum(- T * F.log_softmax(self.la * (simClass-marginM), -1), -1)
 
         if self.tau > 0 and self.K > 1:
             simCenter = P.matmul(P.t()) # (nb_classes*K, nb_classes*K)
             reg = torch.sum(torch.sqrt(2.0 + 1e-5 - 2.*simCenter[self.weight])) / (self.nb_classes * self.K * (self.K-1.))
-            return loss + self.tau * reg
+            return loss.mean() + self.tau * reg
         else:
-            return loss
+            return loss.mean()

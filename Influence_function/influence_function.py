@@ -199,8 +199,8 @@ class BaseInfluenceFunction():
 
         return confusion_class_pairs
 
-    def viz_cls(self, top_bottomk, dl, label, cls):
-        ind_cls = np.where(label.detach().cpu().numpy() == cls)[0]
+    def viz_cls(self, top_bottomk, dl, cls):
+        ind_cls = np.where(np.asarray(dl.dataset.ys) == cls)[0]
         for i in range(top_bottomk):
             plt.subplot(1, top_bottomk, i + 1)
             img = read_image(dl.dataset.im_paths[ind_cls[i]])
@@ -274,72 +274,6 @@ class MCScalableIF(BaseInfluenceFunction):
             with open("Influential_data/{}_{}_confusion_grad4trainall_testpair{}.pkl".format(self.dataset_name, self.loss_type, pair_idx), "wb") as fp:  # Pickling
                 pickle.dump(grad_loss, fp)
         return grad_loss
-
-    def agg_get_theta(self, all_features, wrong_cls, confused_classes, steps=1, lr=0.001):
-
-        theta_orig = self.model.module[-1].weight.data
-        torch.cuda.empty_cache()
-
-        # revise back the weights
-        theta = theta_orig.clone()
-
-        # Record original inter-class distance
-        inter_dist_orig, _ = grad_confusion(self.model, all_features, wrong_cls, confused_classes,
-                                            self.testing_nn_label, self.testing_label,
-                                            self.testing_nn_indices)  # dD/dtheta
-        print("Original confusion: ", inter_dist_orig)
-
-        # Optimization
-        for _ in range(steps):
-            inter_dist, v = grad_confusion(self.model, all_features, wrong_cls, confused_classes,
-                                           self.testing_nn_label, self.testing_label,
-                                           self.testing_nn_indices)  # dD/dtheta
-            print("Confusion: ", inter_dist)
-            if inter_dist - inter_dist_orig >= 1.:  # FIXME: stopping criteria threshold selection
-                break
-            theta_new = theta + lr * v[0].to(theta.device)  # gradient ascent
-            theta = theta_new
-            self.model.module[-1].weight.data = theta
-
-        self.model.module[-1].weight.data = theta_orig
-        return theta
-
-    def cache_agg_get_theta(self, classes, steps=1, lr=0.001):
-
-        theta_orig = self.model.module[-1].weight.data
-        torch.cuda.empty_cache()
-        all_features = self.get_features()  # (N, 2048)
-
-        for pair in classes:
-            wrong_cls = pair[0][0]
-            confused_classes = [x[1] for x in pair]
-
-            # revise back the weights
-            self.model.module[-1].weight.data = theta_orig
-            theta = theta_orig.clone()
-
-            # Record original inter-class distance
-            inter_dist_orig, _ = grad_confusion(self.model, all_features, wrong_cls, confused_classes,
-                                                self.testing_nn_label, self.testing_label,
-                                                self.testing_nn_indices)  # dD/dtheta
-            print("Original confusion: ", inter_dist_orig)
-
-            # Optimization
-            for _ in range(steps):
-                inter_dist, v = grad_confusion(self.model, all_features, wrong_cls, confused_classes,
-                                               self.testing_nn_label, self.testing_label,
-                                               self.testing_nn_indices)  # dD/dtheta
-                print("Confusion: ", inter_dist)
-                if inter_dist - inter_dist_orig >= 1.:  # FIXME: stopping criteria threshold selection
-                    break
-                theta_new = theta + lr * v[0].to(theta.device)  # gradient ascent
-                theta = theta_new
-                self.model.module[-1].weight.data = theta
-
-            theta_dict = {'theta': theta_orig, 'theta_hat': theta}
-            torch.save(theta_dict, "Influential_data/{}_{}_confusion_theta_test_{}.pth".format(self.dataset_name, self.loss_type, wrong_cls))
-
-        self.model.module[-1].weight.data = theta_orig
 
     def get_theta_newton_step_group(self, all_features, wrong_cls, confuse_classes,
                                     steps=1, lr=0.001, descent=False):
@@ -458,7 +392,7 @@ class MCScalableIF(BaseInfluenceFunction):
         self.model.module[-1].weight.data = theta_orig
         return new_theta.unsqueeze(0), deltaL_deltaD
 
-    def MC_estimate_group(self, pair, num_thetas=2):
+    def MC_estimate_group(self, pair, steps, num_thetas=2):
 
         theta_orig = self.model.module[-1].weight.data  # original theta
         torch.cuda.empty_cache()
@@ -477,6 +411,7 @@ class MCScalableIF(BaseInfluenceFunction):
             if kk == 0:
                 ''' first theta is the steepest ascent direction '''
                 deltaD, deltaL, theta_new = self.get_theta_newton_step_group(all_features, wrong_cls, confused_classes,
+                                                                             steps=steps,
                                                                              descent=False)
                 deltaL_deltaD.append(deltaL / (deltaD + 1e-8))
                 theta_list = torch.cat([theta_list, theta_new.detach().cpu().unsqueeze(0)], dim=0)
@@ -484,6 +419,7 @@ class MCScalableIF(BaseInfluenceFunction):
             elif kk == 1:
                 '''second theta is the steepest descent direction'''
                 deltaD, deltaL, theta_new = self.get_theta_newton_step_group(all_features, wrong_cls, confused_classes,
+                                                                             steps=steps,
                                                                              descent=True)
                 deltaL_deltaD.append(deltaL / (deltaD + 1e-8))
                 theta_list = torch.cat([theta_list, theta_new.detach().cpu().unsqueeze(0)], dim=0)
@@ -503,8 +439,8 @@ class MCScalableIF(BaseInfluenceFunction):
 
         self.model.module[-1].weight.data = theta_orig
         # Take average deltaD_deltaL
-        mean_deltaD_deltaL = np.mean(np.stack(deltaL_deltaD), axis=0)
-        return mean_deltaD_deltaL
+        mean_deltaL_deltaD = np.mean(np.stack(deltaL_deltaD), axis=0)
+        return mean_deltaL_deltaD
 
     def MC_estimate_single(self, pair, num_thetas=2):
 
@@ -549,34 +485,8 @@ class MCScalableIF(BaseInfluenceFunction):
 
         self.model.module[-1].weight.data = theta_orig
         # Take average deltaD_deltaL
-        mean_deltaD_deltaL = np.mean(np.stack(deltaL_deltaD), axis=0)
-        return mean_deltaD_deltaL
-
-
-    def group_influence_func(self, pair_idx, save=True):
-        confusion_class_pairs = self.get_confusion_class_pairs()
-        pair = confusion_class_pairs[pair_idx]
-        self.viz_2cls(5, self.dl_ev, pair[0][0], pair[0][1])  # visualize confusion classes
-
-        with open("Influential_data/{}_{}_confusion_grad4trainall_testpair{}.pkl".format(self.dataset_name, self.loss_type, pair_idx), "rb") as fp:  # Pickling
-            grad4train = pickle.load(fp)
-
-        influence_values = calc_influential_func_sample(grad4train)
-        influence_values = np.asarray(influence_values)
-        training_sample_by_influence = influence_values.argsort()  # ascending
-        self.viz_samples(self.dl_tr, training_sample_by_influence[:10])  # helpful
-        self.viz_samples(self.dl_tr, training_sample_by_influence[-10:])  # harmful
-
-        helpful_indices = np.where(influence_values < 0)[0]  # cache all helpful
-        harmful_indices = np.where(influence_values > 0)[0]  # cache all harmful
-        if save:
-            np.save("Influential_data/{}_{}_helpful_testcls{}".format(self.dataset_name, self.loss_type, pair_idx),
-                    helpful_indices)
-            np.save("Influential_data/{}_{}_harmful_testcls{}".format(self.dataset_name, self.loss_type, pair_idx),
-                    harmful_indices)
-        else:
-            return helpful_indices, harmful_indices, influence_values
-
+        mean_deltaL_deltaD = np.mean(np.stack(deltaL_deltaD), axis=0)
+        return mean_deltaL_deltaD
 
     def single_influence_func(self, all_features, wrong_indices, confuse_indices):
 
