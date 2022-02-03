@@ -11,12 +11,13 @@ if __name__ == '__main__':
     # loss_type = 'ProxyNCA_prob_orig'; dataset_name = 'inshop'; config_name = 'inshop'; seed = 4
     # loss_type = 'ProxyNCA_prob_orig'; dataset_name = 'sop'; config_name = 'sop'; seed = 3
 
-    loss_type = 'ProxyAnchor'; dataset_name = 'cub'; config_name = 'cub'; seed = 4
+    # loss_type = 'ProxyAnchor'; dataset_name = 'cub'; config_name = 'cub'; seed = 4
     # loss_type = 'ProxyAnchor'; dataset_name = 'cars'; config_name = 'cars'; seed = 0
     # loss_type = 'ProxyAnchor'; dataset_name = 'inshop'; config_name = 'inshop'; seed = 2
     # loss_type = 'ProxyAnchor'; dataset_name = 'sop'; config_name = 'sop'; seed = 0
 
     # loss_type = 'SoftTriple'; dataset_name = 'cub'; config_name = 'cub'; seed = 3
+    loss_type = 'SoftTriple'; dataset_name = 'cars'; config_name = 'cars'; seed = 4
 
     IS = OrigIF(dataset_name, seed, loss_type, config_name, test_crop, sz_embedding, epoch)
 
@@ -32,7 +33,6 @@ if __name__ == '__main__':
     #         continue
     #     inter_dist, v = grad_confusion(IS.model, test_features, wrong_cls, confused_classes,
     #                                    IS.testing_nn_label, IS.testing_label, IS.testing_nn_indices)  # dD/dtheta
-    #     torch.save(v, os.path.join('Influential_data_baselines', 'grad_test_{}_{}_{}.pth'.format(IS.dataset_name, IS.loss_type, wrong_cls)))
     #
     #     '''Step 2: Get H^-1 grad(test)'''
     #     ihvp = inverse_hessian_product(IS.model, IS.criterion, v, IS.dl_tr, scale=500, damping=0.01)

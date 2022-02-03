@@ -2,8 +2,8 @@
 import os
 from Influence_function.EIF_utils import *
 from Influence_function.IF_utils import *
-from Influence_function.influence_function import MCScalableIF
-os.environ['CUDA_VISIBLE_DEVICES'] = "0"
+from Influence_function.influence_function import MCScalableIF, collate_influence_byclass
+os.environ['CUDA_VISIBLE_DEVICES'] = "1"
 
 if __name__ == '__main__':
 
@@ -18,10 +18,11 @@ if __name__ == '__main__':
     # loss_type = 'ProxyAnchor'; dataset_name = 'inshop'; config_name = 'inshop'; seed = 2
     # loss_type = 'ProxyAnchor'; dataset_name = 'sop'; config_name = 'sop'; seed = 0
 
-    loss_type = 'SoftTriple'; dataset_name = 'cub'; config_name = 'cub'; seed = 3
+    # loss_type = 'SoftTriple'; dataset_name = 'cub'; config_name = 'cub'; seed = 3
+    loss_type = 'SoftTriple'; dataset_name = 'cars'; config_name = 'cars'; seed = 4
 
     IS = MCScalableIF(dataset_name, seed, loss_type, config_name, test_crop, sz_embedding, epoch)
-
+    #
     # confusion_class_pairs = IS.get_confusion_class_pairs()
     # for pair_idx in range(len(confusion_class_pairs)):
     #     '''Step 1: Get deltaD_deltaL'''
@@ -35,10 +36,12 @@ if __name__ == '__main__':
     #
     #     helpful_indices = np.where(influence_values < 0)[0]  # cache all helpful
     #     harmful_indices = np.where(influence_values > 0)[0]  # cache all harmful
+    #
     #     np.save("Influential_data/{}_{}_helpful_testcls{}".format(IS.dataset_name, IS.loss_type, pair_idx),
     #             helpful_indices)
     #     np.save("Influential_data/{}_{}_harmful_testcls{}".format(IS.dataset_name, IS.loss_type, pair_idx),
     #             harmful_indices)
+    #
     # exit()
 
     '''Other: get confusion (before VS after)'''

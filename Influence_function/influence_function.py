@@ -442,7 +442,7 @@ class MCScalableIF(BaseInfluenceFunction):
         mean_deltaL_deltaD = np.mean(np.stack(deltaL_deltaD), axis=0)
         return mean_deltaL_deltaD
 
-    def MC_estimate_single(self, pair, num_thetas=2):
+    def MC_estimate_single(self, pair, steps, num_thetas=2):
 
         theta_orig = self.model.module[-1].weight.data  # original theta
         torch.cuda.empty_cache()
@@ -459,14 +459,14 @@ class MCScalableIF(BaseInfluenceFunction):
             if kk == 0:
                 ''' first theta is the steepest ascent direction '''
                 deltaD, deltaL, theta_new = self.get_theta_newton_step_single(all_features, [pairidx1], [pairidx2],
-                                                                              descent=False)
+                                                                              descent=False, steps=steps)
                 deltaL_deltaD.append(deltaL / (deltaD + 1e-8))
                 theta_list = torch.cat([theta_list, theta_new.detach().cpu().unsqueeze(0)], dim=0)
 
             elif kk == 1:
                 '''second theta is the steepest descent direction'''
                 deltaD, deltaL, theta_new = self.get_theta_newton_step_single(all_features, [pairidx1], [pairidx2],
-                                                                              descent=True)
+                                                                              descent=True, steps=steps)
                 deltaL_deltaD.append(deltaL / (deltaD + 1e-8))
                 theta_list = torch.cat([theta_list, theta_new.detach().cpu().unsqueeze(0)], dim=0)
 
@@ -488,28 +488,28 @@ class MCScalableIF(BaseInfluenceFunction):
         mean_deltaL_deltaD = np.mean(np.stack(deltaL_deltaD), axis=0)
         return mean_deltaL_deltaD
 
-    def single_influence_func(self, all_features, wrong_indices, confuse_indices):
-
-        '''Step 1: All confusion gradient to parameters'''
-        theta_orig = self.model.module[-1].weight.data
-        torch.cuda.empty_cache()
-        theta = self.get_theta_newton_step_single(theta_orig, all_features, wrong_indices, confuse_indices)
-
-        '''Step 2: Training class loss changes'''
-        l_prev, l_cur = loss_change_train(self.model, self.criterion, self.dl_tr, theta_orig, theta)
-        grad_loss = {'l_prev': l_prev, 'l_cur': l_cur}
-
-        '''Step 3: Calc influence functions'''
-        # sanity check self.viz_2sample(self.dl_ev, wrong_indices[0], confuse_indices[0])
-        influence_values = calc_influential_func_sample(grad_loss)
-        influence_values = np.asarray(influence_values)
-        training_sample_by_influence = influence_values.argsort()  # ascending
-        print('Proportion of negative change: ', np.sum(influence_values < 0) / len(influence_values))
-        print('Proportion of zero change: ', np.sum(influence_values == 0) / len(influence_values))
-        print('Proportion of positive change: ', np.sum(influence_values > 0) / len(influence_values))
-        # sanity check self.viz_sample(self.dl_tr, training_sample_by_influence[:10])  # helpful
-        # sanity check self.viz_sample(self.dl_tr, training_sample_by_influence[-10:])  # harmful
-        return training_sample_by_influence, influence_values
+    # def single_influence_func(self, all_features, wrong_indices, confuse_indices):
+    #
+    #     '''Step 1: All confusion gradient to parameters'''
+    #     theta_orig = self.model.module[-1].weight.data
+    #     torch.cuda.empty_cache()
+    #     theta = self.get_theta_newton_step_single(theta_orig, all_features, wrong_indices, confuse_indices)
+    #
+    #     '''Step 2: Training class loss changes'''
+    #     l_prev, l_cur = loss_change_train(self.model, self.criterion, self.dl_tr, theta_orig, theta)
+    #     grad_loss = {'l_prev': l_prev, 'l_cur': l_cur}
+    #
+    #     '''Step 3: Calc influence functions'''
+    #     # sanity check self.viz_2sample(self.dl_ev, wrong_indices[0], confuse_indices[0])
+    #     influence_values = calc_influential_func_sample(grad_loss)
+    #     influence_values = np.asarray(influence_values)
+    #     training_sample_by_influence = influence_values.argsort()  # ascending
+    #     print('Proportion of negative change: ', np.sum(influence_values < 0) / len(influence_values))
+    #     print('Proportion of zero change: ', np.sum(influence_values == 0) / len(influence_values))
+    #     print('Proportion of positive change: ', np.sum(influence_values > 0) / len(influence_values))
+    #     # sanity check self.viz_sample(self.dl_tr, training_sample_by_influence[:10])  # helpful
+    #     # sanity check self.viz_sample(self.dl_tr, training_sample_by_influence[-10:])  # harmful
+    #     return training_sample_by_influence, influence_values
 
 
 
@@ -526,3 +526,16 @@ class OrigIF(BaseInfluenceFunction):
         influence_values = np.asarray(influence_values).flatten()
 
         return influence_values
+
+
+def collate_influence_byclass(influence_values, class_labels, nb_classes):
+    class_labels = np.asarray(class_labels)
+    influence_values = np.asarray(influence_values)
+
+    cls_avg_influence_values = []
+    for cls in range(nb_classes):
+        class_indices = np.where(class_labels == cls)[0]
+        class_influence_values = influence_values[class_indices]
+        cls_avg_influence_values.append(np.mean(class_influence_values))
+
+    return np.asarray(cls_avg_influence_values)

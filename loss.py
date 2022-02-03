@@ -221,6 +221,43 @@ class Proxy_Anchor(torch.nn.Module):
 
         return loss
 
+class ProxyAnchor_cls_reweight(torch.nn.Module):
+    '''
+        Fixed anchor
+    '''
+    def __init__(self, nb_classes, sz_embed, mrg=0.1, alpha=32):
+        torch.nn.Module.__init__(self)
+        self.proxies = torch.nn.Parameter(torch.randn(nb_classes, sz_embed)) # not training
+        self.nb_classes = nb_classes
+        self.sz_embed = sz_embed
+        self.mrg = mrg
+        self.alpha = alpha
+
+    def forward(self, X, indices, T, class_weights):
+        P = F.normalize(self.proxies, p=2, dim=-1)
+        X = F.normalize(X, p=2, dim=-1)
+
+        cos = F.linear(X, P)  # Calcluate cosine similarity (N, C)
+        P_one_hot = binarize_and_smooth_labels(
+                    T=T,
+                    nb_classes=self.nb_classes)
+        N_one_hot = 1 - P_one_hot
+
+        pos_exp = torch.exp(-self.alpha * (cos - self.mrg)) # (N, C)
+        neg_exp = torch.exp(self.alpha * (cos + self.mrg))
+
+        with_pos_proxies = torch.nonzero(P_one_hot.sum(dim=0) != 0).squeeze(dim=1)  # The set of positive proxies of data in the batch
+        num_valid_proxies = len(with_pos_proxies)  # The number of positive proxies
+
+        P_sim_sum = torch.where(P_one_hot == 1, pos_exp, torch.zeros_like(pos_exp)).sum(dim=0) # (C,)
+        N_sim_sum = torch.where(N_one_hot == 1, neg_exp, torch.zeros_like(neg_exp)).sum(dim=0) # (C,)
+
+        pos_term = torch.log(1 + class_weights * P_sim_sum).sum() / num_valid_proxies
+        neg_term = torch.log(1 + class_weights * N_sim_sum).sum() / self.nb_classes
+        loss = pos_term + neg_term
+
+        return loss
+
 class ProxyAnchor_reweight(torch.nn.Module):
     '''
         Fixed anchor
@@ -300,6 +337,8 @@ class SoftTriple(torch.nn.Module):
             return loss.mean() + self.tau * reg
         else:
             return loss.mean()
+
+
 
 class SoftTriple_reweight(torch.nn.Module):
     def __init__(self, la, gamma, tau, margin, K,
