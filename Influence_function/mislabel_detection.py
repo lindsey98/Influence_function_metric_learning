@@ -7,15 +7,15 @@ from Influence_function.sample_relabel import kNN_label_pred
 import numpy as np
 import matplotlib.pyplot as plt
 import time
-os.environ['CUDA_VISIBLE_DEVICES'] = "0"
+os.environ['CUDA_VISIBLE_DEVICES'] = "1"
 
 if __name__ == '__main__':
     noisy_level = 0.1
     loss_type = 'ProxyNCA_prob_orig_noisy_{}'.format(noisy_level); sz_embedding = 512; epoch = 40; test_crop = False
     # dataset_name = 'cub_noisy';  config_name = 'cub'; seed = 0
     # dataset_name = 'cars_noisy'; config_name = 'cars'; seed = 3
-    dataset_name = 'inshop_noisy'; config_name = 'inshop'; seed = 4
-    # dataset_name = 'sop_noisy'; config_name = 'sop'; seed = 3
+    # dataset_name = 'inshop_noisy'; config_name = 'inshop'; seed = 4
+    dataset_name = 'sop_noisy'; config_name = 'sop'; seed = 3
 
     '''============ Our Influence function =================='''
     IS = MCScalableIF(dataset_name, seed, loss_type, config_name, test_crop)
@@ -33,7 +33,7 @@ if __name__ == '__main__':
             confusion_class_pairs = IS.get_confusion_class_pairs()
 
             '''Step 1: Get deltaD_deltaL'''
-            mean_deltaL_deltaD = IS.MC_estimate_group(confusion_class_pairs[0], num_thetas=num_thetas)
+            mean_deltaL_deltaD = IS.MC_estimate_group(confusion_class_pairs[0], num_thetas=num_thetas, steps=50)
 
             '''Step 2: Calc influence functions'''
             influence_values = np.asarray(mean_deltaL_deltaD)
@@ -142,6 +142,8 @@ if __name__ == '__main__':
     plt.plot(cum_overlap, label='random')
     plt.legend()
     plt.tight_layout()
-    plt.savefig('mislabel_{}_alltheta_noisylevel{}.pdf'.format(dataset_name, noisy_level),
+    # plt.savefig('./images/mislabel_{}_alltheta_noisylevel{}.pdf'.format(dataset_name, noisy_level),
+    #             bbox_inches='tight')
+    plt.savefig('./images/mislabel_{}_alltheta_noisylevel{}.png'.format(dataset_name, noisy_level),
                 bbox_inches='tight')
 

@@ -14,8 +14,9 @@ if __name__ == '__main__':
     # loss_type = 'ProxyNCA_prob_orig'; dataset_name = 'inshop'; config_name = 'inshop'; seed = 4
     # loss_type = 'ProxyNCA_prob_orig'; dataset_name = 'sop'; config_name = 'sop'; seed = 3
 
-    loss_type = 'SoftTriple'; dataset_name = 'cub'; config_name = 'cub'; seed = 3
+    # loss_type = 'SoftTriple'; dataset_name = 'cub'; config_name = 'cub'; seed = 3
     # loss_type = 'SoftTriple'; dataset_name = 'cars'; config_name = 'cars'; seed = 4
+    loss_type = 'SoftTriple'; dataset_name = 'inshop'; config_name = 'inshop'; seed = 3
 
     IS = OrigIF(dataset_name, seed, loss_type, config_name, test_crop)
 
@@ -108,5 +109,4 @@ if __name__ == '__main__':
 
         # log results
         with open(result_log_file, 'a+') as f:
-            f.write('{}\t{}\t{:.4f}\t{:.4f}\n'.format(wrong_ind, confuse_ind, inter_dist_orig,
-                                                              inter_dist_after))
+            f.write('{}\t{}\t{:.4f}\t{:.4f}\n'.format(wrong_ind, confuse_ind, inter_dist_orig, inter_dist_after))

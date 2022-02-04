@@ -14,7 +14,7 @@ from tqdm import tqdm
 from torch.utils.data import Dataset, DataLoader
 import random
 
-os.environ["CUDA_VISIBLE_DEVICES"]="1, 0"
+os.environ["CUDA_VISIBLE_DEVICES"]="0, 1"
 
 parser = argparse.ArgumentParser(description='Training ProxyNCA++')
 # parser.add_argument('--epochs', default = 40, type=int, dest = 'nb_epochs')
