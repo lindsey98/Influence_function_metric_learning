@@ -12,7 +12,7 @@ from evaluation import assign_by_euclidian_at_k_indices
 import sklearn
 import pickle
 from utils import evaluate
-os.environ['CUDA_VISIBLE_DEVICES'] = "0"
+os.environ['CUDA_VISIBLE_DEVICES'] = "1"
 
 # knn monitor as in InstDisc https://arxiv.org/abs/1805.01978
 # implementation follows http://github.com/zhirongw/lemniscate.pytorch and https://github.com/leftthomas/SimCLR, https://github.com/PatrickHua/SimSiam/blob/main/tools/knn_monitor.py
@@ -48,8 +48,18 @@ class SampleRelabel(MCScalableIF):
         # global 1st NN
         nn_indices, nn_label = assign_by_euclidian_at_k_indices(embedding, label, 1)
         nn_indices, nn_label = nn_indices.flatten(), nn_label.flatten()
+
         # Same class 1st NN
-        distances = sklearn.metrics.pairwise.pairwise_distances(embedding)  # (N_train, N_train)
+        chunk_size = 1000
+        num_chunks = math.ceil(len(embedding) / chunk_size)
+        distances = torch.tensor([])
+        for i in tqdm(range(0, num_chunks)):
+            chunk_indices = [chunk_size * i, min(len(embedding), chunk_size * (i + 1))]
+            chunk_X = embedding[chunk_indices[0]:chunk_indices[1], :]
+            distance_mat = torch.from_numpy(sklearn.metrics.pairwise.pairwise_distances(embedding, chunk_X))
+            distances = torch.cat((distances, distance_mat), dim=-1)
+        distances = distances.detach().cpu().numpy()
+
         diff_cls_mask = (label[:, None] != label).detach().cpu().numpy().nonzero()
         distances[diff_cls_mask[0], diff_cls_mask[1]] = distances.max() + 1
         nn_indices_same_cls = np.argsort(distances, axis=1)[:, 1]
@@ -198,26 +208,26 @@ if __name__ == '__main__':
     loss_type = 'ProxyNCA_prob_orig'; sz_embedding = 512; epoch = 40; test_crop = False
     # dataset_name = 'cub';  config_name = 'cub'; seed = 0
     # dataset_name = 'cars'; config_name = 'cars'; seed = 3
-    dataset_name = 'inshop'; config_name = 'inshop'; seed = 4
-    # dataset_name = 'sop'; config_name = 'sop'; seed = 3
+    # dataset_name = 'inshop'; config_name = 'inshop'; seed = 4
+    dataset_name = 'sop'; config_name = 'sop'; seed = 3
 
     IS = SampleRelabel(dataset_name, seed, loss_type, config_name, test_crop)
 
     '''Analyze pairs with generalization error'''
     '''Step 1: Visualize all pairs (confuse), Find interesting pairs'''
-    # test_nn_indices, test_nn_label, test_nn_indices_same_cls = IS.getNN_indices(IS.testing_embedding, IS.testing_label)
-    # wrong_indices = (test_nn_label != IS.testing_label.detach().cpu().numpy().flatten()).nonzero()[0]
-    # confuse_indices = test_nn_indices[wrong_indices]
-    # print(len(confuse_indices))
-    # assert len(wrong_indices) == len(confuse_indices)
-    #
-    # # Same class 1st NN
-    # wrong_test_nn_indices_same_cls = test_nn_indices_same_cls[wrong_indices]
-    # assert len(wrong_indices) == len(wrong_test_nn_indices_same_cls)
-    #
-    # IS.GradAnalysis( wrong_indices, confuse_indices, wrong_test_nn_indices_same_cls,
-    #                  IS.dl_ev, base_dir='Confuse_Vis')
-    # exit()
+    test_nn_indices, test_nn_label, test_nn_indices_same_cls = IS.getNN_indices(IS.testing_embedding, IS.testing_label)
+    wrong_indices = (test_nn_label != IS.testing_label.detach().cpu().numpy().flatten()).nonzero()[0]
+    confuse_indices = test_nn_indices[wrong_indices]
+    print(len(confuse_indices))
+    assert len(wrong_indices) == len(confuse_indices)
+
+    # Same class 1st NN
+    wrong_test_nn_indices_same_cls = test_nn_indices_same_cls[wrong_indices]
+    assert len(wrong_indices) == len(wrong_test_nn_indices_same_cls)
+
+    IS.GradAnalysis( wrong_indices, confuse_indices, wrong_test_nn_indices_same_cls,
+                     IS.dl_ev, base_dir='Confuse_Vis')
+    exit()
 
     '''Step 2: Identify influential training points for a specific pair'''
     lines = open('explaination/{}_{}'.format(IS.dataset_name, 'ModelD_HumanS_pairs')).readlines()
@@ -254,54 +264,53 @@ if __name__ == '__main__':
     #                          base_dir=base_dir, pair_ind1=pair_ind1, pair_ind2=pair_ind2)
     # exit()
 
-    # Visualize harmful/helpful training
-
-    vis_dir = 'Case_study/{}'.format(IS.dataset_name)
-    os.makedirs(vis_dir, exist_ok=True)
-    for line in tqdm(lines):
-        pair_ind1, pair_ind2 = line.strip().split(',')
-        pair_ind1, pair_ind2 = int(pair_ind1), int(pair_ind2)
-        os.makedirs('./{}/{}_{}/'.format(vis_dir, pair_ind1, pair_ind2), exist_ok=True)
-        with open('./{}/Allrelabeldict_{}_{}_soft_knn.pkl'.format(base_dir, pair_ind1, pair_ind2), 'rb') as handle:
-            relabel_dict = pickle.load(handle)
-
-        for ind in relabel_dict.keys():
-            orig_cls = IS.dl_tr.dataset.ys[ind]
-            recommend_cls = relabel_dict[ind].argsort()[::-1][0]
-            if recommend_cls != orig_cls:
-                fig = plt.figure(figsize=(30, 15))
-                plt.subplot(2, 6, 1)
-                img = read_image(IS.dl_tr.dataset.im_paths[ind])
-                plt.imshow(to_pil_image(img))
-                plt.axis('off')
-                if lookat_harmful:
-                    plt.title('Harmful Training', fontdict={'fontsize': 20})
-                else:
-                    plt.title('Helpful Training', fontdict={'fontsize': 20})
-
-                # sample images
-                orig_cls_indices = np.where(np.asarray(IS.dl_tr.dataset.ys) == orig_cls)[0]
-                recom_cls_indices = np.where(np.asarray(IS.dl_tr.dataset.ys) == recommend_cls)[0]
-                for i in range(min(5, len(orig_cls_indices))):
-                    plt.subplot(2, 6, i + 2)
-                    img = read_image(IS.dl_tr.dataset.im_paths[orig_cls_indices[i]])
-                    plt.imshow(to_pil_image(img))
-                    plt.axis('off')
-                    if i == 2:
-                        plt.title('Original Class = {}'.format(orig_cls), fontdict={'fontsize': 20})
-
-                for i in range(min(5, len(recom_cls_indices))):
-                    plt.subplot(2, 6, i + 3 + 5)
-                    img = read_image(IS.dl_tr.dataset.im_paths[recom_cls_indices[i]])
-                    plt.imshow(to_pil_image(img))
-                    plt.axis('off')
-                    if i == 2:
-                        plt.title('Recommend Class = {}'.format(recommend_cls), fontdict={'fontsize': 20})
-                plt.tight_layout()
-                # plt.show()
-                plt.savefig('./{}/{}_{}/harmful{}_{}.png'.format(vis_dir, pair_ind1, pair_ind2, lookat_harmful, ind))
-
-        break
+    '''Visualize harmful/helpful training '''
+    # vis_dir = 'Case_study/{}'.format(IS.dataset_name)
+    # os.makedirs(vis_dir, exist_ok=True)
+    # for line in tqdm(lines):
+    #     pair_ind1, pair_ind2 = line.strip().split(',')
+    #     pair_ind1, pair_ind2 = int(pair_ind1), int(pair_ind2)
+    #     os.makedirs('./{}/{}_{}/'.format(vis_dir, pair_ind1, pair_ind2), exist_ok=True)
+    #     with open('./{}/Allrelabeldict_{}_{}_soft_knn.pkl'.format(base_dir, pair_ind1, pair_ind2), 'rb') as handle:
+    #         relabel_dict = pickle.load(handle)
+    #
+    #     for ind in relabel_dict.keys():
+    #         orig_cls = IS.dl_tr.dataset.ys[ind]
+    #         recommend_cls = relabel_dict[ind].argsort()[::-1][0]
+    #         if recommend_cls != orig_cls:
+    #             fig = plt.figure(figsize=(30, 15))
+    #             plt.subplot(2, 6, 1)
+    #             img = read_image(IS.dl_tr.dataset.im_paths[ind])
+    #             plt.imshow(to_pil_image(img))
+    #             plt.axis('off')
+    #             if lookat_harmful:
+    #                 plt.title('Harmful Training', fontdict={'fontsize': 20})
+    #             else:
+    #                 plt.title('Helpful Training', fontdict={'fontsize': 20})
+    #
+    #             # sample images
+    #             orig_cls_indices = np.where(np.asarray(IS.dl_tr.dataset.ys) == orig_cls)[0]
+    #             recom_cls_indices = np.where(np.asarray(IS.dl_tr.dataset.ys) == recommend_cls)[0]
+    #             for i in range(min(5, len(orig_cls_indices))):
+    #                 plt.subplot(2, 6, i + 2)
+    #                 img = read_image(IS.dl_tr.dataset.im_paths[orig_cls_indices[i]])
+    #                 plt.imshow(to_pil_image(img))
+    #                 plt.axis('off')
+    #                 if i == 2:
+    #                     plt.title('Original Class = {}'.format(orig_cls), fontdict={'fontsize': 20})
+    #
+    #             for i in range(min(5, len(recom_cls_indices))):
+    #                 plt.subplot(2, 6, i + 3 + 5)
+    #                 img = read_image(IS.dl_tr.dataset.im_paths[recom_cls_indices[i]])
+    #                 plt.imshow(to_pil_image(img))
+    #                 plt.axis('off')
+    #                 if i == 2:
+    #                     plt.title('Recommend Class = {}'.format(recommend_cls), fontdict={'fontsize': 20})
+    #             plt.tight_layout()
+    #             # plt.show()
+    #             plt.savefig('./{}/{}_{}/harmful{}_{}.png'.format(vis_dir, pair_ind1, pair_ind2, lookat_harmful, ind))
+    #
+    #     break
 
     '''Step 4: Train with relabelled data'''
     # for line in tqdm(lines):

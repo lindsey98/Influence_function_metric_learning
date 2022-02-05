@@ -3,7 +3,7 @@ import os
 from Influence_function.influence_function import MCScalableIF, collate_influence_byclass
 from Influence_function.EIF_utils import *
 from evaluation import assign_by_euclidian_at_k_indices
-os.environ['CUDA_VISIBLE_DEVICES'] = "0, 1"
+os.environ['CUDA_VISIBLE_DEVICES'] = "0"
 
 if __name__ == '__main__':
 
@@ -14,8 +14,9 @@ if __name__ == '__main__':
     # loss_type = 'ProxyNCA_prob_orig'; dataset_name = 'sop'; config_name = 'sop'; seed = 3
 
     # loss_type = 'SoftTriple'; dataset_name = 'cub'; config_name = 'cub'; seed = 3
-    loss_type = 'SoftTriple'; dataset_name = 'cars'; config_name = 'cars'; seed = 4
+    # loss_type = 'SoftTriple'; dataset_name = 'cars'; config_name = 'cars'; seed = 4
     # loss_type = 'SoftTriple'; dataset_name = 'inshop'; config_name = 'inshop'; seed = 3
+    loss_type = 'SoftTriple'; dataset_name = 'sop'; config_name = 'sop'; seed = 4
 
     IS = MCScalableIF(dataset_name, seed, loss_type, config_name, test_crop)
 
@@ -32,33 +33,33 @@ if __name__ == '__main__':
     os.makedirs(base_dir, exist_ok=True)
 
     '''Step 2: Save influential samples indices for 50 pairs'''
-    # all_features = IS.get_features()
-    # for kk in range(min(len(wrong_indices), 50)):
-    #     wrong_ind = wrong_indices[kk]
-    #     confuse_ind = confuse_indices[kk]
-    #     if os.path.exists('./{}/{}_helpful_indices_{}_{}.npy'.format(base_dir, loss_type, wrong_ind, confuse_ind)):
-    #         print('skip')
-    #         continue
-    #     # sanity check: IS.viz_2sample(IS.dl_ev, wrong_ind, confuse_ind)
-    #     mean_deltaL_deltaD = IS.MC_estimate_single([wrong_ind, confuse_ind], num_thetas=1, steps=50)
-    #
-    #     influence_values = np.asarray(mean_deltaL_deltaD)
-    #     training_sample_by_influence = influence_values.argsort()  # ascending
-    #     # IS.viz_samples(IS.dl_tr, training_sample_by_influence[:10])  # helpful
-    #     # IS.viz_samples(IS.dl_tr, training_sample_by_influence[-10:])  # harmful
-    #
-    #     helpful_indices = np.where(influence_values < 0)[0]
-    #     harmful_indices = np.where(influence_values > 0)[0]
-    #     np.save('./{}/{}_helpful_indices_{}_{}'.format(base_dir, loss_type, wrong_ind, confuse_ind), helpful_indices)
-    #     np.save('./{}/{}_harmful_indices_{}_{}'.format(base_dir, loss_type, wrong_ind, confuse_ind), harmful_indices)
-    # exit()
+    all_features = IS.get_features()
+    for kk in range(min(len(wrong_indices), 50)):
+        wrong_ind = wrong_indices[kk]
+        confuse_ind = confuse_indices[kk]
+        if os.path.exists('./{}/{}_helpful_indices_{}_{}.npy'.format(base_dir, loss_type, wrong_ind, confuse_ind)):
+            print('skip')
+            continue
+        # sanity check: IS.viz_2sample(IS.dl_ev, wrong_ind, confuse_ind)
+        mean_deltaL_deltaD = IS.MC_estimate_single([wrong_ind, confuse_ind], num_thetas=1, steps=50)
+
+        influence_values = np.asarray(mean_deltaL_deltaD)
+        training_sample_by_influence = influence_values.argsort()  # ascending
+        # IS.viz_samples(IS.dl_tr, training_sample_by_influence[:10])  # helpful
+        # IS.viz_samples(IS.dl_tr, training_sample_by_influence[-10:])  # harmful
+
+        helpful_indices = np.where(influence_values < 0)[0]
+        harmful_indices = np.where(influence_values > 0)[0]
+        np.save('./{}/{}_helpful_indices_{}_{}'.format(base_dir, loss_type, wrong_ind, confuse_ind), helpful_indices)
+        np.save('./{}/{}_harmful_indices_{}_{}'.format(base_dir, loss_type, wrong_ind, confuse_ind), harmful_indices)
+    exit()
 
     '''Step 3: Train the model for every pair'''
     # Run in shell
     for kk in tqdm(range(min(len(wrong_indices), 50))):
         wrong_ind = wrong_indices[kk]
         confuse_ind = confuse_indices[kk]
-        #  Normal training
+        #  FIXME Normal training
         os.system("python train_sample_reweight.py --dataset {} \
                         --loss-type {}_confusion_{}_{}_Allsamples \
                         --helpful {}/{}_helpful_indices_{}_{}.npy \
@@ -73,6 +74,19 @@ if __name__ == '__main__':
                                                                    IS.seed,
                                                                    '{}_softtriple_reweight'.format(dataset_name)))
 
+        # os.system("python train_sample_reweight.py --dataset {} \
+        #                 --loss-type {}_confusion_{}_{}_Allsamples \
+        #                 --helpful {}/Allhelpful_indices_{}_{}.npy \
+        #                 --harmful {}/Allharmful_indices_{}_{}.npy \
+        #                 --model_dir {} \
+        #                 --helpful_weight 2 --harmful_weight 0 \
+        #                 --seed {} --config config/{}.json".format(IS.dataset_name,
+        #                                                            loss_type, wrong_ind, confuse_ind,
+        #                                                            base_dir, wrong_ind, confuse_ind,
+        #                                                            base_dir, wrong_ind, confuse_ind,
+        #                                                            IS.model_dir,
+        #                                                            IS.seed,
+        #                                                            '{}_reweight'.format(dataset_name)))
 
 
     '''Step 4: Sanity check: Whether the confusion pairs are pulled far apart, Whether the confusion samples is pulled closer to correct neighbor'''

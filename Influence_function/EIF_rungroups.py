@@ -25,29 +25,29 @@ if __name__ == '__main__':
 
     IS = MCScalableIF(dataset_name, seed, loss_type, config_name, test_crop, sz_embedding, epoch)
     #
-    # confusion_class_pairs = IS.get_confusion_class_pairs()
-    # for pair_idx in range(len(confusion_class_pairs)):
-    #     if os.path.exists("Influential_data/{}_{}_helpful_testcls{}.npy".format(IS.dataset_name, IS.loss_type, pair_idx)):
-    #         print('skip')
-    #         continue
-    #     '''Step 1: Get deltaD_deltaL'''
-    #     mean_deltaL_deltaD = IS.MC_estimate_group(confusion_class_pairs[pair_idx], num_thetas=1, steps=50)
-    #
-    #     '''Step 2: Calc influence functions'''
-    #     influence_values = np.asarray(mean_deltaL_deltaD)
-    #     training_sample_by_influence = influence_values.argsort()  # ascending
-    #     # IS.viz_samples(IS.dl_tr, training_sample_by_influence[:10])  # helpful
-    #     # IS.viz_samples(IS.dl_tr, training_sample_by_influence[-10:])  # harmful
-    #
-    #     helpful_indices = np.where(influence_values < 0)[0]  # cache all helpful
-    #     harmful_indices = np.where(influence_values > 0)[0]  # cache all harmful
-    #
-    #     np.save("Influential_data/{}_{}_helpful_testcls{}".format(IS.dataset_name, IS.loss_type, pair_idx),
-    #             helpful_indices)
-    #     np.save("Influential_data/{}_{}_harmful_testcls{}".format(IS.dataset_name, IS.loss_type, pair_idx),
-    #             harmful_indices)
-    #
-    # exit()
+    confusion_class_pairs = IS.get_confusion_class_pairs()
+    for pair_idx in range(len(confusion_class_pairs)):
+        if os.path.exists("Influential_data/{}_{}_helpful_testcls{}.npy".format(IS.dataset_name, IS.loss_type, pair_idx)):
+            print('skip')
+            continue
+        '''Step 1: Get deltaD_deltaL'''
+        mean_deltaL_deltaD = IS.MC_estimate_group(confusion_class_pairs[pair_idx], num_thetas=1, steps=50)
+
+        '''Step 2: Calc influence functions'''
+        influence_values = np.asarray(mean_deltaL_deltaD)
+        training_sample_by_influence = influence_values.argsort()  # ascending
+        # IS.viz_samples(IS.dl_tr, training_sample_by_influence[:10])  # helpful
+        # IS.viz_samples(IS.dl_tr, training_sample_by_influence[-10:])  # harmful
+
+        helpful_indices = np.where(influence_values < 0)[0]  # cache all helpful
+        harmful_indices = np.where(influence_values > 0)[0]  # cache all harmful
+
+        np.save("Influential_data/{}_{}_helpful_testcls{}".format(IS.dataset_name, IS.loss_type, pair_idx),
+                helpful_indices)
+        np.save("Influential_data/{}_{}_harmful_testcls{}".format(IS.dataset_name, IS.loss_type, pair_idx),
+                harmful_indices)
+
+    exit()
 
     '''Other: get confusion (before VS after)'''
     # FIXME: inter class distance should be computed based on original confusion pairs

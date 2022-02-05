@@ -10,12 +10,12 @@ import time
 os.environ['CUDA_VISIBLE_DEVICES'] = "1"
 
 if __name__ == '__main__':
-    noisy_level = 0.1
+    noisy_level = 0.05
     loss_type = 'ProxyNCA_prob_orig_noisy_{}'.format(noisy_level); sz_embedding = 512; epoch = 40; test_crop = False
     # dataset_name = 'cub_noisy';  config_name = 'cub'; seed = 0
     # dataset_name = 'cars_noisy'; config_name = 'cars'; seed = 3
-    # dataset_name = 'inshop_noisy'; config_name = 'inshop'; seed = 4
-    dataset_name = 'sop_noisy'; config_name = 'sop'; seed = 3
+    dataset_name = 'inshop_noisy'; config_name = 'inshop'; seed = 4
+    # dataset_name = 'sop_noisy'; config_name = 'sop'; seed = 3
 
     '''============ Our Influence function =================='''
     IS = MCScalableIF(dataset_name, seed, loss_type, config_name, test_crop)

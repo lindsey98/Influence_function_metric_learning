@@ -13,40 +13,41 @@ if __name__ == '__main__':
 
     # loss_type = 'SoftTriple'; dataset_name = 'cub'; config_name = 'cub'; seed = 3
     # loss_type = 'SoftTriple'; dataset_name = 'cars'; config_name = 'cars'; seed = 4
-    loss_type = 'SoftTriple'; dataset_name = 'inshop'; config_name = 'inshop'; seed = 3
+    # loss_type = 'SoftTriple'; dataset_name = 'inshop'; config_name = 'inshop'; seed = 3
+    loss_type = 'SoftTriple'; dataset_name = 'sop'; config_name = 'sop'; seed = 4
 
     IS = OrigIF(dataset_name, seed, loss_type, config_name, test_crop, sz_embedding, epoch)
 
     '''Step 1: Get grad(test)'''
-    # train_features = IS.get_train_features()
-    # test_features = IS.get_features()  # (N, 2048)
-    # confusion_class_pairs = IS.get_confusion_class_pairs()
-    # for pair_idx, pair in enumerate(confusion_class_pairs):
-    #     wrong_cls = pair[0][0]
-    #     confused_classes = [x[1] for x in pair]
-    #     if os.path.exists("Influential_data_baselines/{}_{}_helpful_testcls{}.npy".format(IS.dataset_name, IS.loss_type, pair_idx)):
-    #         print('skip')
-    #         continue
-    #     inter_dist, v = grad_confusion(IS.model, test_features, wrong_cls, confused_classes,
-    #                                    IS.testing_nn_label, IS.testing_label, IS.testing_nn_indices)  # dD/dtheta
-    #
-    #     '''Step 2: Get H^-1 grad(test)'''
-    #     ihvp = inverse_hessian_product(IS.model, IS.criterion, v, IS.dl_tr, scale=500, damping=0.01)
-    #
-    #     '''Step 3: Get influential indices, i.e. grad(test) H^-1 grad(train), save'''
-    #     influence_values = calc_influential_func_orig(IS=IS, train_features=train_features, inverse_hvp_prod=ihvp)
-    #     influence_values = np.asarray(influence_values).flatten()
-    #     training_sample_by_influence = influence_values.argsort()  # ascending
-    #     # IS.viz_sample(IS.dl_tr, training_sample_by_influence[:10])  # harmful
-    #     # IS.viz_sample(IS.dl_tr, training_sample_by_influence[-10:])  # helpful
-    #
-    #     helpful_indices = np.where(influence_values > 0)[0]  # cache all helpful
-    #     harmful_indices = np.where(influence_values < 0)[0]  # cache all harmful
-    #     np.save("Influential_data_baselines/{}_{}_helpful_testcls{}".format(IS.dataset_name, IS.loss_type, pair_idx),
-    #             helpful_indices)
-    #     np.save("Influential_data_baselines/{}_{}_harmful_testcls{}".format(IS.dataset_name, IS.loss_type, pair_idx),
-    #             harmful_indices)
-    # exit()
+    train_features = IS.get_train_features()
+    test_features = IS.get_features()  # (N, 2048)
+    confusion_class_pairs = IS.get_confusion_class_pairs()
+    for pair_idx, pair in enumerate(confusion_class_pairs):
+        wrong_cls = pair[0][0]
+        confused_classes = [x[1] for x in pair]
+        if os.path.exists("Influential_data_baselines/{}_{}_helpful_testcls{}.npy".format(IS.dataset_name, IS.loss_type, pair_idx)):
+            print('skip')
+            continue
+        inter_dist, v = grad_confusion(IS.model, test_features, wrong_cls, confused_classes,
+                                       IS.testing_nn_label, IS.testing_label, IS.testing_nn_indices)  # dD/dtheta
+
+        '''Step 2: Get H^-1 grad(test)'''
+        ihvp = inverse_hessian_product(IS.model, IS.criterion, v, IS.dl_tr, scale=500, damping=0.01)
+
+        '''Step 3: Get influential indices, i.e. grad(test) H^-1 grad(train), save'''
+        influence_values = calc_influential_func_orig(IS=IS, train_features=train_features, inverse_hvp_prod=ihvp)
+        influence_values = np.asarray(influence_values).flatten()
+        training_sample_by_influence = influence_values.argsort()  # ascending
+        # IS.viz_sample(IS.dl_tr, training_sample_by_influence[:10])  # harmful
+        # IS.viz_sample(IS.dl_tr, training_sample_by_influence[-10:])  # helpful
+
+        helpful_indices = np.where(influence_values > 0)[0]  # cache all helpful
+        harmful_indices = np.where(influence_values < 0)[0]  # cache all harmful
+        np.save("Influential_data_baselines/{}_{}_helpful_testcls{}".format(IS.dataset_name, IS.loss_type, pair_idx),
+                helpful_indices)
+        np.save("Influential_data_baselines/{}_{}_harmful_testcls{}".format(IS.dataset_name, IS.loss_type, pair_idx),
+                harmful_indices)
+    exit()
 
     IS.model = IS._load_model()  # reload the original weights
     features = IS.get_features()
