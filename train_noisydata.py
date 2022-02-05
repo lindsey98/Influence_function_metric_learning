@@ -26,18 +26,18 @@ parser.add_argument('--init_eval', default=False, action='store_true')
 parser.add_argument('--apex', default=False, action='store_true')
 parser.add_argument('--warmup_k', default=5, type=int)
 
-parser.add_argument('--dataset', default='cub_noisy')
-parser.add_argument('--seed', default=0, type=int)
+parser.add_argument('--dataset', default='inshop_noisy')
+parser.add_argument('--seed', default=3, type=int)
 parser.add_argument('--eval_nmi', default=True, action='store_true')
 parser.add_argument('--embedding-size', default = 512, type=int, dest = 'sz_embedding')
-parser.add_argument('--config', default='config/cub_SoftTriple.json')
+parser.add_argument('--config', default='config/inshop_SoftTriple.json')
 parser.add_argument('--mode', default='trainval', choices=['train', 'trainval',
                                                            'test', 'testontrain'],
                     help='train with train data or train with trainval')
 parser.add_argument('--batch-size', default = 32, type=int, dest = 'sz_batch')
 parser.add_argument('--no_warmup', default=False, action='store_true')
-parser.add_argument('--mislabel_percentage', default=0.01, type=float)
-parser.add_argument('--loss-type', default='SoftTriple_noisy_0.01', type=str)
+parser.add_argument('--mislabel_percentage', default=0.1, type=float)
+parser.add_argument('--loss-type', default='SoftTriple_noisy_0.1', type=str)
 parser.add_argument('--workers', default = 4, type=int, dest = 'nb_workers')
 
 args = parser.parse_args()

@@ -11,11 +11,15 @@ os.environ['CUDA_VISIBLE_DEVICES'] = "1"
 
 if __name__ == '__main__':
     noisy_level = 0.05
-    loss_type = 'ProxyNCA_prob_orig_noisy_{}'.format(noisy_level); sz_embedding = 512; epoch = 40; test_crop = False
-    # dataset_name = 'cub_noisy';  config_name = 'cub'; seed = 0
-    # dataset_name = 'cars_noisy'; config_name = 'cars'; seed = 3
-    dataset_name = 'inshop_noisy'; config_name = 'inshop'; seed = 4
-    # dataset_name = 'sop_noisy'; config_name = 'sop'; seed = 3
+    sz_embedding = 512; epoch = 40; test_crop = False
+    # loss_type = 'ProxyNCA_prob_orig_noisy_{}'.format(noisy_level); dataset_name = 'cub_noisy';  config_name = 'cub'; seed = 0
+    # loss_type = 'ProxyNCA_prob_orig_noisy_{}'.format(noisy_level); dataset_name = 'cars_noisy'; config_name = 'cars'; seed = 3
+    # loss_type = 'ProxyNCA_prob_orig_noisy_{}'.format(noisy_level); dataset_name = 'inshop_noisy'; config_name = 'inshop'; seed = 4
+    # loss_type = 'ProxyNCA_prob_orig_noisy_{}'.format(noisy_level); dataset_name = 'sop_noisy'; config_name = 'sop'; seed = 3
+
+    # loss_type = 'SoftTriple_noisy_{}'.format(noisy_level); dataset_name = 'cub_noisy';  config_name = 'cub'; seed = 3
+    # loss_type = 'SoftTriple_noisy_{}'.format(noisy_level); dataset_name = 'cars_noisy';  config_name = 'cars'; seed = 4
+    loss_type = 'SoftTriple_noisy_{}'.format(noisy_level); dataset_name = 'inshop_noisy';  config_name = 'inshop'; seed = 3
 
     '''============ Our Influence function =================='''
     IS = MCScalableIF(dataset_name, seed, loss_type, config_name, test_crop)
@@ -38,8 +42,8 @@ if __name__ == '__main__':
             '''Step 2: Calc influence functions'''
             influence_values = np.asarray(mean_deltaL_deltaD)
             training_sample_by_influence = influence_values.argsort()  # ascending
-            IS.viz_samples(IS.dl_tr, training_sample_by_influence[:10])  # helpful
-            IS.viz_samples(IS.dl_tr, training_sample_by_influence[-10:])  # harmful
+            # IS.viz_samples(IS.dl_tr, training_sample_by_influence[:10])  # helpful
+            # IS.viz_samples(IS.dl_tr, training_sample_by_influence[-10:])  # harmful
 
             helpful_indices = np.where(influence_values < 0)[0]  # cache all helpful
             harmful_indices = np.where(influence_values > 0)[0]  # cache all harmful
@@ -118,8 +122,8 @@ if __name__ == '__main__':
         influence_values = calc_influential_func_orig(IS=IS, train_features=train_features, inverse_hvp_prod=ihvp)
         influence_values = np.asarray(influence_values).flatten()
         training_sample_by_influence = influence_values.argsort()  # ascending
-        IS.viz_samples(IS.dl_tr, training_sample_by_influence[:10])  # harmful
-        IS.viz_samples(IS.dl_tr, training_sample_by_influence[-10:])  # helpful
+        # IS.viz_samples(IS.dl_tr, training_sample_by_influence[:10])  # harmful
+        # IS.viz_samples(IS.dl_tr, training_sample_by_influence[-10:])  # helpful
 
         helpful_indices = np.where(influence_values > 0)[0]  # cache all helpful
         harmful_indices = np.where(influence_values < 0)[0]  # cache all harmful
@@ -142,8 +146,8 @@ if __name__ == '__main__':
     plt.plot(cum_overlap, label='random')
     plt.legend()
     plt.tight_layout()
-    # plt.savefig('./images/mislabel_{}_alltheta_noisylevel{}.pdf'.format(dataset_name, noisy_level),
+    # plt.savefig('./images/mislabel_{}_{}_alltheta_noisylevel{}.pdf'.format(dataset_name, loss_type, noisy_level),
     #             bbox_inches='tight')
-    plt.savefig('./images/mislabel_{}_alltheta_noisylevel{}.png'.format(dataset_name, noisy_level),
+    plt.savefig('./images/mislabel_{}_{}_alltheta_noisylevel{}.png'.format(dataset_name, loss_type, noisy_level),
                 bbox_inches='tight')
 

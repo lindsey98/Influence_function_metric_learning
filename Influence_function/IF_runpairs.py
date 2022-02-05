@@ -12,12 +12,12 @@ if __name__ == '__main__':
     # loss_type = 'ProxyNCA_prob_orig'; dataset_name = 'cub';  config_name = 'cub'; seed = 0
     # loss_type = 'ProxyNCA_prob_orig'; dataset_name = 'cars'; config_name = 'cars'; seed = 3
     # loss_type = 'ProxyNCA_prob_orig'; dataset_name = 'inshop'; config_name = 'inshop'; seed = 4
-    # loss_type = 'ProxyNCA_prob_orig'; dataset_name = 'sop'; config_name = 'sop'; seed = 3
+    loss_type = 'ProxyNCA_prob_orig'; dataset_name = 'sop'; config_name = 'sop'; seed = 3
 
     # loss_type = 'SoftTriple'; dataset_name = 'cub'; config_name = 'cub'; seed = 3
     # loss_type = 'SoftTriple'; dataset_name = 'cars'; config_name = 'cars'; seed = 4
     # loss_type = 'SoftTriple'; dataset_name = 'inshop'; config_name = 'inshop'; seed = 3
-    loss_type = 'SoftTriple'; dataset_name = 'sop'; config_name = 'sop'; seed = 4
+    # loss_type = 'SoftTriple'; dataset_name = 'sop'; config_name = 'sop'; seed = 4
 
     IS = OrigIF(dataset_name, seed, loss_type, config_name, test_crop)
 
@@ -34,24 +34,24 @@ if __name__ == '__main__':
     os.makedirs(base_dir, exist_ok=True)
 
     '''Step 2: Save influential samples indices for 50 pairs'''
-    train_features = IS.get_train_features()
-    test_features = IS.get_features()  # (N, 2048)
-    for kk in range(min(len(wrong_indices), 50)):
-        wrong_ind = wrong_indices[kk]
-        confuse_ind = confuse_indices[kk]
-        if os.path.exists('./{}/{}_helpful_indices_{}_{}.npy'.format(base_dir, loss_type, wrong_ind, confuse_ind)):
-            print('skip')
-            continue
-        # sanity check: IS.viz_2sample(IS.dl_ev, wrong_ind, confuse_ind)
-        torch.cuda.empty_cache()
-        influence_values = IS.single_influence_func_orig(train_features=train_features, test_features=test_features,
-                                                         wrong_indices=[wrong_ind], confuse_indices=[confuse_ind])
-
-        helpful_indices = np.where(influence_values > 0)[0]  # cache all helpful
-        harmful_indices = np.where(influence_values < 0)[0]  # cache all harmful
-        np.save('./{}/{}_helpful_indices_{}_{}'.format(base_dir, loss_type, wrong_ind, confuse_ind), helpful_indices)
-        np.save('./{}/{}_harmful_indices_{}_{}'.format(base_dir, loss_type, wrong_ind, confuse_ind), harmful_indices)
-    exit()
+    # train_features = IS.get_train_features()
+    # test_features = IS.get_features()  # (N, 2048)
+    # for kk in range(min(len(wrong_indices), 50)):
+    #     wrong_ind = wrong_indices[kk]
+    #     confuse_ind = confuse_indices[kk]
+    #     if os.path.exists('./{}/{}_helpful_indices_{}_{}.npy'.format(base_dir, loss_type, wrong_ind, confuse_ind)):
+    #         print('skip')
+    #         continue
+    #     # sanity check: IS.viz_2sample(IS.dl_ev, wrong_ind, confuse_ind)
+    #     torch.cuda.empty_cache()
+    #     influence_values = IS.single_influence_func_orig(train_features=train_features, test_features=test_features,
+    #                                                      wrong_indices=[wrong_ind], confuse_indices=[confuse_ind])
+    #
+    #     helpful_indices = np.where(influence_values > 0)[0]  # cache all helpful
+    #     harmful_indices = np.where(influence_values < 0)[0]  # cache all harmful
+    #     np.save('./{}/{}_helpful_indices_{}_{}'.format(base_dir, loss_type, wrong_ind, confuse_ind), helpful_indices)
+    #     np.save('./{}/{}_harmful_indices_{}_{}'.format(base_dir, loss_type, wrong_ind, confuse_ind), harmful_indices)
+    # exit()
 
     '''Step 3: Train the model for every pair'''
     # Run in shell
@@ -73,6 +73,22 @@ if __name__ == '__main__':
                                                                    IS.model_dir,
                                                                    IS.seed,
                                                                    '{}_softtriple_reweight'.format(dataset_name)))
+
+
+        # os.system("python train_sample_reweight.py --dataset {} \
+        #                 --loss-type {}_confusion_{}_{}_Allsamples \
+        #                 --helpful {}/Allhelpful_indices_{}_{}.npy \
+        #                 --harmful {}/Allharmful_indices_{}_{}.npy \
+        #                 --model_dir {} \
+        #                 --helpful_weight 2 --harmful_weight 0 \
+        #                 --seed {} --config config/{}.json".format(IS.dataset_name,
+        #                                                            loss_type, wrong_ind, confuse_ind,
+        #                                                            base_dir, wrong_ind, confuse_ind,
+        #                                                            base_dir, wrong_ind, confuse_ind,
+        #                                                            IS.model_dir,
+        #                                                            IS.seed,
+        #                                                            '{}_reweight'.format(dataset_name)))
+
 
 
     '''Step 4: Sanity check: Whether the confusion pairs are pulled far apart, Whether the confusion samples is pulled closer to correct neighbor'''
