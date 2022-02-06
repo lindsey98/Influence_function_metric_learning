@@ -9,12 +9,10 @@ if __name__ == '__main__':
     # loss_type = 'ProxyNCA_prob_orig'; dataset_name = 'cub';  config_name = 'cub'; seed = 0
     # loss_type = 'ProxyNCA_prob_orig'; dataset_name = 'cars'; config_name = 'cars'; seed = 3
     # loss_type = 'ProxyNCA_prob_orig'; dataset_name = 'inshop'; config_name = 'inshop'; seed = 4
-    loss_type = 'ProxyNCA_prob_orig'; dataset_name = 'sop'; config_name = 'sop'; seed = 3
 
     # loss_type = 'SoftTriple'; dataset_name = 'cub'; config_name = 'cub'; seed = 3
     # loss_type = 'SoftTriple'; dataset_name = 'cars'; config_name = 'cars'; seed = 4
-    # loss_type = 'SoftTriple'; dataset_name = 'inshop'; config_name = 'inshop'; seed = 3
-    # loss_type = 'SoftTriple'; dataset_name = 'sop'; config_name = 'sop'; seed = 4
+    loss_type = 'SoftTriple'; dataset_name = 'inshop'; config_name = 'inshop'; seed = 3
 
     IS = OrigIF(dataset_name, seed, loss_type, config_name, test_crop, sz_embedding, epoch)
 

@@ -11,7 +11,6 @@ if __name__ == '__main__':
     # dataset_name = 'cub';  config_name = 'cub'; seed = 0
     # dataset_name = 'cars'; config_name = 'cars'; seed = 3
     dataset_name = 'inshop'; config_name = 'inshop'; seed = 4
-    # dataset_name = 'sop'; config_name = 'sop'; seed = 3
 
     IS = MCScalableIF(dataset_name, seed, loss_type, config_name, test_crop)
     # pairs = [[97, 4885],
