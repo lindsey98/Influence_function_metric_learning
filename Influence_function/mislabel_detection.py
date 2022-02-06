@@ -10,7 +10,7 @@ import time
 os.environ['CUDA_VISIBLE_DEVICES'] = "1"
 
 if __name__ == '__main__':
-    noisy_level = 0.05
+    noisy_level = 0.1
     sz_embedding = 512; epoch = 40; test_crop = False
     # loss_type = 'ProxyNCA_prob_orig_noisy_{}'.format(noisy_level); dataset_name = 'cub_noisy';  config_name = 'cub'; seed = 0
     # loss_type = 'ProxyNCA_prob_orig_noisy_{}'.format(noisy_level); dataset_name = 'cars_noisy'; config_name = 'cars'; seed = 3
