@@ -379,20 +379,6 @@ def batch_lbl_stats(y):
     return kk_c
 
 
-def get_wrong_indices(X, T, N=15):
-    k = 1
-    Y = evaluation.assign_by_euclidian_at_k(X, T, k)
-    Y = torch.from_numpy(Y)
-    correct = [1 if t in y[:k] else 0 for t, y in zip(T, Y)]
-
-    wrong_ind = np.where(np.asarray(correct) == 0)[0]
-    wrong_labels = T[wrong_ind]
-    unique_labels, wrong_freq = torch.unique(wrong_labels, return_counts=True)
-    topN_wrong_classes = unique_labels[torch.argsort(wrong_freq, descending=True)[:N]].numpy()
-
-    return wrong_ind, topN_wrong_classes
-
-
 
 def overlay_mask(img: Image.Image, mask: Image.Image, colormap: str = 'jet', alpha: float = 0.7) -> (Image.Image, np.ndarray):
 
@@ -438,6 +424,26 @@ def overlay_mask(img: Image.Image, mask: Image.Image, colormap: str = 'jet', alp
     overlayed_img = Image.fromarray((alpha * img + (1 - alpha) * overlay).astype(np.uint8))
 
     return overlayed_img, overlay
+
+def get_wrong_indices(X, T, topk=None):
+    nn_k = 1
+    Y = evaluation.assign_by_euclidian_at_k(X, T, nn_k)
+    Y = torch.from_numpy(Y)
+    correct = [1 if t in y[:nn_k] else 0 for t, y in zip(T, Y)]
+
+    wrong_ind = np.where(np.asarray(correct) == 0)[0] # wrong indices
+    wrong_labels = T[wrong_ind] # labels at those wrong indices
+    wrong_preds = Y[wrong_ind] # predictions at those wrong indices
+
+    unique_labels, wrong_freq = torch.unique(wrong_labels, return_counts=True) # count times of being wrong
+    if topk is None:
+        top_wrong_classes = unique_labels[torch.argsort(wrong_freq, descending=True)].numpy() # FIXME: return all test
+    else:
+        top_wrong_classes = unique_labels[torch.argsort(wrong_freq, descending=True)[:topk]].numpy()
+
+    return wrong_ind, top_wrong_classes.astype(int), wrong_labels, wrong_preds
+
+
 
 
 

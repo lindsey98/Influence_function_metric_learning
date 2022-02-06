@@ -4,7 +4,7 @@ import torch
 import torchvision
 import loss
 from networks import Feat_resnet50_max_n
-from evaluation.pumap import prepare_data, get_wrong_indices
+from utils import get_wrong_indices
 import torch.nn as nn
 import os
 import matplotlib.pyplot as plt
@@ -17,7 +17,7 @@ from utils import predict_batchwise_debug
 from collections import OrderedDict
 import scipy.stats
 from evaluation import assign_by_euclidian_at_k_indices
-import utils
+from dataset.utils import prepare_data
 
 
 class BaseInfluenceFunction():
@@ -78,13 +78,10 @@ class BaseInfluenceFunction():
         return model
 
     def _load_criterion(self):
-        proxies = torch.load('{}/Epoch_{}/proxy.pth'.format(self.model_dir, self.epoch), map_location='cpu')[
-            'proxies'].detach()
+        proxies = torch.load('{}/Epoch_{}/proxy.pth'.format(self.model_dir, self.epoch), map_location='cpu')['proxies'].detach()
         if 'ProxyNCA_prob_orig' in self.loss_type:
             criterion = loss.ProxyNCA_prob_orig(nb_classes=self.dl_tr.dataset.nb_classes(), sz_embed=self.sz_embedding,
                                                 scale=3)
-        elif 'ProxyAnchor' in self.loss_type:
-            criterion = loss.Proxy_Anchor(nb_classes=self.dl_tr.dataset.nb_classes(), sz_embed=self.sz_embedding)
         elif 'SoftTriple' in self.loss_type:
             criterion = loss.SoftTriple(nb_classes=self.dl_tr.dataset.nb_classes(), sz_embed=self.sz_embedding,
                                         la=20, gamma=0.1, tau=0.2, margin=0.01, K=1)
@@ -105,8 +102,7 @@ class BaseInfluenceFunction():
 
         # Caution: I only care about these pairs, re-evaluation (if any) should also be based on these pairs
         nn_indices, pred = assign_by_euclidian_at_k_indices(testing_embedding, testing_label, 1)  # predict
-        torch.save(torch.from_numpy(pred.flatten()),
-                   '{}/Epoch_{}/testing_nn_labels.pth'.format(self.model_dir, self.epoch))
+        torch.save(torch.from_numpy(pred.flatten()),'{}/Epoch_{}/testing_nn_labels.pth'.format(self.model_dir, self.epoch))
         np.save('{}/Epoch_{}/testing_nn_indices'.format(self.model_dir, self.epoch), nn_indices)
 
     def _load_data(self):
@@ -268,6 +264,9 @@ class MCScalableIF(BaseInfluenceFunction):
                                            test_crop=False, sz_embedding=512, epoch=40)
 
     def get_grad_loss_train_all(self, theta, theta_hat, pair_idx=None, save=False):
+        '''
+            Compute training L(theta'), L(theta)
+        '''
         l_prev, l_cur = loss_change_train(self.model, self.criterion, self.dl_tr, theta, theta_hat)
         grad_loss = {'l_prev': l_prev, 'l_cur': l_cur}
         if save and pair_idx is not None:
@@ -277,7 +276,16 @@ class MCScalableIF(BaseInfluenceFunction):
 
     def get_theta_newton_step_group(self, all_features, wrong_cls, confuse_classes,
                                     steps=1, lr=0.001, descent=False):
-
+        '''
+            Get theta' by newton step on mean{d(confusion_pair)}
+            :param all_features: testing features (N_test, 2048)
+            :param wrong_cls: top wrong class
+            :param confuse_classes: classes that are confused with the top wrong class
+            :param steps: # of newton steps
+            :param lr: learning rate
+            :param descent: gradient descent or ascent
+            :returns deltaD, deltaL, theta'
+        '''
         theta_orig = self.model.module[-1].weight.data
         torch.cuda.empty_cache(); theta = theta_orig.clone()
 
@@ -315,7 +323,16 @@ class MCScalableIF(BaseInfluenceFunction):
 
     def get_theta_newton_step_single(self, all_features, wrong_indices, confuse_indices,
                                      steps=1, lr=0.001, descent=False):
-
+        '''
+            Get theta' by newton step on d(confusion_pair)
+            :param all_features: testing features (N_test, 2048)
+            :param wrong_indices: confuse pairs indices
+            :param confuse_indices: confuse pairs indices
+            :param steps: # of newton steps
+            :param lr: learning rate
+            :param descent: gradient descent or ascent
+            :returns deltaD, deltaL, theta'
+        '''
         theta_orig = self.model.module[-1].weight.data
         torch.cuda.empty_cache(); theta = theta_orig.clone()
 
@@ -351,7 +368,16 @@ class MCScalableIF(BaseInfluenceFunction):
                                              all_features, wrong_cls, confuse_classes,
                                              theta_orig,
                                              inter_dist_orig):
-
+        '''
+            Get the third theta' by taking the avg of the theta_max, theta_min
+            :param prev_thetas: theta_max and theta_min
+            :param all_features: testing features
+            :param wrong_cls: top wrong class
+            :param confuse_classes: classes that are confused with the top wrong class
+            :param theta_orig: theta
+            :param inter_dist_orig: d(theta, confusion pair)
+            :returns theta', deltaL/deltaD
+        '''
         deltaL_deltaD = []
         new_theta = torch.mean(prev_thetas, dim=0)  # middle direction
         new_theta = new_theta.cuda()
@@ -374,7 +400,16 @@ class MCScalableIF(BaseInfluenceFunction):
                                               all_features, wrong_indices, confuse_indices,
                                               theta_orig,
                                               inter_dist_orig):
-
+        '''
+            Get the third theta' by taking the avg of the theta_max, theta_min
+            :param prev_thetas: theta_max and theta_min
+            :param all_features: testing features
+            :param wrong_indices: confuse pairs indices
+            :param confuse_indices: confuse pairs indices
+            :param theta_orig: theta
+            :param inter_dist_orig: d(theta, confusion pair)
+            :returns theta', deltaL/deltaD
+        '''
         deltaL_deltaD = []
         new_theta = torch.mean(prev_thetas, dim=0)  # middle direction
         new_theta = new_theta.cuda()
@@ -393,7 +428,13 @@ class MCScalableIF(BaseInfluenceFunction):
         return new_theta.unsqueeze(0), deltaL_deltaD
 
     def MC_estimate_group(self, pair, steps, num_thetas=2):
-
+        '''
+            Estimate deltaL/deltaD for group of confusion pairs
+            :param pair: wrong_cls and confusion_classes
+            :param steps: # newton steps
+            :param num_thetas: # theta used for estimation
+            :returns avg(deltaL/deltaD)
+        '''
         theta_orig = self.model.module[-1].weight.data  # original theta
         torch.cuda.empty_cache()
         all_features = self.get_features()  # test features (N, 2048)
@@ -443,7 +484,13 @@ class MCScalableIF(BaseInfluenceFunction):
         return mean_deltaL_deltaD
 
     def MC_estimate_single(self, pair, steps, num_thetas=2):
-
+        '''
+            Estimate deltaL/deltaD for group of confusion pairs
+            :param pair: wrong_indices and confuse_indices
+            :param steps: # newton steps
+            :param num_thetas: # theta used for estimation
+            :returns avg(deltaL/deltaD)
+        '''
         theta_orig = self.model.module[-1].weight.data  # original theta
         torch.cuda.empty_cache()
         all_features = self.get_features()  # test features (N, 2048)
@@ -488,29 +535,6 @@ class MCScalableIF(BaseInfluenceFunction):
         mean_deltaL_deltaD = np.mean(np.stack(deltaL_deltaD), axis=0)
         return mean_deltaL_deltaD
 
-    # def single_influence_func(self, all_features, wrong_indices, confuse_indices):
-    #
-    #     '''Step 1: All confusion gradient to parameters'''
-    #     theta_orig = self.model.module[-1].weight.data
-    #     torch.cuda.empty_cache()
-    #     theta = self.get_theta_newton_step_single(theta_orig, all_features, wrong_indices, confuse_indices)
-    #
-    #     '''Step 2: Training class loss changes'''
-    #     l_prev, l_cur = loss_change_train(self.model, self.criterion, self.dl_tr, theta_orig, theta)
-    #     grad_loss = {'l_prev': l_prev, 'l_cur': l_cur}
-    #
-    #     '''Step 3: Calc influence functions'''
-    #     # sanity check self.viz_2sample(self.dl_ev, wrong_indices[0], confuse_indices[0])
-    #     influence_values = calc_influential_func_sample(grad_loss)
-    #     influence_values = np.asarray(influence_values)
-    #     training_sample_by_influence = influence_values.argsort()  # ascending
-    #     print('Proportion of negative change: ', np.sum(influence_values < 0) / len(influence_values))
-    #     print('Proportion of zero change: ', np.sum(influence_values == 0) / len(influence_values))
-    #     print('Proportion of positive change: ', np.sum(influence_values > 0) / len(influence_values))
-    #     # sanity check self.viz_sample(self.dl_tr, training_sample_by_influence[:10])  # helpful
-    #     # sanity check self.viz_sample(self.dl_tr, training_sample_by_influence[-10:])  # harmful
-    #     return training_sample_by_influence, influence_values
-
 
 
 class OrigIF(BaseInfluenceFunction):
@@ -520,22 +544,17 @@ class OrigIF(BaseInfluenceFunction):
                                                     test_crop=False, sz_embedding=512, epoch=40)
 
     def single_influence_func_orig(self, train_features, test_features, wrong_indices, confuse_indices):
+        '''
+            Use original influence function to calculate training influences to a confusion pair(s)
+            :param train_features: training features (N_train, 2048)
+            :param test_features: testing_features (N_test, 2048)
+            :param wrong_indices: confusion pairs indices
+            :param confuse_indices: confusion pairs indices
+            :returns influence_values: training influences (N_train, )
+        '''
         inter_dist_pair, v = grad_confusion_pair(self.model, test_features, wrong_indices, confuse_indices)
         ihvp = inverse_hessian_product(self.model, self.criterion, v, self.dl_tr, scale=500, damping=0.01)
         influence_values = calc_influential_func_orig(IS=self, train_features=train_features, inverse_hvp_prod=ihvp)
         influence_values = np.asarray(influence_values).flatten()
 
         return influence_values
-
-
-def collate_influence_byclass(influence_values, class_labels, nb_classes):
-    class_labels = np.asarray(class_labels)
-    influence_values = np.asarray(influence_values)
-
-    cls_avg_influence_values = []
-    for cls in range(nb_classes):
-        class_indices = np.where(class_labels == cls)[0]
-        class_influence_values = influence_values[class_indices]
-        cls_avg_influence_values.append(np.mean(class_influence_values))
-
-    return np.asarray(cls_avg_influence_values)

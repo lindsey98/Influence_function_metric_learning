@@ -16,6 +16,8 @@ import logging
 from torch.utils.data.sampler import Sampler, SubsetRandomSampler
 import scipy
 from scipy.spatial import distance
+import utils
+import dataset
 
 
 def std_per_channel(images):
@@ -419,3 +421,146 @@ class ClsCohSampler(torch.utils.data.sampler.Sampler):
         return self.n_dataset // self.batch_size
 
 
+def prepare_data(data_name='cub',
+                 config_name='',
+                 batch_size=1,
+                 test_crop=False):
+    '''
+        Prepare dataloader
+        :param data_name: dataset used
+        :param config_name: json config file
+        :param batch_size:
+        :param test_crop: use cropping in dl_ev or not
+        :returns dl_tr, dl_ev
+    '''
+    dataset_config = utils.load_config('dataset/config.json')
+
+    config = utils.load_config('config/{}.json'.format(config_name))
+    transform_key = 'transform_parameters'
+    if 'transform_key' in config.keys():
+        transform_key = config['transform_key']
+    print('Transformation: ', transform_key)
+
+    if not test_crop:
+
+        dl_tr_noshuffle = torch.utils.data.DataLoader(
+            dataset=dataset.load(
+                name=data_name,
+                root=dataset_config['dataset'][data_name]['root'],
+                source=dataset_config['dataset'][data_name]['source'],
+                classes=dataset_config['dataset'][data_name]['classes']['trainval'],
+                transform=transforms.Compose([
+                    RGBAToRGB(),
+                    transforms.Resize(dataset_config[transform_key]["sz_crop"]),
+                    transforms.ToTensor(),
+                    ScaleIntensities(*dataset_config[transform_key]["intensity_scale"]),
+                    transforms.Normalize(
+                        mean=dataset_config[transform_key]["mean"],
+                        std=dataset_config[transform_key]["std"],
+                    )
+                ])
+            ),
+            num_workers=0,
+            shuffle=False,
+            batch_size=batch_size,
+        )
+
+        if not 'inshop' in data_name:
+            # use this dataloader if you want to visualize (without resizing and cropping)
+            dl_ev = torch.utils.data.DataLoader(
+                dataset.load(
+                    name=data_name.split('_noisy')[0],
+                    root=dataset_config['dataset'][data_name]['root'],
+                    source=dataset_config['dataset'][data_name]['source'],
+                    classes=dataset_config['dataset'][data_name]['classes']['eval'],
+                    transform=transforms.Compose([
+                        RGBAToRGB(),
+                        transforms.Resize(dataset_config[transform_key]["sz_crop"]),
+                        transforms.ToTensor(),
+                        ScaleIntensities(*dataset_config[transform_key]["intensity_scale"]),
+                        transforms.Normalize(
+                            mean=dataset_config[transform_key]["mean"],
+                            std=dataset_config[transform_key]["std"],
+                        )
+                    ])
+                ),
+                batch_size=batch_size,
+                shuffle=False,
+                num_workers=0,
+            )
+        else: # inshop
+            dl_ev = torch.utils.data.DataLoader(
+                dataset.load_inshop(
+                    name=data_name.split('_noisy')[0],
+                    root=dataset_config['dataset'][data_name]['root'],
+                    source=dataset_config['dataset'][data_name]['source'],
+                    classes=dataset_config['dataset'][data_name]['classes']['eval'],
+                    transform=transforms.Compose([
+                        RGBAToRGB(),
+                        transforms.Resize(dataset_config[transform_key]["sz_crop"]),
+                        transforms.ToTensor(),
+                        ScaleIntensities(*dataset_config[transform_key]["intensity_scale"]),
+                        transforms.Normalize(
+                            mean=dataset_config[transform_key]["mean"],
+                            std=dataset_config[transform_key]["std"],
+                        )
+                    ]),
+                    dset_type='all'
+                ),
+                batch_size=batch_size,
+                shuffle=False,
+                num_workers=0,
+            )
+
+    else:
+        dl_tr_noshuffle = torch.utils.data.DataLoader(
+            dataset=dataset.load(
+                name=data_name,
+                root=dataset_config['dataset'][data_name]['root'],
+                source=dataset_config['dataset'][data_name]['source'],
+                classes=dataset_config['dataset'][data_name]['classes']['trainval'],
+                transform=dataset.utils.make_transform(
+                    **dataset_config[transform_key],
+                    is_train=False
+                )
+            ),
+            num_workers=0,
+            shuffle=False,
+            batch_size=batch_size,
+        )
+
+        if not 'inshop' in data_name:
+            dl_ev = torch.utils.data.DataLoader(
+                dataset.load(
+                    name=data_name.split('_noisy')[0],
+                    root=dataset_config['dataset'][data_name]['root'],
+                    source=dataset_config['dataset'][data_name]['source'],
+                    classes=dataset_config['dataset'][data_name]['classes']['eval'],
+                    transform=dataset.utils.make_transform(
+                        **dataset_config[transform_key],
+                        is_train=False
+                    )
+                ),
+                batch_size=batch_size,
+                shuffle=False,
+                num_workers=0,
+            )
+        else:
+            dl_ev = torch.utils.data.DataLoader(
+                dataset.load_inshop(
+                    name=data_name.split('_noisy')[0],
+                    root=dataset_config['dataset'][data_name]['root'],
+                    source=dataset_config['dataset'][data_name]['source'],
+                    classes=dataset_config['dataset'][data_name]['classes']['eval'],
+                    transform=dataset.utils.make_transform(
+                        **dataset_config[transform_key],
+                        is_train=False
+                    ),
+                    dset_type='all'
+                ),
+                batch_size=batch_size,
+                shuffle=False,
+                num_workers=0,
+            )
+
+    return dl_tr_noshuffle, dl_ev

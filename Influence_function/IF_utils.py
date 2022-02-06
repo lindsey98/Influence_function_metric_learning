@@ -54,6 +54,13 @@ import numpy as np
 def grad_loss(model, criterion, all_features, all_labels):
     '''
         Get dL/dtheta for all training
+        Arguments:
+            model: model
+            criterion: loss
+            all_features: features (N, 2048)
+            all_labels: labels (N,)
+        Returns:
+            List of dLoss/dtheta
     '''
     grad_all = []
     for feat, t in zip(all_features, all_labels):
@@ -136,7 +143,7 @@ def calc_influential_func_orig(IS, train_features, inverse_hvp_prod):
         Calculate influential functions
         Arguments:
             inverse_hvp_prod: inverse hessian vector product, of shape (|theta|,)
-            grad_alltrain: list of gradients for all training (N_train, |theta|)
+            train_features: training features (N_trauin, 2048)
         Returns:
             influence_values: list of influence values (N_train,)
     '''

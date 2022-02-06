@@ -2,7 +2,7 @@
 import os
 from Influence_function.EIF_utils import *
 from Influence_function.IF_utils import *
-from Influence_function.influence_function import MCScalableIF, collate_influence_byclass
+from Influence_function.influence_function import MCScalableIF
 os.environ['CUDA_VISIBLE_DEVICES'] = "0"
 
 if __name__ == '__main__':

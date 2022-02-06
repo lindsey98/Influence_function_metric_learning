@@ -1,6 +1,6 @@
 
 import os
-from Influence_function.influence_function import MCScalableIF, collate_influence_byclass
+from Influence_function.influence_function import MCScalableIF
 from Influence_function.EIF_utils import *
 from evaluation import assign_by_euclidian_at_k_indices
 os.environ['CUDA_VISIBLE_DEVICES'] = "1, 0"

@@ -8,6 +8,7 @@ import math
 
 @torch.no_grad()
 def calc_loss_train_relabel(model, dl, relabel_candidate, criterion, indices=None):
+
     l_all = {}
     model.eval()
     for ct, (x, t, ind) in enumerate(dl):
@@ -39,6 +40,9 @@ def loss_change_train_relabel(model, criterion, dl_tr, relabel_candidate, params
 
 @torch.no_grad()
 def calc_loss_train(model, dl, criterion, indices=None):
+    '''
+        Calculate all training losses
+    '''
     l = []
     model.eval()
 
@@ -52,7 +56,9 @@ def calc_loss_train(model, dl, criterion, indices=None):
     return l
 
 def loss_change_train(model, criterion, dl_tr, params_prev, params_cur):
-
+    '''
+        Calculate training L(params_prev) and L(params_cur)
+    '''
     weight_orig = model.module[-1].weight.data # cache original parameters
     model.module[-1].weight.data = params_prev
     l_prev = calc_loss_train(model, dl_tr, criterion, None)
@@ -65,6 +71,9 @@ def loss_change_train(model, criterion, dl_tr, params_prev, params_cur):
 
 
 def calc_inter_dist_pair(feat_cls1, feat_cls2):
+    '''
+        Calculate d(confusion pair)
+    '''
     feat_cls1 = F.normalize(feat_cls1, p=2, dim=-1)
     feat_cls2 = F.normalize(feat_cls2, p=2, dim=-1)
 
@@ -76,7 +85,9 @@ def calc_inter_dist_pair(feat_cls1, feat_cls2):
     return inter_dis
 
 def grad_confusion_pair(model, all_features, wrong_indices, confusion_indices):
-
+    '''
+        Calculate  \partial d(confusion pair) / \partial theta
+    '''
     cls_features = all_features[wrong_indices]
     confuse_cls_features = all_features[confusion_indices]
 
@@ -98,7 +109,9 @@ def grad_confusion_pair(model, all_features, wrong_indices, confusion_indices):
 
 def grad_confusion(model, all_features, cls, confusion_classes,
                    pred, label, nn_indices):
-
+    '''
+        Calculate  \partial avg{d(confusion pair)} / \partial theta
+    '''
     pred = pred.detach().cpu().numpy()
     label = label.detach().cpu().numpy()
     nn_indices = nn_indices.flatten()
@@ -129,6 +142,9 @@ def grad_confusion(model, all_features, cls, confusion_classes,
     return accum_confusion, accum_grads
 
 def calc_influential_func_sample(grad_alltrain):
+    '''
+        Calculate L(theta')-L(theta)
+    '''
     l_prev = grad_alltrain['l_prev']
     l_cur = grad_alltrain['l_cur']
     l_diff = np.stack(l_cur) - np.stack(l_prev) # l_diff = l'-l0, if l_diff < 0, helpful, otherwise harmful

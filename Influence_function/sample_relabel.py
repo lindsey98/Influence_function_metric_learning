@@ -66,9 +66,9 @@ class SampleRelabel(MCScalableIF):
 
         return nn_indices, nn_label, nn_indices_same_cls
 
-    def GradAnalysis(self,
-                     wrong_indices, confuse_indices, wrong_samecls_indices,
-                     dl, base_dir='Grad_Test'):
+    def VisulizePairs(self,
+                      wrong_indices, confuse_indices, wrong_samecls_indices,
+                      dl, base_dir='Grad_Test'):
         '''Visualize all confusion pairs'''
         assert len(wrong_indices) == len(confuse_indices)
         assert len(wrong_indices) == len(wrong_samecls_indices)
@@ -78,8 +78,8 @@ class SampleRelabel(MCScalableIF):
         model_copy.eval()
 
         for ind1, ind2, ind3 in zip(wrong_indices, confuse_indices, wrong_samecls_indices):
-            cam_extractor1 = GradCAMCustomize(model_copy, target_layer=model_copy.module[0].base.layer4)  # to last layer
-            cam_extractor2 = GradCAMCustomize(model_copy, target_layer=model_copy.module[0].base.layer4)  # to last layer
+            # cam_extractor1 = GradCAMCustomize(model_copy, target_layer=model_copy.module[0].base.layer4)  # to last layer
+            # cam_extractor2 = GradCAMCustomize(model_copy, target_layer=model_copy.module[0].base.layer4)  # to last layer
 
             # Get the two embeddings first
             img1 = to_pil_image(read_image(dl.dataset.im_paths[ind1]))
@@ -206,10 +206,9 @@ class SampleRelabel(MCScalableIF):
 if __name__ == '__main__':
 
     loss_type = 'ProxyNCA_prob_orig'; sz_embedding = 512; epoch = 40; test_crop = False
-    # dataset_name = 'cub';  config_name = 'cub'; seed = 0
+    dataset_name = 'cub';  config_name = 'cub'; seed = 0
     # dataset_name = 'cars'; config_name = 'cars'; seed = 3
     # dataset_name = 'inshop'; config_name = 'inshop'; seed = 4
-    dataset_name = 'sop'; config_name = 'sop'; seed = 3
 
     IS = SampleRelabel(dataset_name, seed, loss_type, config_name, test_crop)
 
@@ -225,7 +224,7 @@ if __name__ == '__main__':
     wrong_test_nn_indices_same_cls = test_nn_indices_same_cls[wrong_indices]
     assert len(wrong_indices) == len(wrong_test_nn_indices_same_cls)
 
-    IS.GradAnalysis( wrong_indices, confuse_indices, wrong_test_nn_indices_same_cls,
+    IS.VisulizePairs(wrong_indices, confuse_indices, wrong_test_nn_indices_same_cls,
                      IS.dl_ev, base_dir='Confuse_Vis')
     exit()
 
