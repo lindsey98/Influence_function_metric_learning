@@ -34,14 +34,14 @@ if __name__ == '__main__':
         print(pair)
         '''============ Our Influence function =================='''
         start_time = time.time()
-        mean_deltaD_deltaL = IS.MC_estimate_single(pair, num_thetas=1)
+        mean_deltaD_deltaL = IS.MC_estimate_forpairs(pair, num_thetas=1)
         influence_values = np.asarray(mean_deltaD_deltaL)
         print('EIF runtime:', time.time() - start_time)
 
         '''============ Original Influence function ================'''
         start_time = time.time()
         train_features = IS.get_train_features()
-        test_features = IS.get_features()  # (N, 2048)
+        test_features = IS.get_test_features()  # (N, 2048)
         inter_dist, v = grad_confusion_pair(IS.model, test_features, [pair[0]], [pair[1]])  # dD/dtheta
         ihvp = inverse_hessian_product(IS.model, IS.criterion, v, IS.dl_tr, scale=500, damping=0.01)
         influence_values = calc_influential_func_orig(IS=IS, train_features=train_features, inverse_hvp_prod=ihvp)

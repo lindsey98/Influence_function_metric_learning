@@ -18,7 +18,7 @@ if __name__ == '__main__':
 
     '''Step 1: Get grad(test)'''
     train_features = IS.get_train_features()
-    test_features = IS.get_features()  # (N, 2048)
+    test_features = IS.get_test_features()  # (N, 2048)
     confusion_class_pairs = IS.get_confusion_class_pairs()
     for pair_idx, pair in enumerate(confusion_class_pairs):
         wrong_cls = pair[0][0]
@@ -47,8 +47,11 @@ if __name__ == '__main__':
                 harmful_indices)
     exit()
 
+    '''Train (see scripts/run_cars_baseline.sh ...) with downweighted harmful and upweighted helpful training'''
+
+    '''Other: get confusion (before VS after)'''
     IS.model = IS._load_model()  # reload the original weights
-    features = IS.get_features()
+    features = IS.get_test_features()
     confusion_class_pairs = IS.get_confusion_class_pairs()
     for pair_idx in range(len(confusion_class_pairs)):
         print('Pair index', pair_idx)

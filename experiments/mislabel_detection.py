@@ -10,7 +10,7 @@ import time
 os.environ['CUDA_VISIBLE_DEVICES'] = "1"
 
 if __name__ == '__main__':
-    noisy_level = 0.1
+    noisy_level = 0.05
     sz_embedding = 512; epoch = 40; test_crop = False
     # loss_type = 'ProxyNCA_prob_orig_noisy_{}'.format(noisy_level); dataset_name = 'cub_noisy';  config_name = 'cub'; seed = 0
     # loss_type = 'ProxyNCA_prob_orig_noisy_{}'.format(noisy_level); dataset_name = 'cars_noisy'; config_name = 'cars'; seed = 3
@@ -36,7 +36,7 @@ if __name__ == '__main__':
             confusion_class_pairs = IS.get_confusion_class_pairs()
 
             '''Step 1: Get deltaD_deltaL'''
-            mean_deltaL_deltaD = IS.MC_estimate_group(confusion_class_pairs[0], num_thetas=num_thetas, steps=50)
+            mean_deltaL_deltaD = IS.MC_estimate_forclasses(confusion_class_pairs[0], num_thetas=num_thetas, steps=50)
 
             '''Step 2: Calc influence functions'''
             influence_values = np.asarray(mean_deltaL_deltaD)
@@ -58,7 +58,7 @@ if __name__ == '__main__':
         ticks_pos = np.arange(0, 1.2, 0.2)
         fraction_data_scanned = [int(x) for x in ticks_pos*len(training_sample_by_influence)]
         fraction_mislabelled_detected = [int(x) for x in ticks_pos*len(gt_mislabelled_indices)]
-        plt.plot(cum_overlap, label='EIF with N_theta = {}'.format(num_thetas))
+        plt.plot(cum_overlap, label='EIF with M = {}'.format(num_thetas))
         plt.xlabel("Fraction of training data checked", fontdict={'fontsize': 15})
         plt.ylabel("Fraction of mislabelled data detected", fontdict={'fontsize': 15})
         plt.xticks(fraction_data_scanned, [round(x, 1) for x in ticks_pos])
@@ -105,7 +105,7 @@ if __name__ == '__main__':
         influence_values = np.load("{}/{}_{}_influence_values_testcls{}_IF_{}.npy".format(basedir, IS.dataset_name, IS.loss_type, 0, noisy_level))
     else:
         train_features = IS.get_train_features()
-        test_features = IS.get_features()  # (N, 2048)
+        test_features = IS.get_test_features()  # (N, 2048)
         confusion_class_pairs = IS.get_confusion_class_pairs()
         wrong_cls = confusion_class_pairs[0][0][0]
         confused_classes = [x[1] for x in confusion_class_pairs[0]]
@@ -145,8 +145,8 @@ if __name__ == '__main__':
     plt.plot(cum_overlap, label='random')
     plt.legend()
     plt.tight_layout()
-    # plt.savefig('./images/mislabel_{}_{}_alltheta_noisylevel{}.pdf'.format(dataset_name, loss_type, noisy_level),
-    #             bbox_inches='tight')
-    plt.savefig('./images/mislabel_{}_{}_alltheta_noisylevel{}.png'.format(dataset_name, loss_type, noisy_level),
+    plt.savefig('./images/mislabel_{}_{}_alltheta_noisylevel{}.pdf'.format(dataset_name, loss_type, noisy_level),
                 bbox_inches='tight')
+    # plt.savefig('./images/mislabel_{}_{}_alltheta_noisylevel{}.png'.format(dataset_name, loss_type, noisy_level),
+    #             bbox_inches='tight')
 

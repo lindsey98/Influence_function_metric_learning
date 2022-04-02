@@ -31,26 +31,26 @@ if __name__ == '__main__':
     os.makedirs(base_dir, exist_ok=True)
 
     '''Step 2: Save influential samples indices for 50 pairs'''
-    # all_features = IS.get_features()
-    # for kk in range(min(len(wrong_indices), 50)):
-    #     wrong_ind = wrong_indices[kk]
-    #     confuse_ind = confuse_indices[kk]
-    #     if os.path.exists('./{}/{}_helpful_indices_{}_{}.npy'.format(base_dir, loss_type, wrong_ind, confuse_ind)):
-    #         print('skip')
-    #         continue
-    #     # sanity check: IS.viz_2sample(IS.dl_ev, wrong_ind, confuse_ind)
-    #     mean_deltaL_deltaD = IS.MC_estimate_single([wrong_ind, confuse_ind], num_thetas=1, steps=50)
-    #
-    #     influence_values = np.asarray(mean_deltaL_deltaD)
-    #     training_sample_by_influence = influence_values.argsort()  # ascending
-    #     # IS.viz_samples(IS.dl_tr, training_sample_by_influence[:10])  # helpful
-    #     # IS.viz_samples(IS.dl_tr, training_sample_by_influence[-10:])  # harmful
-    #
-    #     helpful_indices = np.where(influence_values < 0)[0]
-    #     harmful_indices = np.where(influence_values > 0)[0]
-    #     np.save('./{}/{}_helpful_indices_{}_{}'.format(base_dir, loss_type, wrong_ind, confuse_ind), helpful_indices)
-    #     np.save('./{}/{}_harmful_indices_{}_{}'.format(base_dir, loss_type, wrong_ind, confuse_ind), harmful_indices)
-    # exit()
+    all_features = IS.get_test_features()
+    for kk in range(min(len(wrong_indices), 50)):
+        wrong_ind = wrong_indices[kk]
+        confuse_ind = confuse_indices[kk]
+        if os.path.exists('./{}/{}_helpful_indices_{}_{}.npy'.format(base_dir, loss_type, wrong_ind, confuse_ind)):
+            print('skip')
+            continue
+        # sanity check: IS.viz_2sample(IS.dl_ev, wrong_ind, confuse_ind)
+        mean_deltaL_deltaD = IS.MC_estimate_forpairs([wrong_ind, confuse_ind], num_thetas=1, steps=50)
+
+        influence_values = np.asarray(mean_deltaL_deltaD)
+        training_sample_by_influence = influence_values.argsort()  # ascending
+        # IS.viz_samples(IS.dl_tr, training_sample_by_influence[:10])  # helpful
+        # IS.viz_samples(IS.dl_tr, training_sample_by_influence[-10:])  # harmful
+
+        helpful_indices = np.where(influence_values < 0)[0]
+        harmful_indices = np.where(influence_values > 0)[0]
+        np.save('./{}/{}_helpful_indices_{}_{}'.format(base_dir, loss_type, wrong_ind, confuse_ind), helpful_indices)
+        np.save('./{}/{}_harmful_indices_{}_{}'.format(base_dir, loss_type, wrong_ind, confuse_ind), harmful_indices)
+    exit()
 
     '''Step 3: Train the model for every pair'''
     # Run in shell
@@ -91,7 +91,7 @@ if __name__ == '__main__':
     '''Step 4: Sanity check: Whether the confusion pairs are pulled far apart, Whether the confusion samples is pulled closer to correct neighbor'''
     result_log_file = 'Confuse_pair_influential_data/{}_{}_pairs.txt'.format(IS.dataset_name, loss_type)
     IS.model = IS._load_model()  # reload the original weights
-    new_features = IS.get_features()
+    new_features = IS.get_test_features()
     for kk in range(min(len(wrong_indices), 50)):
         wrong_ind = wrong_indices[kk]
         confuse_ind = confuse_indices[kk]

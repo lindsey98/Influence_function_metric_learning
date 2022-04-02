@@ -6,37 +6,37 @@ import numpy as np
 import torch.nn.functional as F
 import math
 
-@torch.no_grad()
-def calc_loss_train_relabel(model, dl, relabel_candidate, criterion, indices=None):
-
-    l_all = {}
-    model.eval()
-    for ct, (x, t, ind) in enumerate(dl):
-        torch.cuda.empty_cache()
-        if ind.item() in indices:
-            y = relabel_candidate[ind.item()]
-            x = x.expand(len(y), x.size()[1], x.size()[2], x.size()[3])
-            m = model(x)
-            l = criterion.debug(m, None, y) # (nb_classes, )
-            l_all[ind.item()] = l.detach().cpu().numpy()
-            pass
-    l_final = []
-    for ind in indices:
-        l_final.append(l_all[ind])
-    l_final = np.asarray(l_final)
-    return l_final # (N, nb_classes)
-
-def loss_change_train_relabel(model, criterion, dl_tr, relabel_candidate, params_prev, params_cur, indices):
-
-    weight_orig = model.module[-1].weight.data # cache original parameters
-    model.module[-1].weight.data = params_prev
-    l_prev = calc_loss_train_relabel(model, dl_tr, relabel_candidate, criterion, indices) # (N, nb_classes)
-
-    model.module[-1].weight.data = params_cur
-    l_cur = calc_loss_train_relabel(model, dl_tr, relabel_candidate, criterion, indices) # (N, nb_classes)
-
-    model.module[-1].weight.data = weight_orig # dont forget to revise the weights back to the original
-    return l_prev, l_cur
+# @torch.no_grad()
+# def calc_loss_train_relabel(model, dl, relabel_candidate, criterion, indices=None):
+#
+#     l_all = {}
+#     model.eval()
+#     for ct, (x, t, ind) in enumerate(dl):
+#         torch.cuda.empty_cache()
+#         if ind.item() in indices:
+#             y = relabel_candidate[ind.item()]
+#             x = x.expand(len(y), x.size()[1], x.size()[2], x.size()[3])
+#             m = model(x)
+#             l = criterion.debug(m, None, y) # (nb_classes, )
+#             l_all[ind.item()] = l.detach().cpu().numpy()
+#             pass
+#     l_final = []
+#     for ind in indices:
+#         l_final.append(l_all[ind])
+#     l_final = np.asarray(l_final)
+#     return l_final # (N, nb_classes)
+#
+# def loss_change_train_relabel(model, criterion, dl_tr, relabel_candidate, params_prev, params_cur, indices):
+#
+#     weight_orig = model.module[-1].weight.data # cache original parameters
+#     model.module[-1].weight.data = params_prev
+#     l_prev = calc_loss_train_relabel(model, dl_tr, relabel_candidate, criterion, indices) # (N, nb_classes)
+#
+#     model.module[-1].weight.data = params_cur
+#     l_cur = calc_loss_train_relabel(model, dl_tr, relabel_candidate, criterion, indices) # (N, nb_classes)
+#
+#     model.module[-1].weight.data = weight_orig # dont forget to revise the weights back to the original
+#     return l_prev, l_cur
 
 @torch.no_grad()
 def calc_loss_train(model, dl, criterion, indices=None):
@@ -74,7 +74,7 @@ def calc_inter_dist_pair(feat_cls1, feat_cls2):
     '''
         Calculate d(confusion pair)
     '''
-    feat_cls1 = F.normalize(feat_cls1, p=2, dim=-1)
+    feat_cls1 = F.normalize(feat_cls1, p=2, dim=-1) # L2 normalization
     feat_cls2 = F.normalize(feat_cls2, p=2, dim=-1)
 
     if len(feat_cls1.shape) == 1 and len(feat_cls2.shape) == 1:
