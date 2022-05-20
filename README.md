@@ -22,6 +22,22 @@ python train.py --dataset [cub|cars|inshop] \
 --seed [0|1|2|3|4] \
 --config [config/cub_SoftTriple.json|config/cars_SoftTriple.json|config/inshop_SoftTriple.json]
 ```
+- Training the models with mislabelled data
+  - Training the DML models with Proxy-NCA++ loss or with SoftTriple loss
+```
+python train.py --dataset [cub_noisy|cars_noisy|inshop_noisy] \
+--loss-type ProxyNCA_prob_orig_noisy_0.1 \
+--seed [0|1|2|3|4] \
+--mislabel_percentage 0.1 \
+--config [config/cub_ProxyNCA_prob_orig.json|config/cars_ProxyNCA_prob_orig.json|config/inshop_ProxyNCA_prob_orig.json]
+```
+```
+python train.py --dataset [cub_noisy|cars_noisy|inshop_noisy] \
+--loss-type SoftTriple_noisy_0.1 \
+--seed [0|1|2|3|4] \
+--mislabel_percentage 0.1 \
+--config [config/cub_SoftTriple.json|config/cars_SoftTriple.json|config/inshop_SoftTriple.json]
+```
 
 - Implementation of EIF and IF
 
