@@ -25,14 +25,14 @@ python train.py --dataset [cub|cars|inshop] \
 - Training the models with mislabelled data
   - Training the DML models with Proxy-NCA++ loss or with SoftTriple loss
 ```
-python train.py --dataset [cub_noisy|cars_noisy|inshop_noisy] \
+python train_noisydata.py --dataset [cub_noisy|cars_noisy|inshop_noisy] \
 --loss-type ProxyNCA_prob_orig_noisy_0.1 \
 --seed [0|1|2|3|4] \
 --mislabel_percentage 0.1 \
 --config [config/cub_ProxyNCA_prob_orig.json|config/cars_ProxyNCA_prob_orig.json|config/inshop_ProxyNCA_prob_orig.json]
 ```
 ```
-python train.py --dataset [cub_noisy|cars_noisy|inshop_noisy] \
+python train_noisydata.py --dataset [cub_noisy|cars_noisy|inshop_noisy] \
 --loss-type SoftTriple_noisy_0.1 \
 --seed [0|1|2|3|4] \
 --mislabel_percentage 0.1 \
@@ -62,3 +62,7 @@ python train.py --dataset [cub_noisy|cars_noisy|inshop_noisy] \
 - Sample relabelling recommendation evaluation
 
   See experiments/sample_recommendation_evaluation.py
+
+## Results
+- All trained models: https://drive.google.com/drive/folders/1yKR8BWPxM5MtUwjHzU7k-Mbzse73Ij_t?usp=sharing
+- For the detailed statistics of Table 1, please see https://docs.google.com/spreadsheets/d/1f4OXVLO2Mu2CHrBVm72a2ztTHx5nNG92dczTNNw7io4/edit?usp=sharing
