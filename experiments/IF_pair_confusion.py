@@ -4,6 +4,7 @@ from Influence_function.influence_function import OrigIF
 from Influence_function.IF_utils import *
 from Influence_function.EIF_utils import grad_confusion_pair
 from evaluation import assign_by_euclidian_at_k_indices
+import numpy as np
 os.environ['CUDA_VISIBLE_DEVICES'] = "1"
 
 if __name__ == '__main__':
@@ -70,22 +71,7 @@ if __name__ == '__main__':
                                                                    base_dir, loss_type, wrong_ind, confuse_ind,
                                                                    IS.model_dir,
                                                                    IS.seed,
-                                                                   '{}_softtriple_reweight'.format(dataset_name)))
-
-
-        # os.system("python train_sample_reweight.py --dataset {} \
-        #                 --loss-type {}_confusion_{}_{}_Allsamples \
-        #                 --helpful {}/Allhelpful_indices_{}_{}.npy \
-        #                 --harmful {}/Allharmful_indices_{}_{}.npy \
-        #                 --model_dir {} \
-        #                 --helpful_weight 2 --harmful_weight 0 \
-        #                 --seed {} --config config/{}.json".format(IS.dataset_name,
-        #                                                            loss_type, wrong_ind, confuse_ind,
-        #                                                            base_dir, wrong_ind, confuse_ind,
-        #                                                            base_dir, wrong_ind, confuse_ind,
-        #                                                            IS.model_dir,
-        #                                                            IS.seed,
-        #                                                            '{}_reweight'.format(dataset_name)))
+                                                                   '{}_reweight_{}'.format(dataset_name, loss_type)))
 
 
 

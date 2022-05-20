@@ -4,7 +4,7 @@ import numpy as np
 from torchvision.transforms.functional import to_pil_image
 from torchvision.io.image import read_image
 from Influence_function.influence_function import MCScalableIF
-from explanation_evaluation.CAM_methods import *
+# from explanation_evaluation.CAM_methods import *
 from Influence_function.EIF_utils import *
 from Influence_function.IF_utils import *
 from utils import overlay_mask
@@ -21,7 +21,6 @@ if __name__ == '__main__':
     # dataset_name = 'cub';  config_name = 'cub'; seed = 0
     # dataset_name = 'cars'; config_name = 'cars'; seed = 3
     dataset_name = 'inshop'; config_name = 'inshop'; seed = 4
-    # dataset_name = 'sop'; config_name = 'sop'; seed = 3
 
     IS = SampleRelabel(dataset_name, seed, loss_type, config_name, test_crop)
 
@@ -44,6 +43,8 @@ if __name__ == '__main__':
     relabel_dist = np.asarray(relabel_dist)
 
     ct_relabel = 0
+    ct_relabel_instances = 0
+    ct_instances = 0
     ct_relabel_sig = 0
     centrailized_relabel = []
     diversified_relabel = []
@@ -52,6 +53,8 @@ if __name__ == '__main__':
         if np.sum(relabel_dist[cls] != cls) > 0:
             ct_relabel += 1
             percentage = np.sum(relabel_dist[cls] != cls) / len(relabel_dist[cls])
+            ct_relabel_instances += np.sum(relabel_dist[cls] != cls)
+            ct_instances += len(relabel_dist[cls])
             if percentage >= 0.1:
                 # print('Cls {} Percentage {}'.format(cls, percentage))
                 ct_relabel_sig += 1
@@ -65,6 +68,7 @@ if __name__ == '__main__':
             elif percentage <= 0.05 and percentage > 0:
                 individual_relabel.append(cls)
 
+    print('Total number of instances to be relabelled {}%'.format(ct_relabel_instances/ct_instances))
     print('Total number of classes {}'.format(IS.dl_tr.dataset.nb_classes()))
     print('Total number of classes with relabelling suggestion {}'.format(ct_relabel))
     print('Total number of classes with significant (>=10%) relabelling suggestion {}'.format(ct_relabel_sig))
@@ -107,39 +111,39 @@ if __name__ == '__main__':
     # Individual [48, 611, 682, 967, 1497, 1629, 1723, 1730, 1733, 1753, 1962, 2369, 2462, 2529, 2616, 3102, 3125, 3803, 3965]
 
     '''Plot'''
-    cls = 682
-    cls_indices = np.where(np.asarray(IS.dl_tr.dataset.ys) == cls)[0]
-    relabel_as_classes = relabel_dict[cls_indices]
-
-    relabel_freq = np.asarray([np.sum(relabel_dist[cls] == c) / len(relabel_dist[cls]) for c in range(IS.dl_tr.dataset.nb_classes())])
-    high_freq_relabel_cls = relabel_freq.argsort()[::-1]
-
-    for topk in range(1, IS.dl_tr.dataset.nb_classes()):
-        if relabel_freq[high_freq_relabel_cls[topk]] == 0:
-            break
-        # top-1 class
-        topk_relabel_class = np.arange(IS.dl_tr.dataset.nb_classes())[high_freq_relabel_cls[topk]]
-        interest_indices = np.where(relabel_as_classes == topk_relabel_class)[0]
-        vis_indices = cls_indices[interest_indices]
-        fig = plt.figure(figsize=(30, 15))
-        for kk in range(min(len(vis_indices), 10)):
-            plt.subplot(2, 10, kk+1)
-            img = read_image(IS.dl_tr.dataset.im_paths[vis_indices[kk]])
-            plt.imshow(to_pil_image(img))
-            plt.title("Ind = {} Cls = {}".format(vis_indices[kk], cls))
-            plt.axis('off')
-            # plt.tight_layout()
-
-        ind_cls = np.where(np.asarray(IS.dl_tr.dataset.ys) == topk_relabel_class)[0]
-        for i in range(min(5, len(ind_cls))):
-            plt.subplot(2, 10, i + 11)
-            img = read_image(IS.dl_tr.dataset.im_paths[ind_cls[i]])
-            plt.imshow(to_pil_image(img))
-            plt.title('Ind = {} Cls = {}'.format(ind_cls[i], topk_relabel_class))
-            plt.axis('off')
-        plt.tight_layout()
-        plt.show()
-        plt.close()
+    # cls = 682
+    # cls_indices = np.where(np.asarray(IS.dl_tr.dataset.ys) == cls)[0]
+    # relabel_as_classes = relabel_dict[cls_indices]
+    #
+    # relabel_freq = np.asarray([np.sum(relabel_dist[cls] == c) / len(relabel_dist[cls]) for c in range(IS.dl_tr.dataset.nb_classes())])
+    # high_freq_relabel_cls = relabel_freq.argsort()[::-1]
+    #
+    # for topk in range(1, IS.dl_tr.dataset.nb_classes()):
+    #     if relabel_freq[high_freq_relabel_cls[topk]] == 0:
+    #         break
+    #     # top-1 class
+    #     topk_relabel_class = np.arange(IS.dl_tr.dataset.nb_classes())[high_freq_relabel_cls[topk]]
+    #     interest_indices = np.where(relabel_as_classes == topk_relabel_class)[0]
+    #     vis_indices = cls_indices[interest_indices]
+    #     fig = plt.figure(figsize=(30, 15))
+    #     for kk in range(min(len(vis_indices), 10)):
+    #         plt.subplot(2, 10, kk+1)
+    #         img = read_image(IS.dl_tr.dataset.im_paths[vis_indices[kk]])
+    #         plt.imshow(to_pil_image(img))
+    #         plt.title("Ind = {} Cls = {}".format(vis_indices[kk], cls))
+    #         plt.axis('off')
+    #         # plt.tight_layout()
+    #
+    #     ind_cls = np.where(np.asarray(IS.dl_tr.dataset.ys) == topk_relabel_class)[0]
+    #     for i in range(min(5, len(ind_cls))):
+    #         plt.subplot(2, 10, i + 11)
+    #         img = read_image(IS.dl_tr.dataset.im_paths[ind_cls[i]])
+    #         plt.imshow(to_pil_image(img))
+    #         plt.title('Ind = {} Cls = {}'.format(ind_cls[i], topk_relabel_class))
+    #         plt.axis('off')
+    #     plt.tight_layout()
+    #     plt.show()
+    #     plt.close()
 
 
 

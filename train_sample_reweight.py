@@ -31,7 +31,7 @@ parser.add_argument('--warmup_k', default=5, type=int)
 parser.add_argument('--dataset', default='cub')
 parser.add_argument('--seed', default=3, type=int)
 parser.add_argument('--embedding-size', default = 512, type=int, dest = 'sz_embedding')
-parser.add_argument('--config', default='config/cub_softtriple_reweight.json')
+parser.add_argument('--config', default='config/cub_reweight_SoftTriple.json')
 parser.add_argument('--mode', default='trainval', choices=['train', 'trainval', 'test',
                                                            'testontrain', 'testontrain_super'],
                     help='train with train data or train with trainval')

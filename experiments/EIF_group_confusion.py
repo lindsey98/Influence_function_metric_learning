@@ -43,7 +43,9 @@ if __name__ == '__main__':
 
     exit()
 
-    '''Train (see scripts/run_cars.sh ...) with downweighted harmful and upweighted helpful training'''
+    '''Actually train with downweighted harmful and upweighted helpful training'''
+    os.system("./scripts/run_{}_EIF_{}.sh".format(dataset_name, loss_type))
+    exit()
 
     '''Other: get confusion (before VS after)'''
     # FIXME: inter class distance should be computed based on original confusion pairs
@@ -60,7 +62,7 @@ if __name__ == '__main__':
         IS.model = IS._load_model() # reload the original weights
         inter_dist_orig, _ = grad_confusion(IS.model, features, wrong_cls, confuse_classes,
                                             IS.testing_nn_label, IS.testing_label, IS.testing_nn_indices)
-        print("Original inter-class distance: ", inter_dist_orig)
+        print("Original d(G_p): ", inter_dist_orig)
 
         # reload weights as new
         IS.model.load_state_dict(torch.load(
@@ -71,7 +73,7 @@ if __name__ == '__main__':
                  dataset_name, 512, seed)))
         inter_dist_after, _ = grad_confusion(IS.model, features, wrong_cls, confuse_classes,
                                              IS.testing_nn_label, IS.testing_label, IS.testing_nn_indices)
-        print("After inter-class distance: ", inter_dist_after)
+        print("After d(G_p): ", inter_dist_after)
 
     exit()
 

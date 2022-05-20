@@ -118,14 +118,6 @@ class SampleRelabel(MCScalableIF):
             ax.title.set_text('Ind = {} \n Class = {}'.format(ind3, dl.dataset.ys[ind3]))
             plt.axis('off')
 
-            # ax=fig.add_subplot(2, 3, 5)
-            # ax.imshow(result2)
-            # plt.axis('off')
-            #
-            # ax=fig.add_subplot(2, 3, 6)
-            # ax.imshow(result3)
-            # plt.axis('off')
-            # plt.show()
             plt.savefig('./{}/{}/{}_{}.png'.format(base_dir, self.dataset_name,
                                                    ind1, ind2))
             plt.close()
@@ -165,38 +157,6 @@ class SampleRelabel(MCScalableIF):
             with open('./{}/Allrelabeldict_{}_{}_soft_knn.pkl'.format(base_dir, pair_ind1, pair_ind2), 'wb') as handle:
                 pickle.dump(relabel_dict, handle)
 
-        # elif relabel_method == 'soft_IF': # relabel by scalable influence function
-        #     relabel_dict = {}
-        #     theta_orig = self.model.module[-1].weight.data
-        #     test_features = self.get_features()
-        #     torch.cuda.empty_cache()
-        #     theta = self.get_theta_newton_step_single(theta_orig, test_features, [pair_ind1], [pair_ind2], descent=False)
-        #
-        #     unique_labels, unique_counts = torch.unique(self.train_label, return_counts=True)
-        #     median_shots_percls = unique_counts.median().item()
-        #     pred_label, _ = kNN_label_pred(query_indices=top_indices, embeddings=self.train_embedding, labels=self.train_label,
-        #                                    nb_classes=self.dl_tr.dataset.nb_classes(), knn_k=median_shots_percls)
-        #     pred_label = pred_label[:, :5] # top 5 relabel candidate
-        #     relabel_candidate = {}
-        #     for i, kk in enumerate(top_indices):
-        #         relabel_candidate[kk] = pred_label[i]
-        #
-        #     l_prev, l_cur = loss_change_train_relabel(self.model, self.criterion, self.dl_tr, relabel_candidate, theta_orig, theta, top_indices)
-        #     l_diff = l_cur - l_prev # (N_harmful, nb_classes)
-        #
-        #     if lookat_harmful:
-        #         l_diff_filtered = (l_diff < 0) * np.abs(l_diff) # find the label when loss is decreasing -> relabeling helps to deconfuse
-        #     else:
-        #         l_diff_filtered = (l_diff > 0) * np.abs(l_diff) # find the label when loss is increasing -> relabeling helps to confuse
-        #
-        #     prob_relabel = l_diff_filtered / np.sum(l_diff_filtered, axis=-1, keepdims=True)
-        #
-        #     for kk in range(len(top_indices)):
-        #         relabel_dict[top_indices[kk]] = np.zeros(self.dl_tr.dataset.nb_classes())
-        #         relabel_dict[top_indices[kk]][pred_label[kk].long()] = prob_relabel[kk]
-        #
-        #     with open('./{}/Allrelabeldict_{}_{}_soft_IF.pkl'.format(base_dir, pair_ind1, pair_ind2), 'wb') as handle:
-        #         pickle.dump(relabel_dict, handle)
 
         else:
             raise NotImplemented

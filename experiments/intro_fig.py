@@ -97,8 +97,6 @@ if __name__ == '__main__':
     ax.set_ylabel('SoftTriple', fontdict={'fontsize': 50})
     ax.set_yticks(range(5))
     ax.set_yticklabels(['Seed 0', 'Seed 1', 'Seed 2', 'Seed 3', 'Seed 4'], fontdict={'fontsize': 30})
-    # plt.xlim(left=min(np.asarray(inshop_softtriple).min(), np.asarray(inshop_nca).min(), np.asarray(inshop_anchor).min()) - nb_classes,
-    #          right=max(np.asarray(inshop_softtriple).max(), np.asarray(inshop_nca).max(), np.asarray(inshop_anchor).max()) - nb_classes)
 
     plt.xlabel("Testing Classes", fontdict={'fontsize': 50})
     plt.tight_layout()
