@@ -12,9 +12,7 @@ pip install -r requirements.txt
 
 [Cars196](https://ai.stanford.edu/%7Ejkrause/cars/car_dataset.html)\[2\]
 
-[Stanford Online Product](https://cvgl.stanford.edu/projects/lifted_struct/)\[3\]
-
-[In-shop Clothes Retrieval](https://mmlab.ie.cuhk.edu.hk/projects/DeepFashion/InShopRetrieval.html)\[4\]
+[In-shop Clothes Retrieval](https://mmlab.ie.cuhk.edu.hk/projects/DeepFashion/InShopRetrieval.html)\[3\]
 
 
 ## Project Structure
@@ -82,6 +80,4 @@ python train_noisydata.py --dataset [cub_noisy|cars_noisy|inshop_noisy] \
 
 [2] Krause, J., Stark, M., Deng, J., & Fei-Fei, L. (2013). 3d object representations for fine-grained categorization. In Proceedings of the IEEE international conference on computer vision workshops (pp. 554-561).
 
-[3] Oh Song, H., Xiang, Y., Jegelka, S., & Savarese, S. (2016). Deep metric learning via lifted structured feature embedding. In Proceedings of the IEEE conference on computer vision and pattern recognition (pp. 4004-4012).
-
-[4] Liu, Z., Luo, P., Qiu, S., Wang, X., & Tang, X. (2016). Deepfashion: Powering robust clothes recognition and retrieval with rich annotations. In Proceedings of the IEEE conference on computer vision and pattern recognition (pp. 1096-1104).
+[3] Liu, Z., Luo, P., Qiu, S., Wang, X., & Tang, X. (2016). Deepfashion: Powering robust clothes recognition and retrieval with rich annotations. In Proceedings of the IEEE conference on computer vision and pattern recognition (pp. 1096-1104).
