@@ -11,7 +11,7 @@ import argparse
 import json
 from tqdm import tqdm
 from torch.utils.data import Dataset, DataLoader
-
+import random
 os.environ["CUDA_VISIBLE_DEVICES"]="1,0"
 
 parser = argparse.ArgumentParser(description='Training ProxyNCA++')
@@ -54,8 +54,8 @@ def load_best_checkpoint(model):
 if __name__ == '__main__':
 
     # set random seed for all gpus
-    # random.seed(args.seed)
-    # np.random.seed(args.seed) # FIXME: to not set seed
+    random.seed(args.seed)
+    np.random.seed(args.seed)
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed_all(args.seed)
 

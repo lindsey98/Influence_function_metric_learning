@@ -95,6 +95,7 @@ if __name__ == '__main__':
     #     entropy.append(relabel_entropy)
     # print(entropy)
 
+    '''Plot some examples of different categories of relabelling'''
     # CUB
     # Centralized [29, 53]
     # Diversified [58, 61, 96]
@@ -144,7 +145,6 @@ if __name__ == '__main__':
     #     plt.tight_layout()
     #     plt.show()
     #     plt.close()
-
 
 
     # for cls in range(IS.dl_tr.dataset.nb_classes()):

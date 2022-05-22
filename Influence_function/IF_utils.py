@@ -59,7 +59,6 @@ def inverse_hessian_product(model, criterion, v, dl_tr,
         hv = hessian_vector_product(loss, params, cur_estimate) # get hvp
         # Inverse Hessian product Update: v + (I - Hessian_at_x) * cur_estimate
         cur_estimate = [_v + (1 - damping) * _h_e - _hv.detach().cpu() / scale for _v, _h_e, _hv in zip(v, cur_estimate, hv)]
-        pass
 
     inverse_hvp = [b.detach().cpu() / scale for b in cur_estimate] # "In the loop, we scale the Hessian down by scale, which means that the estimate of the inverse Hessian-vector product will be scaled up by scale. The last division corrects for this scaling."
     return inverse_hvp # I didn't divide it by number of recursions

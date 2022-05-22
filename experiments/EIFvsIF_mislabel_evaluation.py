@@ -20,7 +20,7 @@ if __name__ == '__main__':
     # loss_type = 'SoftTriple_noisy_{}'.format(noisy_level); dataset_name = 'cars_noisy';  config_name = 'cars'; seed = 4
     loss_type = 'SoftTriple_noisy_{}'.format(noisy_level); dataset_name = 'inshop_noisy';  config_name = 'inshop'; seed = 3
 
-    '''============ Our Influence function =================='''
+    '''============================================= Our Empirical Influence function =============================================================='''
     IS = MCScalableIF(dataset_name, seed, loss_type, config_name, test_crop)
     basedir = 'MislabelExp_Influential_data'
     os.makedirs(basedir, exist_ok=True)
@@ -28,10 +28,10 @@ if __name__ == '__main__':
     for num_thetas in [1, 2, 3]:
 
         '''Mislabelled data detection'''
-        if os.path.exists("{}/{}_{}_helpful_testcls{}_SIF_theta{}_{}.npy".format(basedir, IS.dataset_name, IS.loss_type, 0, num_thetas, noisy_level)):
-            helpful_indices = np.load("{}/{}_{}_helpful_testcls{}_SIF_theta{}_{}.npy".format(basedir, IS.dataset_name, IS.loss_type, 0, num_thetas, noisy_level))
-            harmful_indices = np.load("{}/{}_{}_harmful_testcls{}_SIF_theta{}_{}.npy".format(basedir, IS.dataset_name, IS.loss_type, 0, num_thetas, noisy_level))
-            influence_values = np.load("{}/{}_{}_influence_values_testcls{}_SIF_theta{}_{}.npy".format(basedir, IS.dataset_name, IS.loss_type, 0, num_thetas, noisy_level))
+        if os.path.exists("{}/{}_{}_helpful_testcls{}_EIF_theta{}_{}.npy".format(basedir, IS.dataset_name, IS.loss_type, 0, num_thetas, noisy_level)):
+            helpful_indices = np.load("{}/{}_{}_helpful_testcls{}_EIF_theta{}_{}.npy".format(basedir, IS.dataset_name, IS.loss_type, 0, num_thetas, noisy_level))
+            harmful_indices = np.load("{}/{}_{}_harmful_testcls{}_EIF_theta{}_{}.npy".format(basedir, IS.dataset_name, IS.loss_type, 0, num_thetas, noisy_level))
+            influence_values = np.load("{}/{}_{}_influence_values_testcls{}_EIF_theta{}_{}.npy".format(basedir, IS.dataset_name, IS.loss_type, 0, num_thetas, noisy_level))
         else:
             confusion_class_pairs = IS.get_confusion_class_pairs()
 
@@ -46,9 +46,9 @@ if __name__ == '__main__':
 
             helpful_indices = np.where(influence_values < 0)[0]  # cache all helpful
             harmful_indices = np.where(influence_values > 0)[0]  # cache all harmful
-            np.save("{}/{}_{}_helpful_testcls{}_SIF_theta{}_{}".format(basedir, IS.dataset_name, IS.loss_type, 0, num_thetas, noisy_level), helpful_indices)
-            np.save("{}/{}_{}_harmful_testcls{}_SIF_theta{}_{}".format(basedir, IS.dataset_name, IS.loss_type, 0, num_thetas, noisy_level), harmful_indices)
-            np.save("{}/{}_{}_influence_values_testcls{}_SIF_theta{}_{}".format(basedir, IS.dataset_name, IS.loss_type, 0, num_thetas, noisy_level), influence_values)
+            np.save("{}/{}_{}_helpful_testcls{}_EIF_theta{}_{}".format(basedir, IS.dataset_name, IS.loss_type, 0, num_thetas, noisy_level), helpful_indices)
+            np.save("{}/{}_{}_harmful_testcls{}_EIF_theta{}_{}".format(basedir, IS.dataset_name, IS.loss_type, 0, num_thetas, noisy_level), harmful_indices)
+            np.save("{}/{}_{}_influence_values_testcls{}_EIF_theta{}_{}".format(basedir, IS.dataset_name, IS.loss_type, 0, num_thetas, noisy_level), influence_values)
 
         training_sample_by_influence = influence_values.argsort()  # ascending, harmful first
         # mislabelled indices ground-truth
@@ -68,7 +68,7 @@ if __name__ == '__main__':
     # TODO climbing plot
     '''Weighted KNN'''
     start_time = time.time()
-    harmful_indices = np.load("{}/{}_{}_harmful_testcls{}_SIF_theta{}_{}.npy".format(basedir, IS.dataset_name, IS.loss_type, 0, 1, noisy_level))
+    harmful_indices = np.load("{}/{}_{}_harmful_testcls{}_EIF_theta{}_{}.npy".format(basedir, IS.dataset_name, IS.loss_type, 0, 1, noisy_level))
     relabel_dict = {}
     unique_labels, unique_counts = torch.unique(IS.train_label, return_counts=True)
     median_shots_percls = unique_counts.median().item()
@@ -92,8 +92,9 @@ if __name__ == '__main__':
                     ct_correct += 1
     print(ct_correct, total_ct)
 
+    '''======================================================================================================================================='''
 
-    '''============ Original Influence function =================='''
+    '''======================================== Original Influence function =========================================================================='''
     IS = OrigIF(dataset_name, seed, loss_type, config_name, test_crop)
     basedir = 'MislabelExp_Influential_data'
     os.makedirs(basedir, exist_ok=True)
@@ -138,7 +139,9 @@ if __name__ == '__main__':
 
     plt.plot(cum_overlap, label='IF')
 
-    '''Relabelled data accuracy (only relabel harmful)'''
+    '''======================================================================================================================================='''
+
+    '''=============================================Random================================================================'''
     overlap = np.isin(np.arange(len(IS.dl_tr.dataset)), gt_mislabelled_indices)
     cum_overlap = np.cumsum(overlap)
 
@@ -147,6 +150,7 @@ if __name__ == '__main__':
     plt.tight_layout()
     plt.savefig('./images/mislabel_{}_{}_alltheta_noisylevel{}.pdf'.format(dataset_name, loss_type, noisy_level),
                 bbox_inches='tight')
-    # plt.savefig('./images/mislabel_{}_{}_alltheta_noisylevel{}.png'.format(dataset_name, loss_type, noisy_level),
-    #             bbox_inches='tight')
+
+    '''======================================================================================================================================='''
+
 

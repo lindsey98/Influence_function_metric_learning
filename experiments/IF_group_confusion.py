@@ -46,11 +46,9 @@ if __name__ == '__main__':
                 helpful_indices)
         np.save("Influential_data_baselines/{}_{}_harmful_testcls{}".format(IS.dataset_name, IS.loss_type, pair_idx),
                 harmful_indices)
-    exit()
 
     '''Actually train with downweighted harmful and upweighted helpful training'''
     os.system("./scripts/run_{}_IF_{}.sh".format(dataset_name, loss_type))
-    exit()
 
     '''Other: get confusion (before VS after)'''
     IS.model = IS._load_model()  # reload the original weights
@@ -75,5 +73,3 @@ if __name__ == '__main__':
         inter_dist_after, _ = grad_confusion(IS.model, features, wrong_cls, confuse_classes,
                                              IS.testing_nn_label, IS.testing_label, IS.testing_nn_indices)
         print("After d(G_p): ", inter_dist_after)
-
-    exit()

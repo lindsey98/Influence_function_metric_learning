@@ -68,14 +68,14 @@ class BaseInfluenceFunction():
             model.load_state_dict(weights_detach)
         return model
 
-    def _load_model_random(self, multi_gpu=True):
-        feat = Feat_resnet50_max_n()
-        emb = torch.nn.Linear(2048, self.sz_embedding)  # projection layer
-        model = torch.nn.Sequential(feat, emb)
-        if multi_gpu:
-            model = nn.DataParallel(model)
-        model.cuda()
-        return model
+    # def _load_model_random(self, multi_gpu=True):
+    #     feat = Feat_resnet50_max_n()
+    #     emb = torch.nn.Linear(2048, self.sz_embedding)  # projection layer
+    #     model = torch.nn.Sequential(feat, emb)
+    #     if multi_gpu:
+    #         model = nn.DataParallel(model)
+    #     model.cuda()
+    #     return model
 
     def _load_criterion(self):
         proxies = torch.load('{}/Epoch_{}/proxy.pth'.format(self.model_dir, self.epoch), map_location='cpu')['proxies'].detach()
@@ -175,8 +175,7 @@ class BaseInfluenceFunction():
 
         # Find the first index which explains >half of the wrong cases (cumulatively)
         confusion_class_degree = -1 * wrong_freq_matrix[np.repeat(np.arange(len(confusion_classes_ind)), 10),
-                                                        confusion_classes_ind.flatten()].reshape(
-            len(confusion_classes_ind), -1)
+                                                        confusion_classes_ind.flatten()].reshape(len(confusion_classes_ind), -1)
         result = np.cumsum(confusion_class_degree, -1)
         row, col = np.where(result > 0.5)
         first_index = [np.where(row == i)[0][0] if len(np.where(row == i)[0]) > 0 else 9 \
@@ -255,6 +254,62 @@ class BaseInfluenceFunction():
         plt.show()
         plt.close()
 
+    def vis_pairs(self, wrong_indices, confuse_indices, wrong_samecls_indices,
+                  dl, base_dir='Grad_Test'):
+        '''Visualize all confusion pairs'''
+        assert len(wrong_indices) == len(confuse_indices)
+        assert len(wrong_indices) == len(wrong_samecls_indices)
+
+        os.makedirs('./{}/{}'.format(base_dir, self.dataset_name), exist_ok=True)
+        model_copy = self._load_model()
+        model_copy.eval()
+
+        for ind1, ind2, ind3 in zip(wrong_indices, confuse_indices, wrong_samecls_indices):
+            # cam_extractor1 = GradCAMCustomize(model_copy, target_layer=model_copy.module[0].base.layer4)  # to last layer
+            # cam_extractor2 = GradCAMCustomize(model_copy, target_layer=model_copy.module[0].base.layer4)  # to last layer
+
+            # Get the two embeddings first
+            img1 = to_pil_image(read_image(dl.dataset.im_paths[ind1]))
+            img2 = to_pil_image(read_image(dl.dataset.im_paths[ind2]))
+            img3 = to_pil_image(read_image(dl.dataset.im_paths[ind3]))
+
+            # cam_extractor1._hooks_enabled = True
+            # model_copy.zero_grad()
+            # emb1 = model_copy(dl.dataset.__getitem__(ind1)[0].unsqueeze(0).cuda())
+            # emb2 = model_copy(dl.dataset.__getitem__(ind2)[0].unsqueeze(0).cuda())
+            # activation_map2 = cam_extractor1(torch.dot(emb1.detach().squeeze(0), emb2.squeeze(0)))
+            # result2, _ = overlay_mask(img2, to_pil_image(activation_map2[0].detach().cpu(), mode='F'), alpha=0.5)
+            #
+            # cam_extractor2._hooks_enabled = True
+            # model_copy.zero_grad()
+            # emb1 = model_copy(dl.dataset.__getitem__(ind1)[0].unsqueeze(0).cuda())
+            # emb3 = model_copy(dl.dataset.__getitem__(ind3)[0].unsqueeze(0).cuda())
+            # activation_map3 = cam_extractor2(torch.dot(emb1.detach().squeeze(0), emb3.squeeze(0)))
+            # result3, _ = overlay_mask(img3, to_pil_image(activation_map3[0].detach().cpu(), mode='F'), alpha=0.5)
+
+            # Display it
+            fig = plt.figure()
+            fig.subplots_adjust(top=0.8)
+
+            ax = fig.add_subplot(1, 3, 1)
+            ax.imshow(img1)
+            ax.title.set_text('Ind = {} \n Class = {}'.format(ind1, dl.dataset.ys[ind1]))
+            plt.axis('off')
+
+            ax = fig.add_subplot(1, 3, 2)
+            ax.imshow(img2)
+            ax.title.set_text('Ind = {} \n Class = {}'.format(ind2, dl.dataset.ys[ind2]))
+            plt.axis('off')
+
+            ax = fig.add_subplot(1, 3, 3)
+            ax.imshow(img3)
+            ax.title.set_text('Ind = {} \n Class = {}'.format(ind3, dl.dataset.ys[ind3]))
+            plt.axis('off')
+
+            plt.savefig('./{}/{}/{}_{}.png'.format(base_dir, self.dataset_name,
+                                                   ind1, ind2))
+            plt.close()
+
 class MCScalableIF(BaseInfluenceFunction):
     def __int__(self, dataset_name, seed, loss_type, config_name,
                 test_crop=False, sz_embedding=512, epoch=40):
@@ -276,7 +331,7 @@ class MCScalableIF(BaseInfluenceFunction):
     def get_theta_forclasses(self, all_features, wrong_cls, confuse_classes,
                              steps=1, lr=0.001, descent=False):
         '''
-            Get theta' by newton step on mean{d(confusion_pair)}
+            Get theta' by newton step on Avg{d(p)c)}
             :param all_features: testing features (N_test, 2048)
             :param wrong_cls: top wrong class
             :param confuse_classes: classes that are confused with the top wrong class
@@ -318,13 +373,13 @@ class MCScalableIF(BaseInfluenceFunction):
         self.model.module[-1].weight.data = theta_orig
         return deltaD, deltaL, theta
 
-    def get_theta_forpairs(self, all_features, wrong_indices, confuse_indices,
-                           steps=1, lr=0.001, descent=False):
+    def get_theta_forpair(self, all_features, wrong_idx, confuse_idx,
+                          steps=1, lr=0.001, descent=False):
         '''
-            Get theta' by newton step on d(confusion_pair)
+            Get theta' by newton step on d(p_c)
             :param all_features: testing features (N_test, 2048)
-            :param wrong_indices: confuse pairs indices
-            :param confuse_indices: confuse pairs indices
+            :param wrong_idx: confuse pairs indices
+            :param confuse_idx: confuse pairs indices
             :param steps: # of newton steps
             :param lr: learning rate
             :param descent: gradient descent or ascent
@@ -334,12 +389,12 @@ class MCScalableIF(BaseInfluenceFunction):
         torch.cuda.empty_cache(); theta = theta_orig.clone()
 
         # Record original inter-class distance
-        inter_dist_orig, _ = grad_confusion_pair(self.model, all_features, wrong_indices, confuse_indices)  # dD/dtheta
+        inter_dist_orig, _ = grad_confusion_pair(self.model, all_features, wrong_idx, confuse_idx)  # dD/dtheta
         print("Original confusion: ", inter_dist_orig)
 
         # Optimization
         for _ in range(steps):
-            inter_dist, v = grad_confusion_pair(self.model, all_features, wrong_indices, confuse_indices)  # dD/dtheta
+            inter_dist, v = grad_confusion_pair(self.model, all_features, wrong_idx, confuse_idx)  # dD/dtheta
             print("Confusion: ", inter_dist)
             if abs(inter_dist - inter_dist_orig) >= 1.:  # FIXME: stopping criteria threshold selection
                 break
@@ -352,7 +407,7 @@ class MCScalableIF(BaseInfluenceFunction):
 
         # deltaD, deltaL
         grad_loss = self.get_grad_loss_train_all(theta_orig, theta)
-        inter_dist, _ = grad_confusion_pair(self.model, all_features, wrong_indices, confuse_indices)  # dD/dtheta
+        inter_dist, _ = grad_confusion_pair(self.model, all_features, wrong_idx, confuse_idx)  # dD/dtheta
         deltaD = inter_dist - inter_dist_orig  # scalar
         deltaL = np.stack(grad_loss['l_cur']) - np.stack(grad_loss['l_prev'])  # (N, )
 
@@ -361,7 +416,8 @@ class MCScalableIF(BaseInfluenceFunction):
         return deltaD, deltaL, theta
 
     def get_theta_orthogonalization_forclasses(self, prev_thetas,
-                                               all_features, wrong_cls, confuse_classes,
+                                               all_features,
+                                               wrong_cls, confuse_classes,
                                                theta_orig,
                                                inter_dist_orig):
         '''
@@ -390,12 +446,12 @@ class MCScalableIF(BaseInfluenceFunction):
         deltaL_deltaD.append(deltaL / (deltaD + 1e-8))
         # revise back the weights
         self.model.module[-1].weight.data = theta_orig
-        return new_theta.unsqueeze(0), deltaL_deltaD
+        return deltaD, deltaL, new_theta
 
-    def get_theta_orthogonalization_forpairs(self, prev_thetas,
-                                             all_features, wrong_indices, confuse_indices,
-                                             theta_orig,
-                                             inter_dist_orig):
+    def get_theta_orthogonalization_forpair(self, prev_thetas,
+                                            all_features, wrong_indices, confuse_indices,
+                                            theta_orig,
+                                            inter_dist_orig):
         '''
             Get the third theta' by taking the avg of the theta_max, theta_min
             :param prev_thetas: theta_max and theta_min
@@ -421,12 +477,12 @@ class MCScalableIF(BaseInfluenceFunction):
         deltaL_deltaD.append(deltaL / (deltaD + 1e-8))
         # revise back the weights
         self.model.module[-1].weight.data = theta_orig
-        return new_theta.unsqueeze(0), deltaL_deltaD
+        return deltaD, deltaL, new_theta
 
-    def MC_estimate_forclasses(self, pair, steps, num_thetas=2):
+    def MC_estimate_forclasses(self, class_pairs, steps, num_thetas=2):
         '''
             Estimate deltaL/deltaD for group of confusion pairs
-            :param pair: wrong_cls and confusion_classes
+            :param class_pairs: wrong_cls and confusion_classes
             :param steps: # newton steps
             :param num_thetas: # theta used for estimation
             :returns avg(deltaL/deltaD)
@@ -437,8 +493,8 @@ class MCScalableIF(BaseInfluenceFunction):
         deltaL_deltaD = []
         theta_list = torch.tensor([])
 
-        wrong_cls = pair[0][0]  # FIXME: look at pairs associated with top-1 wrong class
-        confused_classes = [x[1] for x in pair]
+        wrong_cls = class_pairs[0][0]  # FIXME: look at pairs associated with top-1 wrong class
+        confused_classes = [x[1] for x in class_pairs]
         inter_dist_orig, _ = grad_confusion(self.model, all_features, wrong_cls, confused_classes,
                                             self.testing_nn_label, self.testing_label,
                                             self.testing_nn_indices)  # original D
@@ -463,23 +519,23 @@ class MCScalableIF(BaseInfluenceFunction):
 
             else:
                 '''If more thetas are needed'''
-                theta_new, deltaL_deltaD_more = self.get_theta_orthogonalization_forclasses(prev_thetas=theta_list,
+                deltaD, deltaL, theta_new = self.get_theta_orthogonalization_forclasses(prev_thetas=theta_list,
                                                                                             all_features=all_features,
                                                                                             wrong_cls=wrong_cls,
                                                                                             confuse_classes=confused_classes,
                                                                                             theta_orig=theta_orig,
                                                                                             inter_dist_orig=inter_dist_orig
                                                                                             )
-                theta_list = torch.cat([theta_list, theta_new.detach().cpu()], dim=0)
-                deltaL_deltaD.extend(deltaL_deltaD_more)
+                deltaL_deltaD.append(deltaL / (deltaD + 1e-8))
+                theta_list = torch.cat([theta_list, theta_new.detach().cpu().unsqueeze(0)], dim=0)
                 break
 
-        self.model.module[-1].weight.data = theta_orig
         # Take average deltaD_deltaL
+        self.model.module[-1].weight.data = theta_orig
         mean_deltaL_deltaD = np.mean(np.stack(deltaL_deltaD), axis=0)
         return mean_deltaL_deltaD
 
-    def MC_estimate_forpairs(self, pair, steps, num_thetas=2):
+    def MC_estimate_forpair(self, pair, steps, num_thetas=2):
         '''
             Estimate deltaL/deltaD for group of confusion pairs
             :param pair: wrong_indices and confuse_indices
@@ -501,33 +557,33 @@ class MCScalableIF(BaseInfluenceFunction):
 
             if kk == 0:
                 ''' first theta is the steepest ascent direction '''
-                deltaD, deltaL, theta_new = self.get_theta_forpairs(all_features, [pairidx1], [pairidx2],
-                                                                    descent=False, steps=steps)
+                deltaD, deltaL, theta_new = self.get_theta_forpair(all_features, [pairidx1], [pairidx2],
+                                                                   descent=False, steps=steps)
                 deltaL_deltaD.append(deltaL / (deltaD + 1e-8))
                 theta_list = torch.cat([theta_list, theta_new.detach().cpu().unsqueeze(0)], dim=0)
 
             elif kk == 1:
                 '''second theta is the steepest descent direction'''
-                deltaD, deltaL, theta_new = self.get_theta_forpairs(all_features, [pairidx1], [pairidx2],
-                                                                    descent=True, steps=steps)
+                deltaD, deltaL, theta_new = self.get_theta_forpair(all_features, [pairidx1], [pairidx2],
+                                                                   descent=True, steps=steps)
                 deltaL_deltaD.append(deltaL / (deltaD + 1e-8))
                 theta_list = torch.cat([theta_list, theta_new.detach().cpu().unsqueeze(0)], dim=0)
 
             else:
                 '''If more thetas are needed'''
-                theta_new, deltaL_deltaD_more = self.get_theta_orthogonalization_forpairs(prev_thetas=theta_list,
-                                                                                          all_features=all_features,
-                                                                                          wrong_indices=[pairidx1],
-                                                                                          confuse_indices=[pairidx2],
-                                                                                          theta_orig=theta_orig,
-                                                                                          inter_dist_orig=inter_dist_orig
-                                                                                          )
-                theta_list = torch.cat([theta_list, theta_new.detach().cpu()], dim=0)
-                deltaL_deltaD.extend(deltaL_deltaD_more)
+                deltaD, deltaL, theta_new = self.get_theta_orthogonalization_forpair(prev_thetas=theta_list,
+                                                                                         all_features=all_features,
+                                                                                         wrong_indices=[pairidx1],
+                                                                                         confuse_indices=[pairidx2],
+                                                                                         theta_orig=theta_orig,
+                                                                                         inter_dist_orig=inter_dist_orig
+                                                                                         )
+                theta_list = torch.cat([theta_list, theta_new.detach().cpu().unsqueeze(0)], dim=0)
+                deltaL_deltaD.append(deltaL / (deltaD + 1e-8))
                 break
 
-        self.model.module[-1].weight.data = theta_orig
         # Take average deltaD_deltaL
+        self.model.module[-1].weight.data = theta_orig
         mean_deltaL_deltaD = np.mean(np.stack(deltaL_deltaD), axis=0)
         return mean_deltaL_deltaD
 

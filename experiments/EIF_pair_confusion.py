@@ -39,7 +39,7 @@ if __name__ == '__main__':
             print('skip')
             continue
         # sanity check: IS.viz_2sample(IS.dl_ev, wrong_ind, confuse_ind)
-        mean_deltaL_deltaD = IS.MC_estimate_forpairs([wrong_ind, confuse_ind], num_thetas=1, steps=50)
+        mean_deltaL_deltaD = IS.MC_estimate_forpair([wrong_ind, confuse_ind], num_thetas=1, steps=50)
 
         influence_values = np.asarray(mean_deltaL_deltaD)
         training_sample_by_influence = influence_values.argsort()  # ascending

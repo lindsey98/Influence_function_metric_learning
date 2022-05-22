@@ -54,7 +54,7 @@ class Explanation4EIF(MCScalableIF):
                 not os.path.exists('./{}/{}_helpful_indices_{}_{}.npy'.format('Confuse_pair_influential_data/{}'.format(self.dataset_name), loss_type, wrong_index, confuse_index)) or \
                 not './{}/{}_harmful_indices_{}_{}.npy'.format('Confuse_pair_influential_data/{}'.format(self.dataset_name), loss_type, wrong_index, confuse_index):
 
-            mean_deltaL_deltaD = self.MC_estimate_forpairs([wrong_index, confuse_index], num_thetas=1, steps=50)
+            mean_deltaL_deltaD = self.MC_estimate_forpair([wrong_index, confuse_index], num_thetas=1, steps=50)
             influence_values = np.asarray(mean_deltaL_deltaD)
 
             harmful_indices = np.where(influence_values > 0)[0]

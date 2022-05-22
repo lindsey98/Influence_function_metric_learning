@@ -17,7 +17,6 @@ import random
 os.environ["CUDA_VISIBLE_DEVICES"]="0, 1"
 
 parser = argparse.ArgumentParser(description='Training ProxyNCA++')
-# parser.add_argument('--epochs', default = 40, type=int, dest = 'nb_epochs')
 parser.add_argument('--log-filename', default = 'example')
 parser.add_argument('--lr_steps', default=[1000], nargs='+', type=int)
 parser.add_argument('--source_dir', default='', type=str)

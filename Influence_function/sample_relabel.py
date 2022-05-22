@@ -66,100 +66,28 @@ class SampleRelabel(MCScalableIF):
 
         return nn_indices, nn_label, nn_indices_same_cls
 
-    def vis_pairs(self, wrong_indices, confuse_indices, wrong_samecls_indices,
-                  dl, base_dir='Grad_Test'):
-        '''Visualize all confusion pairs'''
-        assert len(wrong_indices) == len(confuse_indices)
-        assert len(wrong_indices) == len(wrong_samecls_indices)
-
-        os.makedirs('./{}/{}'.format(base_dir, self.dataset_name), exist_ok=True)
-        model_copy = self._load_model()
-        model_copy.eval()
-
-        for ind1, ind2, ind3 in zip(wrong_indices, confuse_indices, wrong_samecls_indices):
-            # cam_extractor1 = GradCAMCustomize(model_copy, target_layer=model_copy.module[0].base.layer4)  # to last layer
-            # cam_extractor2 = GradCAMCustomize(model_copy, target_layer=model_copy.module[0].base.layer4)  # to last layer
-
-            # Get the two embeddings first
-            img1 = to_pil_image(read_image(dl.dataset.im_paths[ind1]))
-            img2 = to_pil_image(read_image(dl.dataset.im_paths[ind2]))
-            img3 = to_pil_image(read_image(dl.dataset.im_paths[ind3]))
-
-            # cam_extractor1._hooks_enabled = True
-            # model_copy.zero_grad()
-            # emb1 = model_copy(dl.dataset.__getitem__(ind1)[0].unsqueeze(0).cuda())
-            # emb2 = model_copy(dl.dataset.__getitem__(ind2)[0].unsqueeze(0).cuda())
-            # activation_map2 = cam_extractor1(torch.dot(emb1.detach().squeeze(0), emb2.squeeze(0)))
-            # result2, _ = overlay_mask(img2, to_pil_image(activation_map2[0].detach().cpu(), mode='F'), alpha=0.5)
-            #
-            # cam_extractor2._hooks_enabled = True
-            # model_copy.zero_grad()
-            # emb1 = model_copy(dl.dataset.__getitem__(ind1)[0].unsqueeze(0).cuda())
-            # emb3 = model_copy(dl.dataset.__getitem__(ind3)[0].unsqueeze(0).cuda())
-            # activation_map3 = cam_extractor2(torch.dot(emb1.detach().squeeze(0), emb3.squeeze(0)))
-            # result3, _ = overlay_mask(img3, to_pil_image(activation_map3[0].detach().cpu(), mode='F'), alpha=0.5)
-
-            # Display it
-            fig = plt.figure()
-            fig.subplots_adjust(top=0.8)
-
-            ax = fig.add_subplot(1, 3, 1)
-            ax.imshow(img1)
-            ax.title.set_text('Ind = {} \n Class = {}'.format(ind1, dl.dataset.ys[ind1]))
-            plt.axis('off')
-
-            ax = fig.add_subplot(1, 3, 2)
-            ax.imshow(img2)
-            ax.title.set_text('Ind = {} \n Class = {}'.format(ind2, dl.dataset.ys[ind2]))
-            plt.axis('off')
-
-            ax = fig.add_subplot(1, 3, 3)
-            ax.imshow(img3)
-            ax.title.set_text('Ind = {} \n Class = {}'.format(ind3, dl.dataset.ys[ind3]))
-            plt.axis('off')
-
-            plt.savefig('./{}/{}/{}_{}.png'.format(base_dir, self.dataset_name,
-                                                   ind1, ind2))
-            plt.close()
-
-    def calc_relabel_dict(self, lookat_harmful, relabel_method,
-                          harmful_indices, helpful_indices, train_nn_indices, train_nn_indices_same_cls,
+    def calc_relabel_dict(self, lookat_harmful,
+                          harmful_indices, helpful_indices,
                           base_dir, pair_ind1, pair_ind2):
 
         assert isinstance(lookat_harmful, bool)
-        assert relabel_method in ['hard', 'soft_knn']
         if lookat_harmful:
             top_indices = harmful_indices  # top_harmful_indices = influence_values.argsort()[-50:]
         else:
             top_indices = helpful_indices
-        top_nn_indices = train_nn_indices[top_indices]
-        top_nn_samecls_indices = train_nn_indices_same_cls[top_indices]
 
-        if relabel_method == 'hard': # relabel as its 1st NN
-            relabel_dict = {}
-            for kk in range(len(top_indices)):
-                if self.dl_tr.dataset.ys[top_nn_indices[kk]] != self.dl_tr.dataset.ys[top_nn_samecls_indices[kk]]: # inconsistent label between global NN and same class NN
-                    relabel_dict[top_indices[kk]] = [self.dl_tr.dataset.ys[top_nn_samecls_indices[kk]],
-                                                     self.dl_tr.dataset.ys[top_nn_indices[kk]]]
-            with open('./{}/Allrelabeldict_{}_{}.pkl'.format(base_dir, pair_ind1, pair_ind2), 'wb') as handle:
-                pickle.dump(relabel_dict, handle)
+        relabel_dict = {}
+        unique_labels, unique_counts = torch.unique(self.train_label, return_counts=True)
+        median_shots_percls = unique_counts.median().item()
+        _, prob_relabel = kNN_label_pred(query_indices=top_indices, embeddings=self.train_embedding, labels=self.train_label,
+                                         nb_classes=self.dl_tr.dataset.nb_classes(), knn_k=median_shots_percls)
 
-        elif relabel_method == 'soft_knn': # relabel by weighted kNN
-            relabel_dict = {}
-            unique_labels, unique_counts = torch.unique(self.train_label, return_counts=True)
-            median_shots_percls = unique_counts.median().item()
-            _, prob_relabel = kNN_label_pred(query_indices=top_indices, embeddings=self.train_embedding, labels=self.train_label,
-                                             nb_classes=self.dl_tr.dataset.nb_classes(), knn_k=median_shots_percls)
+        for kk in range(len(top_indices)):
+            relabel_dict[top_indices[kk]] = prob_relabel[kk].detach().cpu().numpy()
 
-            for kk in range(len(top_indices)):
-                relabel_dict[top_indices[kk]] = prob_relabel[kk].detach().cpu().numpy()
+        with open('./{}/Allrelabeldict_{}_{}_soft_knn.pkl'.format(base_dir, pair_ind1, pair_ind2), 'wb') as handle:
+            pickle.dump(relabel_dict, handle)
 
-            with open('./{}/Allrelabeldict_{}_{}_soft_knn.pkl'.format(base_dir, pair_ind1, pair_ind2), 'wb') as handle:
-                pickle.dump(relabel_dict, handle)
-
-
-        else:
-            raise NotImplemented
 
 
 if __name__ == '__main__':
@@ -199,7 +127,7 @@ if __name__ == '__main__':
         pair_ind1, pair_ind2 = int(pair_ind1), int(pair_ind2)
         if not os.path.exists('./{}/All_influence_{}_{}.npy'.format(base_dir, pair_ind1, pair_ind2)):
             # sanity check: # IS.viz_2sample(IS.dl_ev, pair_ind1, pair_ind2)
-            training_sample_by_influence, influence_values = IS.MC_estimate_forpairs(all_features, [pair_ind1], [pair_ind2])
+            training_sample_by_influence, influence_values = IS.MC_estimate_forpair(all_features, [pair_ind1], [pair_ind2])
             helpful_indices = np.where(influence_values < 0)[0]
             harmful_indices = np.where(influence_values > 0)[0]
             np.save('./{}/Allhelpful_indices_{}_{}'.format(base_dir, pair_ind1, pair_ind2), helpful_indices)
@@ -216,9 +144,8 @@ if __name__ == '__main__':
         assert len(IS.train_label) == len(train_nn_indices)
 
         '''Step 3: Save harmful indices as well as its neighboring indices'''
-        IS.calc_relabel_dict(lookat_harmful=lookat_harmful, relabel_method=relabel_method,
+        IS.calc_relabel_dict(lookat_harmful=lookat_harmful,
                              harmful_indices=harmful_indices, helpful_indices=helpful_indices,
-                             train_nn_indices=train_nn_indices, train_nn_indices_same_cls=train_nn_indices_same_cls,
                              base_dir=base_dir, pair_ind1=pair_ind1, pair_ind2=pair_ind2)
     exit()
 
