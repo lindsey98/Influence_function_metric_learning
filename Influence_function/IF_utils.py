@@ -37,7 +37,7 @@ def grad_loss(model, criterion, all_features, all_labels):
 def inverse_hessian_product(model, criterion, v, dl_tr,
                             scale=500, damping=0.01):
     """
-        Get grad(test)' H^-1 grad(train). v is grad(test)
+        Get grad(test) H^-1. v is grad(test)
         Arguments:
             model: torch NN, model used to evaluate the dataset
             criterion: loss function
