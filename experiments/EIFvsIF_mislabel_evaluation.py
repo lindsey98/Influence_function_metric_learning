@@ -7,18 +7,18 @@ from Influence_function.sample_relabel import kNN_label_pred
 import numpy as np
 import matplotlib.pyplot as plt
 import time
-os.environ['CUDA_VISIBLE_DEVICES'] = "1"
+os.environ['CUDA_VISIBLE_DEVICES'] = "0"
 
 if __name__ == '__main__':
-    noisy_level = 0.05
+    noisy_level = 0.1
     sz_embedding = 512; epoch = 40; test_crop = False
-    # loss_type = 'ProxyNCA_prob_orig_noisy_{}'.format(noisy_level); dataset_name = 'cub_noisy';  config_name = 'cub'; seed = 0
-    # loss_type = 'ProxyNCA_prob_orig_noisy_{}'.format(noisy_level); dataset_name = 'cars_noisy'; config_name = 'cars'; seed = 3
-    # loss_type = 'ProxyNCA_prob_orig_noisy_{}'.format(noisy_level); dataset_name = 'inshop_noisy'; config_name = 'inshop'; seed = 4
+    # loss_type = 'ProxyNCA_prob_orig_noisy_{}'.format(noisy_level); dataset_name = 'cub_noisy';  config_name = 'cub_ProxyNCA_prob_orig'; seed = 0
+    # loss_type = 'ProxyNCA_prob_orig_noisy_{}'.format(noisy_level); dataset_name = 'cars_noisy'; config_name = 'cars_ProxyNCA_prob_orig'; seed = 3
+    # loss_type = 'ProxyNCA_prob_orig_noisy_{}'.format(noisy_level); dataset_name = 'inshop_noisy'; config_name = 'inshop_ProxyNCA_prob_orig'; seed = 4
 
-    # loss_type = 'SoftTriple_noisy_{}'.format(noisy_level); dataset_name = 'cub_noisy';  config_name = 'cub'; seed = 3
-    # loss_type = 'SoftTriple_noisy_{}'.format(noisy_level); dataset_name = 'cars_noisy';  config_name = 'cars'; seed = 4
-    loss_type = 'SoftTriple_noisy_{}'.format(noisy_level); dataset_name = 'inshop_noisy';  config_name = 'inshop'; seed = 3
+    # loss_type = 'SoftTriple_noisy_{}'.format(noisy_level); dataset_name = 'cub_noisy';  config_name = 'cub_SoftTriple'; seed = 3
+    # loss_type = 'SoftTriple_noisy_{}'.format(noisy_level); dataset_name = 'cars_noisy';  config_name = 'cars_SoftTriple'; seed = 4
+    loss_type = 'SoftTriple_noisy_{}'.format(noisy_level); dataset_name = 'inshop_noisy';  config_name = 'inshop_SoftTriple'; seed = 3
 
     '''============================================= Our Empirical Influence function =============================================================='''
     IS = MCScalableIF(dataset_name, seed, loss_type, config_name, test_crop)
@@ -28,10 +28,10 @@ if __name__ == '__main__':
     for num_thetas in [1, 2, 3]:
 
         '''Mislabelled data detection'''
-        if os.path.exists("{}/{}_{}_helpful_testcls{}_EIF_theta{}_{}.npy".format(basedir, IS.dataset_name, IS.loss_type, 0, num_thetas, noisy_level)):
-            helpful_indices = np.load("{}/{}_{}_helpful_testcls{}_EIF_theta{}_{}.npy".format(basedir, IS.dataset_name, IS.loss_type, 0, num_thetas, noisy_level))
-            harmful_indices = np.load("{}/{}_{}_harmful_testcls{}_EIF_theta{}_{}.npy".format(basedir, IS.dataset_name, IS.loss_type, 0, num_thetas, noisy_level))
-            influence_values = np.load("{}/{}_{}_influence_values_testcls{}_EIF_theta{}_{}.npy".format(basedir, IS.dataset_name, IS.loss_type, 0, num_thetas, noisy_level))
+        if os.path.exists("{}/{}_{}_helpful_testcls{}_SIF_theta{}_{}.npy".format(basedir, IS.dataset_name, IS.loss_type, 0, num_thetas, noisy_level)):
+            helpful_indices = np.load("{}/{}_{}_helpful_testcls{}_SIF_theta{}_{}.npy".format(basedir, IS.dataset_name, IS.loss_type, 0, num_thetas, noisy_level))
+            harmful_indices = np.load("{}/{}_{}_harmful_testcls{}_SIF_theta{}_{}.npy".format(basedir, IS.dataset_name, IS.loss_type, 0, num_thetas, noisy_level))
+            influence_values = np.load("{}/{}_{}_influence_values_testcls{}_SIF_theta{}_{}.npy".format(basedir, IS.dataset_name, IS.loss_type, 0, num_thetas, noisy_level))
         else:
             confusion_class_pairs = IS.get_confusion_class_pairs()
 
@@ -40,25 +40,24 @@ if __name__ == '__main__':
 
             '''Step 2: Calc influence functions'''
             influence_values = np.asarray(mean_deltaL_deltaD)
-            training_sample_by_influence = influence_values.argsort()  # ascending
-            # IS.viz_samples(IS.dl_tr, training_sample_by_influence[:10])  # helpful
-            # IS.viz_samples(IS.dl_tr, training_sample_by_influence[-10:])  # harmful
-
             helpful_indices = np.where(influence_values < 0)[0]  # cache all helpful
             harmful_indices = np.where(influence_values > 0)[0]  # cache all harmful
-            np.save("{}/{}_{}_helpful_testcls{}_EIF_theta{}_{}".format(basedir, IS.dataset_name, IS.loss_type, 0, num_thetas, noisy_level), helpful_indices)
-            np.save("{}/{}_{}_harmful_testcls{}_EIF_theta{}_{}".format(basedir, IS.dataset_name, IS.loss_type, 0, num_thetas, noisy_level), harmful_indices)
-            np.save("{}/{}_{}_influence_values_testcls{}_EIF_theta{}_{}".format(basedir, IS.dataset_name, IS.loss_type, 0, num_thetas, noisy_level), influence_values)
 
-        training_sample_by_influence = influence_values.argsort()  # ascending, harmful first
+            np.save("{}/{}_{}_helpful_testcls{}_SIF_theta{}_{}".format(basedir, IS.dataset_name, IS.loss_type, 0, num_thetas, noisy_level), helpful_indices)
+            np.save("{}/{}_{}_harmful_testcls{}_SIF_theta{}_{}".format(basedir, IS.dataset_name, IS.loss_type, 0, num_thetas, noisy_level), harmful_indices)
+            np.save("{}/{}_{}_influence_values_testcls{}_SIF_theta{}_{}".format(basedir, IS.dataset_name, IS.loss_type, 0, num_thetas, noisy_level), influence_values)
+
         # mislabelled indices ground-truth
+        training_sample_by_influence = np.abs(influence_values).argsort()[::-1]  # fixme: descending
+        # training_sample_by_influence = influence_values.argsort()[::-1]  # fixme: harmful is positive
+
         gt_mislabelled_indices = IS.dl_tr.dataset.noisy_indices
         overlap = np.isin(training_sample_by_influence, gt_mislabelled_indices)
         cum_overlap = np.cumsum(overlap)
         ticks_pos = np.arange(0, 1.2, 0.2)
         fraction_data_scanned = [int(x) for x in ticks_pos*len(training_sample_by_influence)]
         fraction_mislabelled_detected = [int(x) for x in ticks_pos*len(gt_mislabelled_indices)]
-        plt.plot(cum_overlap, label='EIF with M = {}'.format(num_thetas))
+        plt.plot(cum_overlap, label='EIF with $N_theta$ = {}'.format(num_thetas))
         plt.xlabel("Fraction of training data checked", fontdict={'fontsize': 15})
         plt.ylabel("Fraction of mislabelled data detected", fontdict={'fontsize': 15})
         plt.xticks(fraction_data_scanned, [round(x, 1) for x in ticks_pos])
@@ -68,7 +67,7 @@ if __name__ == '__main__':
     # TODO climbing plot
     '''Weighted KNN'''
     start_time = time.time()
-    harmful_indices = np.load("{}/{}_{}_harmful_testcls{}_EIF_theta{}_{}.npy".format(basedir, IS.dataset_name, IS.loss_type, 0, 1, noisy_level))
+    harmful_indices = np.load("{}/{}_{}_harmful_testcls{}_SIF_theta{}_{}.npy".format(basedir, IS.dataset_name, IS.loss_type, 0, 1, noisy_level))
     relabel_dict = {}
     unique_labels, unique_counts = torch.unique(IS.train_label, return_counts=True)
     median_shots_percls = unique_counts.median().item()
@@ -121,18 +120,17 @@ if __name__ == '__main__':
         '''Step 3: Get influential indices, i.e. grad(test) H^-1 grad(train), save'''
         influence_values = calc_influential_func_orig(IS=IS, train_features=train_features, inverse_hvp_prod=ihvp)
         influence_values = np.asarray(influence_values).flatten()
-        training_sample_by_influence = influence_values.argsort()  # ascending
-        # IS.viz_samples(IS.dl_tr, training_sample_by_influence[:10])  # harmful
-        # IS.viz_samples(IS.dl_tr, training_sample_by_influence[-10:])  # helpful
-
         helpful_indices = np.where(influence_values > 0)[0]  # cache all helpful
         harmful_indices = np.where(influence_values < 0)[0]  # cache all harmful
+
         np.save("{}/{}_{}_helpful_testcls{}_IF_{}".format(basedir, IS.dataset_name, IS.loss_type, 0, noisy_level), helpful_indices)
         np.save("{}/{}_{}_harmful_testcls{}_IF_{}".format(basedir, IS.dataset_name, IS.loss_type, 0, noisy_level), harmful_indices)
         np.save("{}/{}_{}_influence_values_testcls{}_IF_{}".format(basedir, IS.dataset_name, IS.loss_type, 0, noisy_level), influence_values)
 
-    training_sample_by_influence = influence_values.argsort()  # ascending, harmful first
     # mislabelled indices ground-truth
+    training_sample_by_influence = np.abs(influence_values).argsort()[::-1]  # fixme: descending
+    # training_sample_by_influence = influence_values.argsort()  # fixme: harmful is negative
+
     gt_mislabelled_indices = IS.dl_tr.dataset.noisy_indices
     overlap = np.isin(training_sample_by_influence, gt_mislabelled_indices)
     cum_overlap = np.cumsum(overlap)
@@ -148,9 +146,9 @@ if __name__ == '__main__':
     plt.plot(cum_overlap, label='random')
     plt.legend()
     plt.tight_layout()
-    plt.savefig('./images/mislabel_{}_{}_alltheta_noisylevel{}.pdf'.format(dataset_name, loss_type, noisy_level),
-                bbox_inches='tight')
+    plt.show()
+    # plt.savefig('./images/mislabel_{}_{}_alltheta_noisylevel{}_abs.pdf'.format(dataset_name, loss_type, noisy_level),
+    #             bbox_inches='tight')
 
-    '''======================================================================================================================================='''
 
 

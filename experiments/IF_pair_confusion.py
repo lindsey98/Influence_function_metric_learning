@@ -41,7 +41,6 @@ if __name__ == '__main__':
         if os.path.exists('./{}/{}_helpful_indices_{}_{}.npy'.format(base_dir, loss_type, wrong_ind, confuse_ind)):
             print('skip')
             continue
-        # sanity check: IS.viz_2sample(IS.dl_ev, wrong_ind, confuse_ind)
         torch.cuda.empty_cache()
         influence_values = IS.influence_func_forpairs(train_features=train_features, test_features=test_features,
                                                          wrong_indices=[wrong_ind], confuse_indices=[confuse_ind])

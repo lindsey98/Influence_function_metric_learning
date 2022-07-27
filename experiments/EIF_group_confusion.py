@@ -30,8 +30,6 @@ if __name__ == '__main__':
         '''Step 2: Calc influence functions'''
         influence_values = np.asarray(mean_deltaL_deltaD)
         training_sample_by_influence = influence_values.argsort()  # ascending
-        # IS.viz_samples(IS.dl_tr, training_sample_by_influence[:10])  # helpful
-        # IS.viz_samples(IS.dl_tr, training_sample_by_influence[-10:])  # harmful
 
         helpful_indices = np.where(influence_values < 0)[0]  # cache all helpful
         harmful_indices = np.where(influence_values > 0)[0]  # cache all harmful
