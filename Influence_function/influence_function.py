@@ -166,12 +166,13 @@ class BaseInfluenceFunction():
 
         return wrong_freq_matrix
 
-    def get_confusion_class_pairs(self):
-        _, top10_wrong_classes, wrong_labels, wrong_preds = get_wrong_indices(self.testing_embedding,
-                                                                              self.testing_label, topk=10)
+    def get_confusion_class_pairs(self, topk_cls=10):
+        _, topk_wrong_classes, wrong_labels, wrong_preds = get_wrong_indices(self.testing_embedding,
+                                                                              self.testing_label, topk=topk_cls)
 
-        wrong_freq_matrix = self.get_wrong_freq_matrix(top10_wrong_classes, wrong_labels, wrong_preds)
-        confusion_classes_ind = np.argsort(wrong_freq_matrix, axis=-1)[:, :10]  # get top 10 classes that are frequently confused with top 10 wrong testing classes
+        wrong_freq_matrix = self.get_wrong_freq_matrix(topk_wrong_classes, wrong_labels, wrong_preds) # (k, C_test)
+        # (k, 10)
+        confusion_classes_ind = np.argsort(wrong_freq_matrix, axis=-1)[:, :10]  # get top 10 classes that are frequently confused with topk wrong testing classes
 
         # Find the first index which explains >half of the wrong cases (cumulatively)
         confusion_class_degree = -1 * wrong_freq_matrix[np.repeat(np.arange(len(confusion_classes_ind)), 10),
@@ -184,11 +185,11 @@ class BaseInfluenceFunction():
 
         # Filter out those confusion class pairs
         confusion_class_pairs = [
-            [(top10_wrong_classes[i], np.asarray(self.dl_ev.dataset.classes)[confusion_classes_ind[i][j]]) \
+            [(topk_wrong_classes[i], np.asarray(self.dl_ev.dataset.classes)[confusion_classes_ind[i][j]]) \
              for j in range(first_index[i] + 1)] \
             for i in range(confusion_classes_ind.shape[0])]
 
-        print("Top 10 wrong classes", top10_wrong_classes)
+        print("Top k wrong classes", topk_wrong_classes)
         print("Confusion pairs", confusion_class_pairs)
 
         return confusion_class_pairs
@@ -310,12 +311,12 @@ class BaseInfluenceFunction():
                                                    ind1, ind2))
             plt.close()
 
-class MCScalableIF(BaseInfluenceFunction):
+class EIF(BaseInfluenceFunction):
     def __int__(self, dataset_name, seed, loss_type, config_name,
                 test_crop=False, sz_embedding=512, epoch=40):
 
-        super(MCScalableIF, self).__init__(dataset_name, seed, loss_type, config_name,
-                                           test_crop=False, sz_embedding=512, epoch=40)
+        super(EIF, self).__init__(dataset_name, seed, loss_type, config_name,
+                                  test_crop=False, sz_embedding=512, epoch=40)
 
     def get_grad_loss_train_all(self, theta, theta_hat, pair_idx=None, save=False):
         '''

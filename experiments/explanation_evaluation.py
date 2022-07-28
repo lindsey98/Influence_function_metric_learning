@@ -1,5 +1,5 @@
 
-from Influence_function.influence_function import MCScalableIF
+from Influence_function.influence_function import EIF
 import os
 import matplotlib.pyplot as plt
 from torchvision.transforms.functional import to_pil_image
@@ -10,7 +10,7 @@ from utils import overlay_mask
 import matplotlib.transforms as mtrans
 os.environ['CUDA_VISIBLE_DEVICES'] = "1"
 
-class Explanation4EIF(MCScalableIF):
+class Explanation4EIF(EIF):
     def __init__(self, dataset_name, seed, loss_type, config_name,
                  test_crop=False, sz_embedding=512, epoch=40):
 

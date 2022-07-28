@@ -51,7 +51,8 @@ python train_sample_reweight.py --dataset cars \
 python train_sample_reweight.py --dataset cars \
 --loss-type ProxyNCA_prob_orig_confusion_176_baseline \
 --helpful Influential_data_baselines/cars_ProxyNCA_prob_orig_helpful_testcls7.npy \
---harmful Influential_data_baselines/cars_ProxyNCA_prob_orig_harmful_testcls7.npy --model_dir models/dvi_data_cars_3_lossProxyNCA_prob_orig/ResNet_512_Model \
+--harmful Influential_data_baselines/cars_ProxyNCA_prob_orig_harmful_testcls7.npy \
+--model_dir models/dvi_data_cars_3_lossProxyNCA_prob_orig/ResNet_512_Model \
 --helpful_weight 2 --harmful_weight 0 \
 --seed 3 --config config/cars_reweight_ProxyNCA_prob_orig.json
 

@@ -10,7 +10,7 @@ if __name__ == '__main__':
     # dataset_name = 'inshop'; config_name = 'inshop'; seed = 4
 
     '''============ Our Influence function =================='''
-    IS = MCScalableIF(dataset_name, seed, loss_type, config_name, test_crop)
+    IS = EIF(dataset_name, seed, loss_type, config_name, test_crop)
     nb_classes = IS.dl_ev.dataset.nb_classes()
     print(nb_classes)
     # confusion_class_pairs = IS.get_confusion_class_pairs()

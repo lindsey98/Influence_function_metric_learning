@@ -3,7 +3,7 @@ import os
 import matplotlib.pyplot as plt
 from torchvision.transforms.functional import to_pil_image
 from torchvision.io.image import read_image
-from Influence_function.influence_function import MCScalableIF
+from Influence_function.influence_function import EIF
 from explanation.CAM_methods import *
 from Influence_function.EIF_utils import *
 from Influence_function.IF_utils import *
@@ -37,7 +37,7 @@ def kNN_label_pred(query_indices, embeddings, labels, nb_classes, knn_k):
     pred_labels = torch.argsort(pred_scores, dim=-1, descending=True) # (B, C)
     return pred_labels, pred_scores
 
-class SampleRelabel(MCScalableIF):
+class SampleRelabel(EIF):
     def __init__(self, dataset_name, seed, loss_type, config_name,
                  test_crop=False, sz_embedding=512, epoch=40):
 

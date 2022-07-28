@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from torchvision.transforms.functional import to_pil_image
 from torchvision.io.image import read_image
-from Influence_function.influence_function import MCScalableIF
+from Influence_function.influence_function import EIF
 # from explanation_evaluation.CAM_methods import *
 from Influence_function.EIF_utils import *
 from Influence_function.IF_utils import *

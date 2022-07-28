@@ -1,7 +1,7 @@
 import os
 from Influence_function.EIF_utils import grad_confusion_pair
 from Influence_function.IF_utils import inverse_hessian_product, calc_influential_func_orig
-from Influence_function.influence_function import MCScalableIF
+from Influence_function.influence_function import EIF
 import numpy as np
 import time
 os.environ['CUDA_VISIBLE_DEVICES'] = "0"
@@ -12,7 +12,7 @@ if __name__ == '__main__':
     # dataset_name = 'cars'; config_name = 'cars'; seed = 3
     dataset_name = 'inshop'; config_name = 'inshop'; seed = 4
 
-    IS = MCScalableIF(dataset_name, seed, loss_type, config_name, test_crop)
+    IS = EIF(dataset_name, seed, loss_type, config_name, test_crop)
     # pairs = [[97, 4885],
     #         [109, 4837],
     #         [122, 402],

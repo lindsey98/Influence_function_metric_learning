@@ -6,21 +6,21 @@ import numpy as np
 os.environ['CUDA_VISIBLE_DEVICES'] = "0"
 
 if __name__ == '__main__':
-    sz_embedding = 512; epoch = 40; test_crop = False
-    # loss_type = 'ProxyNCA_prob_orig'; dataset_name = 'cub';  config_name = 'cub'; seed = 0
+    sz_embedding = 512; epoch = 40; test_crop = False; topk_cls=20
+    loss_type = 'ProxyNCA_prob_orig'; dataset_name = 'cub';  config_name = 'cub'; seed = 0
     # loss_type = 'ProxyNCA_prob_orig'; dataset_name = 'cars'; config_name = 'cars'; seed = 3
     # loss_type = 'ProxyNCA_prob_orig'; dataset_name = 'inshop'; config_name = 'inshop'; seed = 4
 
     # loss_type = 'SoftTriple'; dataset_name = 'cub'; config_name = 'cub'; seed = 3
     # loss_type = 'SoftTriple'; dataset_name = 'cars'; config_name = 'cars'; seed = 4
-    loss_type = 'SoftTriple'; dataset_name = 'inshop'; config_name = 'inshop'; seed = 3
+    # loss_type = 'SoftTriple'; dataset_name = 'inshop'; config_name = 'inshop'; seed = 3
 
     IS = OrigIF(dataset_name, seed, loss_type, config_name, test_crop, sz_embedding, epoch)
 
     '''Step 1: Get grad(test)'''
     train_features = IS.get_train_features()
     test_features = IS.get_test_features()  # (N, 2048)
-    confusion_class_pairs = IS.get_confusion_class_pairs()
+    confusion_class_pairs = IS.get_confusion_class_pairs(topk_cls=topk_cls)
     for pair_idx, pair in enumerate(confusion_class_pairs):
         wrong_cls = pair[0][0]
         confused_classes = [x[1] for x in pair]
@@ -37,8 +37,6 @@ if __name__ == '__main__':
         influence_values = calc_influential_func_orig(IS=IS, train_features=train_features, inverse_hvp_prod=ihvp)
         influence_values = np.asarray(influence_values).flatten()
         training_sample_by_influence = influence_values.argsort()  # ascending
-        # IS.viz_sample(IS.dl_tr, training_sample_by_influence[:10])  # harmful
-        # IS.viz_sample(IS.dl_tr, training_sample_by_influence[-10:])  # helpful
 
         helpful_indices = np.where(influence_values > 0)[0]  # cache all helpful
         harmful_indices = np.where(influence_values < 0)[0]  # cache all harmful
@@ -48,12 +46,37 @@ if __name__ == '__main__':
                 harmful_indices)
 
     '''Actually train with downweighted harmful and upweighted helpful training'''
-    os.system("./scripts/run_{}_IF_{}.sh".format(dataset_name, loss_type))
+    # os.system("./scripts/run_{}_IF_{}.sh".format(dataset_name, loss_type))
+    for pair_idx, class_pair in enumerate(confusion_class_pairs):
+        wrong_cls = class_pair[0][0]
+        weight_path = 'models/dvi_data_{}_{}_loss{}_2_0/ResNet_512_Model/Epoch_1/{}_{}_trainval_{}_{}.pth'.format(
+                          dataset_name, seed,
+                          '{}_confusion_{}_baseline'.format(loss_type, wrong_cls),
+                          dataset_name, dataset_name, 512, seed)
+
+        if os.path.exists(weight_path):
+            print("skip")
+            continue
+
+        os.system("python train_sample_reweight.py --dataset {} \
+                --loss-type {}_confusion_{}_baseline \
+                --helpful Influential_data_baselines/{}_{}_helpful_testcls{}.npy \
+                --harmful Influential_data_baselines/{}_{}_harmful_testcls{}.npy \
+                --model_dir {} \
+                --helpful_weight 2 --harmful_weight 0 \
+                --seed {} --config config/{}_reweight_{}.json".format(IS.dataset_name,
+                                                                      IS.loss_type, wrong_cls,
+                                                                      IS.dataset_name, IS.loss_type, pair_idx,
+                                                                      IS.dataset_name, IS.loss_type, pair_idx,
+                                                                      IS.model_dir,
+                                                                      seed, IS.dataset_name, IS.loss_type))
+    exit()
 
     '''Other: get confusion (before VS after)'''
     IS.model = IS._load_model()  # reload the original weights
     features = IS.get_test_features()
-    confusion_class_pairs = IS.get_confusion_class_pairs()
+    confusion_class_pairs = IS.get_confusion_class_pairs(topk_cls=topk_cls)
+
     for pair_idx in range(len(confusion_class_pairs)):
         print('Pair index', pair_idx)
         wrong_cls = confusion_class_pairs[pair_idx][0][0]
@@ -65,11 +88,12 @@ if __name__ == '__main__':
         print("Original d(G_p): ", inter_dist_orig)
 
         # reload weights as new
-        IS.model.load_state_dict(torch.load(
-                'models/dvi_data_{}_{}_loss{}_{}_{}/ResNet_512_Model/Epoch_{}/{}_{}_trainval_{}_{}.pth'.format(dataset_name, seed,
-                 '{}_confusion_{}_baseline'.format(loss_type, wrong_cls),
-                 2, 0,
-                 1, dataset_name, dataset_name, 512, seed)))
+        weight_path = 'models/dvi_data_{}_{}_loss{}_2_0/ResNet_512_Model/Epoch_1/{}_{}_trainval_{}_{}.pth'.format(
+                         dataset_name, seed,
+                        '{}_confusion_{}_baseline'.format(loss_type, wrong_cls),
+                         dataset_name, dataset_name, 512, seed)
+
+        IS.model.load_state_dict(torch.load(weight_path))
         inter_dist_after, _ = grad_confusion(IS.model, features, wrong_cls, confuse_classes,
                                              IS.testing_nn_label, IS.testing_label, IS.testing_nn_indices)
         print("After d(G_p): ", inter_dist_after)

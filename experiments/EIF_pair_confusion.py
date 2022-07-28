@@ -1,6 +1,6 @@
 
 import os
-from Influence_function.influence_function import MCScalableIF
+from Influence_function.influence_function import EIF
 from Influence_function.EIF_utils import *
 from evaluation import assign_by_euclidian_at_k_indices
 os.environ['CUDA_VISIBLE_DEVICES'] = "1, 0"
@@ -9,14 +9,14 @@ if __name__ == '__main__':
 
     sz_embedding = 512; epoch = 40; test_crop = False
     # loss_type = 'ProxyNCA_prob_orig'; dataset_name = 'cub';  config_name = 'cub_ProxyNCA_prob_orig'; seed = 0
-    # loss_type = 'ProxyNCA_prob_orig'; dataset_name = 'cars'; config_name = 'cars_ProxyNCA_prob_orig'; seed = 3
-    loss_type = 'ProxyNCA_prob_orig'; dataset_name = 'inshop'; config_name = 'inshop_ProxyNCA_prob_orig'; seed = 4
+    loss_type = 'ProxyNCA_prob_orig'; dataset_name = 'cars'; config_name = 'cars_ProxyNCA_prob_orig'; seed = 3
+    # loss_type = 'ProxyNCA_prob_orig'; dataset_name = 'inshop'; config_name = 'inshop_ProxyNCA_prob_orig'; seed = 4
 
     # loss_type = 'SoftTriple'; dataset_name = 'cub'; config_name = 'cub_SoftTriple'; seed = 3
     # loss_type = 'SoftTriple'; dataset_name = 'cars'; config_name = 'cars_SoftTriple'; seed = 4
     # loss_type = 'SoftTriple'; dataset_name = 'inshop'; config_name = 'inshop_SoftTriple'; seed = 3
 
-    IS = MCScalableIF(dataset_name, seed, loss_type, config_name, test_crop)
+    IS = EIF(dataset_name, seed, loss_type, config_name, test_crop)
 
     '''Analyze confusing features for all confusion classes'''
     '''Step 1: Get all wrong pairs'''
@@ -31,21 +31,21 @@ if __name__ == '__main__':
     os.makedirs(base_dir, exist_ok=True)
 
     '''Step 2: Save influential samples indices for 50 pairs'''
-    all_features = IS.get_test_features()
-    for kk in range(min(len(wrong_indices), 100)):
-        wrong_ind = wrong_indices[kk]
-        confuse_ind = confuse_indices[kk]
-        if os.path.exists('./{}/{}_helpful_indices_{}_{}.npy'.format(base_dir, loss_type, wrong_ind, confuse_ind)):
-            print('skip')
-            continue
-        mean_deltaL_deltaD = IS.MC_estimate_forpair([wrong_ind, confuse_ind], num_thetas=1, steps=50)
-
-        influence_values = np.asarray(mean_deltaL_deltaD)
-        helpful_indices = np.where(influence_values < 0)[0]
-        harmful_indices = np.where(influence_values > 0)[0]
-        np.save('./{}/{}_helpful_indices_{}_{}'.format(base_dir, loss_type, wrong_ind, confuse_ind), helpful_indices)
-        np.save('./{}/{}_harmful_indices_{}_{}'.format(base_dir, loss_type, wrong_ind, confuse_ind), harmful_indices)
-    exit()
+    # all_features = IS.get_test_features()
+    # for kk in range(min(len(wrong_indices), 100)):
+    #     wrong_ind = wrong_indices[kk]
+    #     confuse_ind = confuse_indices[kk]
+    #     if os.path.exists('./{}/{}_helpful_indices_{}_{}.npy'.format(base_dir, loss_type, wrong_ind, confuse_ind)):
+    #         print('skip')
+    #         continue
+    #     mean_deltaL_deltaD = IS.MC_estimate_forpair([wrong_ind, confuse_ind], num_thetas=1, steps=50)
+    #
+    #     influence_values = np.asarray(mean_deltaL_deltaD)
+    #     helpful_indices = np.where(influence_values < 0)[0]
+    #     harmful_indices = np.where(influence_values > 0)[0]
+    #     np.save('./{}/{}_helpful_indices_{}_{}'.format(base_dir, loss_type, wrong_ind, confuse_ind), helpful_indices)
+    #     np.save('./{}/{}_harmful_indices_{}_{}'.format(base_dir, loss_type, wrong_ind, confuse_ind), harmful_indices)
+    # exit()
 
     '''Step 3: Train the model for every pair'''
     # Run in shell
@@ -54,6 +54,18 @@ if __name__ == '__main__':
         wrong_ind = wrong_indices[kk]
         confuse_ind = confuse_indices[kk]
         torch.cuda.empty_cache()
+
+        new_weight_path = 'models/dvi_data_{}_{}_loss{}_{}_{}/ResNet_512_Model/Epoch_{}/{}_{}_trainval_{}_{}.pth'.format(
+            dataset_name,
+            seed,
+            '{}_confusion_{}_{}_Allsamples'.format(loss_type, wrong_ind, confuse_ind),
+            2, 0,
+            1, dataset_name,
+            dataset_name,
+            512, seed)  # reload weights as new
+        if os.path.exists(new_weight_path):
+            continue
+
         #  FIXME Normal training
         os.system("python train_sample_reweight.py --dataset {} \
                         --loss-type {}_confusion_{}_{}_Allsamples \

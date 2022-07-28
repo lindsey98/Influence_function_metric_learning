@@ -2,7 +2,7 @@ import os
 import torch
 from Influence_function.EIF_utils import grad_confusion
 from Influence_function.IF_utils import inverse_hessian_product, calc_influential_func_orig
-from Influence_function.influence_function import OrigIF, MCScalableIF
+from Influence_function.influence_function import OrigIF, EIF
 from Influence_function.sample_relabel import kNN_label_pred
 import numpy as np
 import matplotlib.pyplot as plt
@@ -21,7 +21,7 @@ if __name__ == '__main__':
     loss_type = 'SoftTriple_noisy_{}'.format(noisy_level); dataset_name = 'inshop_noisy';  config_name = 'inshop_SoftTriple'; seed = 3
 
     '''============================================= Our Empirical Influence function =============================================================='''
-    IS = MCScalableIF(dataset_name, seed, loss_type, config_name, test_crop)
+    IS = EIF(dataset_name, seed, loss_type, config_name, test_crop)
     basedir = 'MislabelExp_Influential_data'
     os.makedirs(basedir, exist_ok=True)
 
