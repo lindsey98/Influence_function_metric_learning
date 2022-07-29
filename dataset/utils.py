@@ -59,13 +59,7 @@ class ScaleIntensities():
         return tensor
 
     def __call__(self, tensor):
-        tensor = (
-            tensor - self.in_range[0]
-        ) / (
-            self.in_range[1] - self.in_range[0]
-        ) * (
-            self.out_range[1] - self.out_range[0]
-        ) + self.out_range[0]
+        tensor = (tensor - self.in_range[0]) / (self.in_range[1] - self.in_range[0]) * ( self.out_range[1] - self.out_range[0]) + self.out_range[0]
         return tensor
 
 

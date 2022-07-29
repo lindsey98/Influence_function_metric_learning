@@ -7,14 +7,14 @@ os.environ['CUDA_VISIBLE_DEVICES'] = "0"
 
 if __name__ == '__main__':
 
-    sz_embedding = 512; epoch = 40; test_crop = False; topk_cls=20
-    # loss_type = 'ProxyNCA_prob_orig'; dataset_name = 'cub';  config_name = 'cub'; seed = 0
-    # loss_type = 'ProxyNCA_prob_orig'; dataset_name = 'cars'; config_name = 'cars'; seed = 3
-    # loss_type = 'ProxyNCA_prob_orig'; dataset_name = 'inshop'; config_name = 'inshop'; seed = 4
+    sz_embedding = 512; epoch = 40; test_crop = False; topk_cls = 30
+    # loss_type = 'ProxyNCA_prob_orig'; dataset_name = 'cub';  config_name = 'cub_ProxyNCA_prob_orig'; seed = 0
+    # loss_type = 'ProxyNCA_prob_orig'; dataset_name = 'cars'; config_name = 'cars_ProxyNCA_prob_orig'; seed = 3
+    loss_type = 'ProxyNCA_prob_orig'; dataset_name = 'inshop'; config_name = 'inshop_ProxyNCA_prob_orig'; seed = 4
 
-    # loss_type = 'SoftTriple'; dataset_name = 'cub'; config_name = 'cub'; seed = 3
-    # loss_type = 'SoftTriple'; dataset_name = 'cars'; config_name = 'cars'; seed = 4
-    loss_type = 'SoftTriple'; dataset_name = 'inshop'; config_name = 'inshop'; seed = 3
+    # loss_type = 'SoftTriple'; dataset_name = 'cub'; config_name = 'cub_SoftTriple'; seed = 3
+    # loss_type = 'SoftTriple'; dataset_name = 'cars'; config_name = 'cars_SoftTriple'; seed = 4
+    # loss_type = 'SoftTriple'; dataset_name = 'inshop'; config_name = 'inshop_SoftTriple'; seed = 3
 
     IS = EIF(dataset_name, seed, loss_type, config_name, test_crop, sz_embedding, epoch)
 
@@ -42,10 +42,9 @@ if __name__ == '__main__':
     exit()
 
     '''Actually train with downweighted harmful and upweighted helpful training'''
-    # os.system("./scripts/run_{}_EIF_{}.sh".format(dataset_name, loss_type))
     for pair_idx, class_pair in enumerate(confusion_class_pairs):
         wrong_cls = class_pair[0][0]
-        weight_path = 'models/dvi_data_{}_{}_loss{}_2_0/ResNet_512_Model/Epoch1/{}_{}_trainval_{}_{}.pth'.format(
+        weight_path = 'models/dvi_data_{}_{}_loss{}_2_0/ResNet_512_Model/Epoch_1/{}_{}_trainval_{}_{}.pth'.format(
                         dataset_name, seed,
                        '{}_confusion_{}'.format(loss_type, wrong_cls),
                         dataset_name, dataset_name, 512, seed)
@@ -65,8 +64,7 @@ if __name__ == '__main__':
                                                                    IS.dataset_name, IS.loss_type, pair_idx,
                                                                    IS.dataset_name, IS.loss_type, pair_idx,
                                                                    IS.model_dir,
-                                                                   seed, IS.dataset_name, IS.loss_type))
-    exit()
+                                                                   IS.seed, IS.dataset_name, IS.loss_type))
 
     '''Other: get confusion (before VS after)'''
     # FIXME: inter class distance should be computed based on original confusion pairs
@@ -86,7 +84,7 @@ if __name__ == '__main__':
         print("Original d(G_p): ", inter_dist_orig)
 
         # reload weights as new
-        weight_path = 'models/dvi_data_{}_{}_loss{}_2_0/ResNet_512_Model/Epoch1/{}_{}_trainval_{}_{}.pth'.format(
+        weight_path = 'models/dvi_data_{}_{}_loss{}_2_0/ResNet_512_Model/Epoch_1/{}_{}_trainval_{}_{}.pth'.format(
                        dataset_name, seed,
                       '{}_confusion_{}'.format(loss_type, wrong_cls),
                        dataset_name, dataset_name, 512, seed)
@@ -96,5 +94,4 @@ if __name__ == '__main__':
                                              IS.testing_nn_label, IS.testing_label, IS.testing_nn_indices)
         print("After d(G_p): ", inter_dist_after)
 
-    exit()
 

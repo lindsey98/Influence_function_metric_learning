@@ -6,14 +6,14 @@ import numpy as np
 os.environ['CUDA_VISIBLE_DEVICES'] = "0"
 
 if __name__ == '__main__':
-    sz_embedding = 512; epoch = 40; test_crop = False; topk_cls=20
-    loss_type = 'ProxyNCA_prob_orig'; dataset_name = 'cub';  config_name = 'cub'; seed = 0
-    # loss_type = 'ProxyNCA_prob_orig'; dataset_name = 'cars'; config_name = 'cars'; seed = 3
-    # loss_type = 'ProxyNCA_prob_orig'; dataset_name = 'inshop'; config_name = 'inshop'; seed = 4
+    sz_embedding = 512; epoch = 40; test_crop = False; topk_cls = 30
+    loss_type = 'ProxyNCA_prob_orig'; dataset_name = 'cub';  config_name = 'cub_ProxyNCA_prob_orig'; seed = 0
+    # loss_type = 'ProxyNCA_prob_orig'; dataset_name = 'cars'; config_name = 'cars_ProxyNCA_prob_orig'; seed = 3
+    # loss_type = 'ProxyNCA_prob_orig'; dataset_name = 'inshop'; config_name = 'inshop_ProxyNCA_prob_orig'; seed = 4
 
-    # loss_type = 'SoftTriple'; dataset_name = 'cub'; config_name = 'cub'; seed = 3
-    # loss_type = 'SoftTriple'; dataset_name = 'cars'; config_name = 'cars'; seed = 4
-    # loss_type = 'SoftTriple'; dataset_name = 'inshop'; config_name = 'inshop'; seed = 3
+    # loss_type = 'SoftTriple'; dataset_name = 'cub'; config_name = 'cub_SoftTriple'; seed = 3
+    # loss_type = 'SoftTriple'; dataset_name = 'cars'; config_name = 'cars_SoftTriple'; seed = 4
+    # loss_type = 'SoftTriple'; dataset_name = 'inshop'; config_name = 'inshop_SoftTriple'; seed = 3
 
     IS = OrigIF(dataset_name, seed, loss_type, config_name, test_crop, sz_embedding, epoch)
 
@@ -46,7 +46,6 @@ if __name__ == '__main__':
                 harmful_indices)
 
     '''Actually train with downweighted harmful and upweighted helpful training'''
-    # os.system("./scripts/run_{}_IF_{}.sh".format(dataset_name, loss_type))
     for pair_idx, class_pair in enumerate(confusion_class_pairs):
         wrong_cls = class_pair[0][0]
         weight_path = 'models/dvi_data_{}_{}_loss{}_2_0/ResNet_512_Model/Epoch_1/{}_{}_trainval_{}_{}.pth'.format(
@@ -58,7 +57,8 @@ if __name__ == '__main__':
             print("skip")
             continue
 
-        os.system("python train_sample_reweight.py --dataset {} \
+        os.system("python train_sample_reweight.py \
+                --dataset {} \
                 --loss-type {}_confusion_{}_baseline \
                 --helpful Influential_data_baselines/{}_{}_helpful_testcls{}.npy \
                 --harmful Influential_data_baselines/{}_{}_harmful_testcls{}.npy \
@@ -69,7 +69,7 @@ if __name__ == '__main__':
                                                                       IS.dataset_name, IS.loss_type, pair_idx,
                                                                       IS.dataset_name, IS.loss_type, pair_idx,
                                                                       IS.model_dir,
-                                                                      seed, IS.dataset_name, IS.loss_type))
+                                                                      IS.seed, IS.dataset_name, IS.loss_type))
     exit()
 
     '''Other: get confusion (before VS after)'''

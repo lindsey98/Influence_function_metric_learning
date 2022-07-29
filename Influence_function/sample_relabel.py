@@ -89,7 +89,6 @@ class SampleRelabel(EIF):
             pickle.dump(relabel_dict, handle)
 
 
-
 if __name__ == '__main__':
 
     loss_type = 'ProxyNCA_prob_orig'; sz_embedding = 512; epoch = 40; test_crop = False
@@ -198,46 +197,46 @@ if __name__ == '__main__':
     #     break
 
     '''Step 4: Train with relabelled data'''
-    for line in tqdm(lines):
-        torch.cuda.empty_cache()
-        pair_ind1, pair_ind2 = line.strip().split(',')
-        pair_ind1, pair_ind2 = int(pair_ind1), int(pair_ind2)
-        #  training with relabelled data
-        os.system("python train_sample_relabel.py --dataset {} \
-                    --loss-type ProxyNCA_prob_orig_{}_relabel_{}_{} \
-                    --relabel_dict Confuse_pair_influential_data/{}/Allrelabeldict_{}_{}_{}.pkl \
-                    --model_dir {} \
-                    --seed {} --config config/{}_relabel.json".format(IS.dataset_name,
-                                                                       relabel_method,
-                                                                       pair_ind1, pair_ind2,
-                                                                       IS.dataset_name,
-                                                                       pair_ind1, pair_ind2, relabel_method,
-                                                                       IS.model_dir,
-                                                                       IS.seed,
-                                                                       IS.dataset_name))
-    exit()
-
-    '''Step 5: Verify that the model after training is better?'''
-    new_features = IS.get_test_features()
-    _, recall, _ = evaluate(IS.model, IS.dl_ev, eval_nmi=False)
-    print(recall)
-    for line in lines:
-        pair_ind1, pair_ind2 = line.strip().split(',')
-        pair_ind1, pair_ind2 = int(pair_ind1), int(pair_ind2)
-        print('For pair: ', pair_ind1, pair_ind2)
-        IS.model = IS._load_model()  # reload the original weights
-        inter_dist_orig, _ = grad_confusion_pair(IS.model, new_features, [pair_ind1], [pair_ind2])
-        print('Original distance: ', inter_dist_orig)
-
-        new_weight_path = 'models/dvi_data_{}_{}_loss{}/ResNet_512_Model/Epoch_{}/{}_{}_trainval_{}_{}.pth'.format(
-                            dataset_name,
-                            seed,
-                            'ProxyNCA_prob_orig_{}_relabel_{}_{}'.format(relabel_method, pair_ind1, pair_ind2),
-                            5, dataset_name,
-                            dataset_name,
-                            512, seed)  # reload weights as new
-        IS.model.load_state_dict(torch.load(new_weight_path))
-        _, recall, _ = evaluate(IS.model, IS.dl_ev, eval_nmi=False)
-        print('After recall:', recall)
-        inter_dist_after, _ = grad_confusion_pair(IS.model, new_features, [pair_ind1], [pair_ind2])
-        print('After distance: ', inter_dist_after)
+    # for line in tqdm(lines):
+    #     torch.cuda.empty_cache()
+    #     pair_ind1, pair_ind2 = line.strip().split(',')
+    #     pair_ind1, pair_ind2 = int(pair_ind1), int(pair_ind2)
+    #     #  training with relabelled data
+    #     os.system("python train_sample_relabel.py --dataset {} \
+    #                 --loss-type ProxyNCA_prob_orig_{}_relabel_{}_{} \
+    #                 --relabel_dict Confuse_pair_influential_data/{}/Allrelabeldict_{}_{}_{}.pkl \
+    #                 --model_dir {} \
+    #                 --seed {} --config config/{}_relabel.json".format(IS.dataset_name,
+    #                                                                    relabel_method,
+    #                                                                    pair_ind1, pair_ind2,
+    #                                                                    IS.dataset_name,
+    #                                                                    pair_ind1, pair_ind2, relabel_method,
+    #                                                                    IS.model_dir,
+    #                                                                    IS.seed,
+    #                                                                    IS.dataset_name))
+    # exit()
+    #
+    # '''Step 5: Verify that the model after training is better?'''
+    # new_features = IS.get_test_features()
+    # _, recall, _ = evaluate(IS.model, IS.dl_ev, eval_nmi=False)
+    # print(recall)
+    # for line in lines:
+    #     pair_ind1, pair_ind2 = line.strip().split(',')
+    #     pair_ind1, pair_ind2 = int(pair_ind1), int(pair_ind2)
+    #     print('For pair: ', pair_ind1, pair_ind2)
+    #     IS.model = IS._load_model()  # reload the original weights
+    #     inter_dist_orig, _ = grad_confusion_pair(IS.model, new_features, [pair_ind1], [pair_ind2])
+    #     print('Original distance: ', inter_dist_orig)
+    #
+    #     new_weight_path = 'models/dvi_data_{}_{}_loss{}/ResNet_512_Model/Epoch_{}/{}_{}_trainval_{}_{}.pth'.format(
+    #                         dataset_name,
+    #                         seed,
+    #                         'ProxyNCA_prob_orig_{}_relabel_{}_{}'.format(relabel_method, pair_ind1, pair_ind2),
+    #                         5, dataset_name,
+    #                         dataset_name,
+    #                         512, seed)  # reload weights as new
+    #     IS.model.load_state_dict(torch.load(new_weight_path))
+    #     _, recall, _ = evaluate(IS.model, IS.dl_ev, eval_nmi=False)
+    #     print('After recall:', recall)
+    #     inter_dist_after, _ = grad_confusion_pair(IS.model, new_features, [pair_ind1], [pair_ind2])
+    #     print('After distance: ', inter_dist_after)

@@ -5,18 +5,18 @@ from Influence_function.IF_utils import *
 from Influence_function.EIF_utils import grad_confusion_pair
 from evaluation import assign_by_euclidian_at_k_indices
 import numpy as np
-os.environ['CUDA_VISIBLE_DEVICES'] = "1"
+os.environ['CUDA_VISIBLE_DEVICES'] = "0, 1"
 
 if __name__ == '__main__':
 
     sz_embedding = 512; epoch = 40; test_crop = False
     # loss_type = 'ProxyNCA_prob_orig'; dataset_name = 'cub';  config_name = 'cub_ProxyNCA_prob_orig'; seed = 0
     # loss_type = 'ProxyNCA_prob_orig'; dataset_name = 'cars'; config_name = 'cars_ProxyNCA_prob_orig'; seed = 3
-    # loss_type = 'ProxyNCA_prob_orig'; dataset_name = 'inshop'; config_name = 'inshop_ProxyNCA_prob_orig'; seed = 4
+    loss_type = 'ProxyNCA_prob_orig'; dataset_name = 'inshop'; config_name = 'inshop_ProxyNCA_prob_orig'; seed = 4
 
     # loss_type = 'SoftTriple'; dataset_name = 'cub'; config_name = 'cub_SoftTriple'; seed = 3
     # loss_type = 'SoftTriple'; dataset_name = 'cars'; config_name = 'cars_SoftTriple'; seed = 4
-    loss_type = 'SoftTriple'; dataset_name = 'inshop'; config_name = 'inshop_SoftTriple'; seed = 3
+    # loss_type = 'SoftTriple'; dataset_name = 'inshop'; config_name = 'inshop_SoftTriple'; seed = 3
 
     IS = OrigIF(dataset_name, seed, loss_type, config_name, test_crop)
 
@@ -45,7 +45,7 @@ if __name__ == '__main__':
             continue
         torch.cuda.empty_cache()
         influence_values = IS.influence_func_forpairs(train_features=train_features, test_features=test_features,
-                                                         wrong_indices=[wrong_ind], confuse_indices=[confuse_ind])
+                                                      wrong_indices=[wrong_ind], confuse_indices=[confuse_ind])
 
         helpful_indices = np.where(influence_values > 0)[0]  # cache all helpful
         harmful_indices = np.where(influence_values < 0)[0]  # cache all harmful
