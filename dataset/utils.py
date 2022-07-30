@@ -415,7 +415,8 @@ class ClsCohSampler(torch.utils.data.sampler.Sampler):
         return self.n_dataset // self.batch_size
 
 
-def prepare_data(data_name='cub',
+def prepare_data(dataset_transform_config='dataset/config.json',
+                 data_name='cub',
                  config_name='',
                  batch_size=1,
                  test_crop=False):
@@ -427,7 +428,7 @@ def prepare_data(data_name='cub',
         :param test_crop: use cropping in dl_ev or not
         :returns dl_tr, dl_ev
     '''
-    dataset_config = utils.load_config('dataset/config.json')
+    dataset_config = utils.load_config(dataset_transform_config)
 
     config = utils.load_config('config/{}.json'.format(config_name))
     transform_key = 'transform_parameters'
@@ -445,7 +446,9 @@ def prepare_data(data_name='cub',
                 classes=dataset_config['dataset'][data_name]['classes']['trainval'],
                 transform=transforms.Compose([
                     RGBAToRGB(),
-                    transforms.Resize(dataset_config[transform_key]["sz_crop"]),
+                    RGBToBGR() if dataset_config[transform_key]['rgb_to_bgr'] else Identity(),
+                    # transforms.Resize(dataset_config[transform_key]["sz_crop"]),
+                    transforms.Resize((dataset_config[transform_key]["sz_crop"], dataset_config[transform_key]["sz_crop"])), # fixme: bninceptionnet requires a square shape input, otherwise throw an error
                     transforms.ToTensor(),
                     ScaleIntensities(*dataset_config[transform_key]["intensity_scale"]),
                     transforms.Normalize(
@@ -469,7 +472,9 @@ def prepare_data(data_name='cub',
                     classes=dataset_config['dataset'][data_name]['classes']['eval'],
                     transform=transforms.Compose([
                         RGBAToRGB(),
-                        transforms.Resize(dataset_config[transform_key]["sz_crop"]),
+                        RGBToBGR() if dataset_config[transform_key]['rgb_to_bgr'] else Identity(),
+                        # transforms.Resize(dataset_config[transform_key]["sz_crop"]),
+                        transforms.Resize((dataset_config[transform_key]["sz_crop"], dataset_config[transform_key]["sz_crop"])),
                         transforms.ToTensor(),
                         ScaleIntensities(*dataset_config[transform_key]["intensity_scale"]),
                         transforms.Normalize(
@@ -491,7 +496,9 @@ def prepare_data(data_name='cub',
                     classes=dataset_config['dataset'][data_name]['classes']['eval'],
                     transform=transforms.Compose([
                         RGBAToRGB(),
-                        transforms.Resize(dataset_config[transform_key]["sz_crop"]),
+                        RGBToBGR() if dataset_config[transform_key]['rgb_to_bgr'] else Identity(),
+                        # transforms.Resize(dataset_config[transform_key]["sz_crop"]),
+                        transforms.Resize((dataset_config[transform_key]["sz_crop"], dataset_config[transform_key]["sz_crop"])),
                         transforms.ToTensor(),
                         ScaleIntensities(*dataset_config[transform_key]["intensity_scale"]),
                         transforms.Normalize(

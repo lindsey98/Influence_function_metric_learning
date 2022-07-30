@@ -3,7 +3,7 @@ import numpy as np
 import torch
 import torchvision
 import loss
-from networks import Feat_resnet50_max_n
+from networks import Feat_resnet50_max_n, bninception
 from utils import get_wrong_indices
 import torch.nn as nn
 import os
@@ -21,20 +21,23 @@ from dataset.utils import prepare_data
 
 
 class BaseInfluenceFunction():
-    def __init__(self, dataset_name, seed, loss_type, config_name,
-                 test_crop=False, sz_embedding=512, epoch=40):
+    def __init__(self, dataset_name, seed, loss_type, config_name, data_transform_config,
+                 test_crop, sz_embedding, epoch, model_arch):
 
         self.folder = 'models/dvi_data_{}_{}_loss{}/'.format(dataset_name, seed, loss_type)
-        self.model_dir = '{}/ResNet_{}_Model'.format(self.folder, sz_embedding)
+        self.model_dir = '{}/{}_{}_Model'.format(self.folder, model_arch, sz_embedding)
         self.config_name = config_name
         self.epoch = epoch
+        self.model_arch = model_arch
 
         # load data
-        self.dl_tr, self.dl_ev = prepare_data(data_name=dataset_name,
+        self.dl_tr, self.dl_ev = prepare_data(dataset_transform_config=data_transform_config,
+                                              data_name=dataset_name,
                                               config_name=self.config_name,
                                               batch_size=1,
                                               test_crop=test_crop)
-        self.dl_tr_clean, _ = prepare_data(data_name=dataset_name.split('_noisy')[0],
+        self.dl_tr_clean, _ = prepare_data(dataset_transform_config=data_transform_config,
+                                           data_name=dataset_name.split('_noisy')[0],
                                            config_name=self.config_name,
                                            batch_size=1,
                                            test_crop=test_crop)
@@ -47,11 +50,16 @@ class BaseInfluenceFunction():
         self.criterion = self._load_criterion()
         self.train_embedding, self.train_label, self.testing_embedding, self.testing_label, \
         self.testing_nn_label, self.testing_nn_indices = self._load_data()
-        pass
 
     def _load_model(self, multi_gpu=True):
-        feat = Feat_resnet50_max_n()
-        emb = torch.nn.Linear(2048, self.sz_embedding)  # projection layer
+        if self.model_arch.lower() == 'resnet':
+            feat = Feat_resnet50_max_n()
+        elif self.model_arch.lower() == 'bninception':
+            feat = bninception()
+        else:
+            raise NotImplementedError
+        in_sz = feat(torch.rand(1, 3, 256, 256)).squeeze().size(0)
+        emb = torch.nn.Linear(in_sz, self.sz_embedding)  # projection layer
         model = torch.nn.Sequential(feat, emb)
         weights = torch.load(
             '{}/Epoch_{}/{}_{}_trainval_{}_{}.pth'.format(self.model_dir, self.epoch, self.dataset_name,
@@ -68,14 +76,6 @@ class BaseInfluenceFunction():
             model.load_state_dict(weights_detach)
         return model
 
-    # def _load_model_random(self, multi_gpu=True):
-    #     feat = Feat_resnet50_max_n()
-    #     emb = torch.nn.Linear(2048, self.sz_embedding)  # projection layer
-    #     model = torch.nn.Sequential(feat, emb)
-    #     if multi_gpu:
-    #         model = nn.DataParallel(model)
-    #     model.cuda()
-    #     return model
 
     def _load_criterion(self):
         proxies = torch.load('{}/Epoch_{}/proxy.pth'.format(self.model_dir, self.epoch), map_location='cpu')['proxies'].detach()
@@ -313,11 +313,11 @@ class BaseInfluenceFunction():
             plt.close()
 
 class EIF(BaseInfluenceFunction):
-    def __int__(self, dataset_name, seed, loss_type, config_name,
-                test_crop=False, sz_embedding=512, epoch=40):
+    def __int__(self, dataset_name, seed, loss_type, config_name, data_transform_config='dataset/config.json',
+                test_crop=False, sz_embedding=512, epoch=40, model_arch='ResNet'):
 
-        super(EIF, self).__init__(dataset_name, seed, loss_type, config_name,
-                                  test_crop=False, sz_embedding=512, epoch=40)
+        super(EIF, self).__init__(dataset_name, seed, loss_type, config_name, data_transform_config=data_transform_config,
+                                  test_crop=test_crop, sz_embedding=sz_embedding, epoch=epoch, model_arch=model_arch)
 
     def get_grad_loss_train_all(self, theta, theta_hat, pair_idx=None, save=False):
         '''
@@ -592,10 +592,10 @@ class EIF(BaseInfluenceFunction):
 
 
 class OrigIF(BaseInfluenceFunction):
-    def __int__(self, dataset_name, seed, loss_type, config_name,
-                test_crop=False, sz_embedding=512, epoch=40):
-        super(BaseInfluenceFunction, self).__init__(dataset_name, seed, loss_type, config_name,
-                                                    test_crop=False, sz_embedding=512, epoch=40)
+    def __int__(self, dataset_name, seed, loss_type, config_name, data_transform_config='dataset/config.json',
+                test_crop=False, sz_embedding=512, epoch=40, model_arch='ResNet'):
+        super(BaseInfluenceFunction, self).__init__(dataset_name, seed, loss_type, config_name, data_transform_config=data_transform_config,
+                                                    test_crop=test_crop, sz_embedding=sz_embedding, epoch=epoch, model_arch=model_arch)
 
     def influence_func_forpairs(self, train_features, test_features, wrong_indices, confuse_indices):
         '''
