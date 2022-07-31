@@ -35,7 +35,7 @@ if __name__ == '__main__':
         else:
             confusion_class_pairs = IS.get_confusion_class_pairs()
 
-            '''Step 1: Get deltaD_deltaL'''
+            '''Step 1: Get deltaD_deltaL with the confusion pairs for the top1 frequently wrong testing class'''
             mean_deltaL_deltaD = IS.MC_estimate_forclasses(confusion_class_pairs[0], num_thetas=num_thetas, steps=50)
 
             '''Step 2: Calc influence functions'''

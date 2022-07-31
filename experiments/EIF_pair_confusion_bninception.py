@@ -31,21 +31,21 @@ if __name__ == '__main__':
     os.makedirs(base_dir, exist_ok=True)
 
     '''Step 2: Save influential samples indices for 50 pairs'''
-    all_features = IS.get_test_features()
-    for kk in range(min(len(wrong_indices), 100)):
-        wrong_ind = wrong_indices[kk]
-        confuse_ind = confuse_indices[kk]
-        if os.path.exists('./{}/{}_helpful_indices_{}_{}.npy'.format(base_dir, loss_type, wrong_ind, confuse_ind)):
-            print('skip')
-            continue
-        mean_deltaL_deltaD = IS.MC_estimate_forpair([wrong_ind, confuse_ind], num_thetas=1, steps=50)
-
-        influence_values = np.asarray(mean_deltaL_deltaD)
-        helpful_indices = np.where(influence_values < 0)[0]
-        harmful_indices = np.where(influence_values > 0)[0]
-        np.save('./{}/{}_helpful_indices_{}_{}'.format(base_dir, loss_type, wrong_ind, confuse_ind), helpful_indices)
-        np.save('./{}/{}_harmful_indices_{}_{}'.format(base_dir, loss_type, wrong_ind, confuse_ind), harmful_indices)
-    exit()
+    # all_features = IS.get_test_features()
+    # for kk in range(min(len(wrong_indices), 100)):
+    #     wrong_ind = wrong_indices[kk]
+    #     confuse_ind = confuse_indices[kk]
+    #     if os.path.exists('./{}/{}_helpful_indices_{}_{}.npy'.format(base_dir, loss_type, wrong_ind, confuse_ind)):
+    #         print('skip')
+    #         continue
+    #     mean_deltaL_deltaD = IS.MC_estimate_forpair([wrong_ind, confuse_ind], num_thetas=1, steps=50)
+    #
+    #     influence_values = np.asarray(mean_deltaL_deltaD)
+    #     helpful_indices = np.where(influence_values < 0)[0]
+    #     harmful_indices = np.where(influence_values > 0)[0]
+    #     np.save('./{}/{}_helpful_indices_{}_{}'.format(base_dir, loss_type, wrong_ind, confuse_ind), helpful_indices)
+    #     np.save('./{}/{}_harmful_indices_{}_{}'.format(base_dir, loss_type, wrong_ind, confuse_ind), harmful_indices)
+    # exit()
 
     '''Step 3: Train the model for every pair'''
     # Run in shell
