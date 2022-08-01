@@ -18,7 +18,30 @@ from collections import OrderedDict
 import scipy.stats
 from evaluation import assign_by_euclidian_at_k_indices
 from dataset.utils import prepare_data
+import sklearn
 
+# knn monitor as in InstDisc https://arxiv.org/abs/1805.01978
+# implementation follows http://github.com/zhirongw/lemniscate.pytorch and https://github.com/leftthomas/SimCLR, https://github.com/PatrickHua/SimSiam/blob/main/tools/knn_monitor.py
+def kNN_label_pred(query_indices, embeddings, labels, nb_classes, knn_k):
+
+    distances = sklearn.metrics.pairwise.pairwise_distances(embeddings) # (N, N)
+    indices = np.argsort(distances, axis=1)[:, 1: knn_k + 1] # (N, knn_k)
+    query_nn_indices = indices[query_indices] # (B, knn_k)
+    query_nn_labels = torch.gather(labels.expand(query_indices.shape[0], -1),
+                                   dim=-1,
+                                   index=torch.from_numpy(query_nn_indices)) # (B, knn_k)
+
+    query2nn_dist = distances[np.repeat(query_indices, knn_k), query_nn_indices.flatten()] # (B*knn_k, )
+    query2nn_dist = query2nn_dist.reshape(len(query_indices), -1) # (B, knn_k)
+    query2nn_dist_exp = (-torch.from_numpy(query2nn_dist)).exp() # (B, knn_k)
+
+    one_hot_label = torch.zeros(query_indices.shape[0] * knn_k, nb_classes, device=query_nn_labels.device) # (B*knn_k, C)
+    one_hot_label = one_hot_label.scatter(dim=-1, index=query_nn_labels.view(-1, 1).type(torch.int64), value=1.0) # (B*knn_k, C)
+
+    raw_pred_scores = torch.sum(one_hot_label.view(query_indices.shape[0], -1, nb_classes) * query2nn_dist_exp.unsqueeze(dim=-1), dim=1) # (B, C)
+    pred_scores = raw_pred_scores / torch.sum(raw_pred_scores, dim=-1, keepdim=True) # (B, C)
+    pred_labels = torch.argsort(pred_scores, dim=-1, descending=True) # (B, C)
+    return pred_labels, pred_scores
 
 class BaseInfluenceFunction():
     def __init__(self, dataset_name, seed, loss_type, config_name, data_transform_config,
@@ -195,122 +218,50 @@ class BaseInfluenceFunction():
 
         return confusion_class_pairs
 
-    def viz_cls(self, top_bottomk, dl, cls):
-        ind_cls = np.where(np.asarray(dl.dataset.ys) == cls)[0]
-        for i in range(top_bottomk):
-            plt.subplot(1, top_bottomk, i + 1)
-            img = read_image(dl.dataset.im_paths[ind_cls[i]])
-            plt.imshow(to_pil_image(img))
-            plt.title('Class = {}'.format(cls))
-        plt.show()
 
-    def viz_2cls(self, top_bottomk, dl, cls1, cls2):
-        ind_cls1 = np.where(np.asarray(dl.dataset.ys) == cls1)[0]
-        ind_cls2 = np.where(np.asarray(dl.dataset.ys) == cls2)[0]
+    def getNN_indices(self, embedding, label):
+        # global 1st NN
+        nn_indices, nn_label = assign_by_euclidian_at_k_indices(embedding, label, 1)
+        nn_indices, nn_label = nn_indices.flatten(), nn_label.flatten()
 
-        top_bottomk = min(top_bottomk, len(ind_cls1), len(ind_cls2))
-        for i in range(top_bottomk):
-            plt.subplot(2, top_bottomk, i + 1)
-            img = read_image(dl.dataset.im_paths[ind_cls1[i]])
-            plt.imshow(to_pil_image(img))
-            plt.title('Class = {}'.format(cls1))
-        for i in range(top_bottomk):
-            plt.subplot(2, top_bottomk, i + 1 + top_bottomk)
-            img = read_image(dl.dataset.im_paths[ind_cls2[i]])
-            plt.imshow(to_pil_image(img))
-            plt.title('Class = {}'.format(cls2))
-        plt.tight_layout()
-        plt.show()
+        # Same class 1st NN
+        chunk_size = 1000 # you need to chunk because the number of samples is too large
+        num_chunks = math.ceil(len(embedding) / chunk_size)
+        distances = torch.tensor([])
+        for i in tqdm(range(0, num_chunks)):
+            chunk_indices = [chunk_size * i, min(len(embedding), chunk_size * (i + 1))]
+            chunk_X = embedding[chunk_indices[0]:chunk_indices[1], :]
+            distance_mat = torch.from_numpy(sklearn.metrics.pairwise.pairwise_distances(embedding, chunk_X))
+            distances = torch.cat((distances, distance_mat), dim=-1)
+        distances = distances.detach().cpu().numpy()
 
-    def viz_samples(self, dl, indices):
-        classes = [dl.dataset.ys[x] for x in indices]
-        for i in range(10):
-            plt.subplot(2, 5, i + 1)
-            img = read_image(dl.dataset.im_paths[indices[i]])
-            plt.imshow(to_pil_image(img))
-            plt.title('Class = {}'.format(classes[i]))
-        plt.tight_layout()
-        plt.show()
+        diff_cls_mask = (label[:, None] != label).detach().cpu().numpy().nonzero()
+        distances[diff_cls_mask[0], diff_cls_mask[1]] = distances.max() + 1
+        nn_indices_same_cls = np.argsort(distances, axis=1)[:, 1] # get NN among all same-class samples
 
-    def viz_1sample(self, dl, ind):
-        cls = dl.dataset.ys[ind]
-        img = read_image(dl.dataset.im_paths[ind])
-        plt.imshow(to_pil_image(img))
-        plt.title('Class = {}'.format(cls))
-        plt.tight_layout()
-        plt.show()
+        return nn_indices, nn_label, nn_indices_same_cls
 
-    def viz_2sample(self, dl, ind1, ind2):
-        class1 = dl.dataset.ys[ind1]
-        class2 = dl.dataset.ys[ind2]
+    def calc_relabel_dict(self, lookat_harmful,
+                          harmful_indices, helpful_indices,
+                          base_dir, pair_ind1, pair_ind2):
 
-        plt.subplot(1, 2, 1)
-        img = read_image(dl.dataset.im_paths[ind1])
-        plt.imshow(to_pil_image(img))
-        plt.title('Class = {}'.format(class1))
+        assert isinstance(lookat_harmful, bool)
+        if lookat_harmful:
+            top_indices = harmful_indices  # top_harmful_indices = influence_values.argsort()[-50:]
+        else:
+            top_indices = helpful_indices
 
-        plt.subplot(1, 2, 2)
-        img = read_image(dl.dataset.im_paths[ind2])
-        plt.imshow(to_pil_image(img))
-        plt.title('Class = {}'.format(class2))
-        plt.show()
-        plt.close()
+        relabel_dict = {}
+        unique_labels, unique_counts = torch.unique(self.train_label, return_counts=True)
+        median_shots_percls = unique_counts.median().item()
+        _, prob_relabel = kNN_label_pred(query_indices=top_indices, embeddings=self.train_embedding, labels=self.train_label,
+                                         nb_classes=self.dl_tr.dataset.nb_classes(), knn_k=median_shots_percls)
 
-    def vis_pairs(self, wrong_indices, confuse_indices, wrong_samecls_indices,
-                  dl, base_dir='Grad_Test'):
-        '''Visualize all confusion pairs'''
-        assert len(wrong_indices) == len(confuse_indices)
-        assert len(wrong_indices) == len(wrong_samecls_indices)
+        for kk in range(len(top_indices)):
+            relabel_dict[top_indices[kk]] = prob_relabel[kk].detach().cpu().numpy()
 
-        os.makedirs('./{}/{}'.format(base_dir, self.dataset_name), exist_ok=True)
-        model_copy = self._load_model()
-        model_copy.eval()
-
-        for ind1, ind2, ind3 in zip(wrong_indices, confuse_indices, wrong_samecls_indices):
-            # cam_extractor1 = GradCAMCustomize(model_copy, target_layer=model_copy.module[0].base.layer4)  # to last layer
-            # cam_extractor2 = GradCAMCustomize(model_copy, target_layer=model_copy.module[0].base.layer4)  # to last layer
-
-            # Get the two embeddings first
-            img1 = to_pil_image(read_image(dl.dataset.im_paths[ind1]))
-            img2 = to_pil_image(read_image(dl.dataset.im_paths[ind2]))
-            img3 = to_pil_image(read_image(dl.dataset.im_paths[ind3]))
-
-            # cam_extractor1._hooks_enabled = True
-            # model_copy.zero_grad()
-            # emb1 = model_copy(dl.dataset.__getitem__(ind1)[0].unsqueeze(0).cuda())
-            # emb2 = model_copy(dl.dataset.__getitem__(ind2)[0].unsqueeze(0).cuda())
-            # activation_map2 = cam_extractor1(torch.dot(emb1.detach().squeeze(0), emb2.squeeze(0)))
-            # result2, _ = overlay_mask(img2, to_pil_image(activation_map2[0].detach().cpu(), mode='F'), alpha=0.5)
-            #
-            # cam_extractor2._hooks_enabled = True
-            # model_copy.zero_grad()
-            # emb1 = model_copy(dl.dataset.__getitem__(ind1)[0].unsqueeze(0).cuda())
-            # emb3 = model_copy(dl.dataset.__getitem__(ind3)[0].unsqueeze(0).cuda())
-            # activation_map3 = cam_extractor2(torch.dot(emb1.detach().squeeze(0), emb3.squeeze(0)))
-            # result3, _ = overlay_mask(img3, to_pil_image(activation_map3[0].detach().cpu(), mode='F'), alpha=0.5)
-
-            # Display it
-            fig = plt.figure()
-            fig.subplots_adjust(top=0.8)
-
-            ax = fig.add_subplot(1, 3, 1)
-            ax.imshow(img1)
-            ax.title.set_text('Ind = {} \n Class = {}'.format(ind1, dl.dataset.ys[ind1]))
-            plt.axis('off')
-
-            ax = fig.add_subplot(1, 3, 2)
-            ax.imshow(img2)
-            ax.title.set_text('Ind = {} \n Class = {}'.format(ind2, dl.dataset.ys[ind2]))
-            plt.axis('off')
-
-            ax = fig.add_subplot(1, 3, 3)
-            ax.imshow(img3)
-            ax.title.set_text('Ind = {} \n Class = {}'.format(ind3, dl.dataset.ys[ind3]))
-            plt.axis('off')
-
-            plt.savefig('./{}/{}/{}_{}.png'.format(base_dir, self.dataset_name,
-                                                   ind1, ind2))
-            plt.close()
+        with open('./{}/Allrelabeldict_{}_{}_soft_knn.pkl'.format(base_dir, pair_ind1, pair_ind2), 'wb') as handle:
+            pickle.dump(relabel_dict, handle)
 
 class EIF(BaseInfluenceFunction):
     def __int__(self, dataset_name, seed, loss_type, config_name, data_transform_config='dataset/config.json',

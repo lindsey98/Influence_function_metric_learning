@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from torchvision.transforms.functional import to_pil_image
 from torchvision.io.image import read_image
-from Influence_function.influence_function import EIF
+from Influence_function.influence_function import EIF, kNN_label_pred
 # from explanation_evaluation.CAM_methods import *
 from Influence_function.EIF_utils import *
 from Influence_function.IF_utils import *
@@ -12,17 +12,16 @@ from evaluation import assign_by_euclidian_at_k_indices
 import sklearn
 import pickle
 from utils import evaluate
-from Influence_function.sample_relabel import SampleRelabel, kNN_label_pred
 os.environ['CUDA_VISIBLE_DEVICES'] = "0"
 
 if __name__ == '__main__':
 
     loss_type = 'ProxyNCA_prob_orig'; sz_embedding = 512; epoch = 40; test_crop = False
-    # dataset_name = 'cub';  config_name = 'cub'; seed = 0
-    # dataset_name = 'cars'; config_name = 'cars'; seed = 3
-    dataset_name = 'inshop'; config_name = 'inshop'; seed = 4
+    # dataset_name = 'cub';  config_name = 'cub_ProxyNCA_prob_orig'; seed = 0
+    # dataset_name = 'cars'; config_name = 'cars_ProxyNCA_prob_orig'; seed = 3
+    dataset_name = 'inshop'; config_name = 'inshop_ProxyNCA_prob_orig'; seed = 4
 
-    IS = SampleRelabel(dataset_name, seed, loss_type, config_name, test_crop)
+    IS = EIF(dataset_name, seed, loss_type, config_name, 'dataset/config.json', test_crop, sz_embedding, epoch, 'ResNet')
 
     relabel_dict = []
     unique_labels, unique_counts = torch.unique(IS.train_label, return_counts=True)
@@ -49,6 +48,7 @@ if __name__ == '__main__':
     centrailized_relabel = []
     diversified_relabel = []
     individual_relabel = []
+    other_relabel = []
     for cls in range(IS.dl_tr.dataset.nb_classes()):
         if np.sum(relabel_dist[cls] != cls) > 0:
             ct_relabel += 1
@@ -56,7 +56,6 @@ if __name__ == '__main__':
             ct_relabel_instances += np.sum(relabel_dist[cls] != cls)
             ct_instances += len(relabel_dist[cls])
             if percentage >= 0.1:
-                # print('Cls {} Percentage {}'.format(cls, percentage))
                 ct_relabel_sig += 1
                 relabel_freq = np.asarray([np.sum(relabel_dist[cls] == c) / len(relabel_dist[cls]) \
                                               for c in range(IS.dl_tr.dataset.nb_classes())])
@@ -67,11 +66,18 @@ if __name__ == '__main__':
                     diversified_relabel.append(cls)
             elif percentage <= 0.05 and percentage > 0:
                 individual_relabel.append(cls)
+            else:
+                other_relabel.append(cls)
 
-    print('Total number of instances to be relabelled {}%'.format(ct_relabel_instances/ct_instances))
+    print('Total number of instances to be relabelled {}%'.format(100*ct_relabel_instances/ct_instances))
     print('Total number of classes {}'.format(IS.dl_tr.dataset.nb_classes()))
     print('Total number of classes with relabelling suggestion {}'.format(ct_relabel))
     print('Total number of classes with significant (>=10%) relabelling suggestion {}'.format(ct_relabel_sig))
+    print('Total number of classes with centralized ', len(centrailized_relabel))
+    print('Total number of classes with diversified ', len(diversified_relabel))
+    print('Total number of classes with individual ', len(individual_relabel))
+    print('Total number of classes with others ', len(other_relabel))
+
     print('Centralized', centrailized_relabel)
     print('Diversified', diversified_relabel)
     print('Individual', individual_relabel)

@@ -18,7 +18,7 @@ if __name__ == '__main__':
     # loss_type = 'SoftTriple'; dataset_name = 'cars'; config_name = 'cars_SoftTriple'; seed = 4
     # loss_type = 'SoftTriple'; dataset_name = 'inshop'; config_name = 'inshop_SoftTriple'; seed = 3
 
-    IS = OrigIF(dataset_name, seed, loss_type, config_name, test_crop)
+    IS = OrigIF(dataset_name, seed, loss_type, config_name, 'dataset/config.json', test_crop, sz_embedding, epoch, 'ResNet')
 
     '''Analyze confusing features for all confusion classes'''
     '''Step 1: Get all wrong pairs'''
@@ -33,25 +33,25 @@ if __name__ == '__main__':
     os.makedirs(base_dir, exist_ok=True)
 
     '''Step 2: Save influential samples indices for 50 pairs'''
-    train_features = IS.get_train_features()
-    test_features = IS.get_test_features()  # (N, 2048)
+    # train_features = IS.get_train_features()
+    # test_features = IS.get_test_features()  # (N, 2048)
     # for kk in range(min(len(wrong_indices), 50)):
-    for kk in range(50, min(len(wrong_indices), 100)):
-
-        wrong_ind = wrong_indices[kk]
-        confuse_ind = confuse_indices[kk]
-        if os.path.exists('./{}/{}_helpful_indices_{}_{}.npy'.format(base_dir, loss_type, wrong_ind, confuse_ind)):
-            print('skip')
-            continue
-        torch.cuda.empty_cache()
-        influence_values = IS.influence_func_forpairs(train_features=train_features, test_features=test_features,
-                                                      wrong_indices=[wrong_ind], confuse_indices=[confuse_ind])
-
-        helpful_indices = np.where(influence_values > 0)[0]  # cache all helpful
-        harmful_indices = np.where(influence_values < 0)[0]  # cache all harmful
-        np.save('./{}/{}_helpful_indices_{}_{}'.format(base_dir, loss_type, wrong_ind, confuse_ind), helpful_indices)
-        np.save('./{}/{}_harmful_indices_{}_{}'.format(base_dir, loss_type, wrong_ind, confuse_ind), harmful_indices)
-    exit()
+    # for kk in range(50, min(len(wrong_indices), 100)):
+    #
+    #     wrong_ind = wrong_indices[kk]
+    #     confuse_ind = confuse_indices[kk]
+    #     if os.path.exists('./{}/{}_helpful_indices_{}_{}.npy'.format(base_dir, loss_type, wrong_ind, confuse_ind)):
+    #         print('skip')
+    #         continue
+    #     torch.cuda.empty_cache()
+    #     influence_values = IS.influence_func_forpairs(train_features=train_features, test_features=test_features,
+    #                                                   wrong_indices=[wrong_ind], confuse_indices=[confuse_ind])
+    #
+    #     helpful_indices = np.where(influence_values > 0)[0]  # cache all helpful
+    #     harmful_indices = np.where(influence_values < 0)[0]  # cache all harmful
+    #     np.save('./{}/{}_helpful_indices_{}_{}'.format(base_dir, loss_type, wrong_ind, confuse_ind), helpful_indices)
+    #     np.save('./{}/{}_harmful_indices_{}_{}'.format(base_dir, loss_type, wrong_ind, confuse_ind), harmful_indices)
+    # exit()
 
     '''Step 3: Train the model for every pair'''
     # Run in shell
