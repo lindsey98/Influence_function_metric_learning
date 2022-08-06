@@ -40,7 +40,7 @@ class Cars(BaseDatasetMod):
 
 
 class CarsNoisy(BaseDatasetMod):
-    def __init__(self, root, source, classes, transform = None, seed=0, mislabel_percentage=0.01):
+    def __init__(self, root, source, classes, transform = None, seed=0, mislabel_percentage=0.1):
         BaseDatasetMod.__init__(self, root, source, classes, transform)
         annos_fn = 'cars_annos.mat'
         cars = scipy.io.loadmat(os.path.join(root, annos_fn))

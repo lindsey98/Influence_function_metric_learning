@@ -17,8 +17,9 @@ from utils import predict_batchwise_debug
 from collections import OrderedDict
 import scipy.stats
 from evaluation import assign_by_euclidian_at_k_indices
-from dataset.utils import prepare_data
+from dataset.utils import prepare_data, prepare_data_noisy
 import sklearn
+import random
 
 # knn monitor as in InstDisc https://arxiv.org/abs/1805.01978
 # implementation follows http://github.com/zhirongw/lemniscate.pytorch and https://github.com/leftthomas/SimCLR, https://github.com/PatrickHua/SimSiam/blob/main/tools/knn_monitor.py
@@ -45,7 +46,7 @@ def kNN_label_pred(query_indices, embeddings, labels, nb_classes, knn_k):
 
 class BaseInfluenceFunction():
     def __init__(self, dataset_name, seed, loss_type, config_name, data_transform_config,
-                 test_crop, sz_embedding, epoch, model_arch):
+                 test_crop, sz_embedding, epoch, model_arch, mislabel_percentage):
 
         self.folder = 'models/dvi_data_{}_{}_loss{}/'.format(dataset_name, seed, loss_type)
         self.model_dir = '{}/{}_{}_Model'.format(self.folder, model_arch, sz_embedding)
@@ -54,11 +55,22 @@ class BaseInfluenceFunction():
         self.model_arch = model_arch
 
         # load data
-        self.dl_tr, self.dl_ev = prepare_data(dataset_transform_config=data_transform_config,
-                                              data_name=dataset_name,
-                                              config_name=self.config_name,
-                                              batch_size=1,
-                                              test_crop=test_crop)
+        if 'noisy' in dataset_name:
+            self.dl_tr, self.dl_ev = prepare_data_noisy(dataset_transform_config=data_transform_config,
+                                                       data_name=dataset_name,
+                                                       config_name=self.config_name,
+                                                       batch_size=1,
+                                                       test_crop=test_crop,
+                                                       seed=seed,
+                                                       mislabel_percentage=mislabel_percentage)
+
+        else:
+            self.dl_tr, self.dl_ev = prepare_data(dataset_transform_config=data_transform_config,
+                                                  data_name=dataset_name,
+                                                  config_name=self.config_name,
+                                                  batch_size=1,
+                                                  test_crop=test_crop)
+
         self.dl_tr_clean, _ = prepare_data(dataset_transform_config=data_transform_config,
                                            data_name=dataset_name.split('_noisy')[0],
                                            config_name=self.config_name,
@@ -73,6 +85,26 @@ class BaseInfluenceFunction():
         self.criterion = self._load_criterion()
         self.train_embedding, self.train_label, self.testing_embedding, self.testing_label, \
         self.testing_nn_label, self.testing_nn_indices = self._load_data()
+
+    def _load_random_model(self, seed, multi_gpu=True):
+        random.seed(seed)
+        np.random.seed(seed)  # FIXME: to not set seed
+        torch.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
+
+        if self.model_arch.lower() == 'resnet':
+            feat = Feat_resnet50_max_n()
+        elif self.model_arch.lower() == 'bninception':
+            feat = bninception()
+        else:
+            raise NotImplementedError
+        in_sz = feat(torch.rand(1, 3, 256, 256)).squeeze().size(0)
+        emb = torch.nn.Linear(in_sz, self.sz_embedding)  # projection layer
+        model = torch.nn.Sequential(feat, emb)
+        if multi_gpu:
+            model = nn.DataParallel(model)
+        model.cuda()
+        return model
 
     def _load_model(self, multi_gpu=True):
         if self.model_arch.lower() == 'resnet':
@@ -265,10 +297,11 @@ class BaseInfluenceFunction():
 
 class EIF(BaseInfluenceFunction):
     def __int__(self, dataset_name, seed, loss_type, config_name, data_transform_config='dataset/config.json',
-                test_crop=False, sz_embedding=512, epoch=40, model_arch='ResNet'):
+                test_crop=False, sz_embedding=512, epoch=40, model_arch='ResNet', mislabel_percentage=0.1):
 
         super(EIF, self).__init__(dataset_name, seed, loss_type, config_name, data_transform_config=data_transform_config,
-                                  test_crop=test_crop, sz_embedding=sz_embedding, epoch=epoch, model_arch=model_arch)
+                                  test_crop=test_crop, sz_embedding=sz_embedding, epoch=epoch, model_arch=model_arch,
+                                  mislabel_percentage=mislabel_percentage)
 
     def get_grad_loss_train_all(self, theta, theta_hat, pair_idx=None, save=False):
         '''
@@ -544,9 +577,10 @@ class EIF(BaseInfluenceFunction):
 
 class OrigIF(BaseInfluenceFunction):
     def __int__(self, dataset_name, seed, loss_type, config_name, data_transform_config='dataset/config.json',
-                test_crop=False, sz_embedding=512, epoch=40, model_arch='ResNet'):
+                test_crop=False, sz_embedding=512, epoch=40, model_arch='ResNet', mislabel_percentage=0.1):
         super(BaseInfluenceFunction, self).__init__(dataset_name, seed, loss_type, config_name, data_transform_config=data_transform_config,
-                                                    test_crop=test_crop, sz_embedding=sz_embedding, epoch=epoch, model_arch=model_arch)
+                                                    test_crop=test_crop, sz_embedding=sz_embedding, epoch=epoch, model_arch=model_arch,
+                                                    mislabel_percentage=mislabel_percentage)
 
     def influence_func_forpairs(self, train_features, test_features, wrong_indices, confuse_indices):
         '''

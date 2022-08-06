@@ -193,7 +193,7 @@ class InShopNoisy(BaseDatasetModNoisy):
     set is partitioned into a query set (14,218 images of 3,985 classes)
     and a gallery set (12, 612 images of 3, 985 classes)
     """
-    def __init__(self, root, source, classes, transform, dset_type='train', seed=0, mislabel_percentage=0.01):
+    def __init__(self, root, source, classes, transform, dset_type='train', seed=0, mislabel_percentage=0.1):
         BaseDatasetMod.__init__(self, root, source, classes, transform)
 
         with open(

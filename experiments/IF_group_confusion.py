@@ -96,3 +96,4 @@ if __name__ == '__main__':
         inter_dist_after, _ = grad_confusion(IS.model, features, wrong_cls, confuse_classes,
                                              IS.testing_nn_label, IS.testing_label, IS.testing_nn_indices)
         print("After d(G_p): ", inter_dist_after)
+

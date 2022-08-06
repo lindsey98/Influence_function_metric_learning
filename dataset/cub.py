@@ -20,7 +20,7 @@ class CUBirds(BaseDatasetMod):
 
 
 class CUBirdsNoisy(BaseDatasetMod):
-    def __init__(self, root, source, classes, transform = None, seed=0, mislabel_percentage=0.01):
+    def __init__(self, root, source, classes, transform = None, seed=0, mislabel_percentage=0.1):
         BaseDatasetMod.__init__(self, root, source, classes, transform)
         index = 0
         for i in torchvision.datasets.ImageFolder(root = os.path.join(root, 'images')).imgs:

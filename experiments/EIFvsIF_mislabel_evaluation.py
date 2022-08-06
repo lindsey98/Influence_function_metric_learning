@@ -1,27 +1,26 @@
 import os
 import torch
-from Influence_function.EIF_utils import grad_confusion
+from Influence_function.EIF_utils import grad_confusion, calc_loss_train
 from Influence_function.IF_utils import inverse_hessian_product, calc_influential_func_orig
-from Influence_function.influence_function import OrigIF, EIF
-from Influence_function.sample_relabel import kNN_label_pred
+from Influence_function.influence_function import OrigIF, EIF, kNN_label_pred
 import numpy as np
 import matplotlib.pyplot as plt
 import time
-os.environ['CUDA_VISIBLE_DEVICES'] = "0"
+os.environ['CUDA_VISIBLE_DEVICES'] = "1"
 
 if __name__ == '__main__':
     noisy_level = 0.1
     sz_embedding = 512; epoch = 40; test_crop = False
     # loss_type = 'ProxyNCA_prob_orig_noisy_{}'.format(noisy_level); dataset_name = 'cub_noisy';  config_name = 'cub_ProxyNCA_prob_orig'; seed = 0
-    # loss_type = 'ProxyNCA_prob_orig_noisy_{}'.format(noisy_level); dataset_name = 'cars_noisy'; config_name = 'cars_ProxyNCA_prob_orig'; seed = 3
+    loss_type = 'ProxyNCA_prob_orig_noisy_{}'.format(noisy_level); dataset_name = 'cars_noisy'; config_name = 'cars_ProxyNCA_prob_orig'; seed = 3
     # loss_type = 'ProxyNCA_prob_orig_noisy_{}'.format(noisy_level); dataset_name = 'inshop_noisy'; config_name = 'inshop_ProxyNCA_prob_orig'; seed = 4
 
     # loss_type = 'SoftTriple_noisy_{}'.format(noisy_level); dataset_name = 'cub_noisy';  config_name = 'cub_SoftTriple'; seed = 3
     # loss_type = 'SoftTriple_noisy_{}'.format(noisy_level); dataset_name = 'cars_noisy';  config_name = 'cars_SoftTriple'; seed = 4
-    loss_type = 'SoftTriple_noisy_{}'.format(noisy_level); dataset_name = 'inshop_noisy';  config_name = 'inshop_SoftTriple'; seed = 3
+    # loss_type = 'SoftTriple_noisy_{}'.format(noisy_level); dataset_name = 'inshop_noisy';  config_name = 'inshop_SoftTriple'; seed = 3
 
     '''============================================= Our Empirical Influence function =============================================================='''
-    IS = EIF(dataset_name, seed, loss_type, config_name, test_crop)
+    IS = EIF(dataset_name, seed, loss_type, config_name, 'dataset/config.json', test_crop, sz_embedding, epoch, 'ResNet', noisy_level)
     basedir = 'MislabelExp_Influential_data'
     os.makedirs(basedir, exist_ok=True)
 
@@ -47,9 +46,14 @@ if __name__ == '__main__':
             np.save("{}/{}_{}_harmful_testcls{}_SIF_theta{}_{}".format(basedir, IS.dataset_name, IS.loss_type, 0, num_thetas, noisy_level), harmful_indices)
             np.save("{}/{}_{}_influence_values_testcls{}_SIF_theta{}_{}".format(basedir, IS.dataset_name, IS.loss_type, 0, num_thetas, noisy_level), influence_values)
 
+        # training_loss = calc_loss_train(IS._load_random_model(seed=seed), IS.dl_tr, IS.criterion, None)
+        training_loss = calc_loss_train(IS.model, IS.dl_tr, IS.criterion, None)
+        # print('average loss for helpful {}'.format(np.mean(training_loss[helpful_indices])))
+        # print('average loss for harmful {}'.format(np.mean(training_loss[harmful_indices])))
+
         # mislabelled indices ground-truth
-        training_sample_by_influence = np.abs(influence_values).argsort()[::-1]  # fixme: descending
-        # training_sample_by_influence = influence_values.argsort()[::-1]  # fixme: harmful is positive
+        # training_sample_by_influence = np.abs(influence_values).argsort()[::-1]  # fixme: descending
+        training_sample_by_influence = influence_values.argsort()[::-1]  # fixme: harmful is positive
 
         gt_mislabelled_indices = IS.dl_tr.dataset.noisy_indices
         overlap = np.isin(training_sample_by_influence, gt_mislabelled_indices)
@@ -94,7 +98,7 @@ if __name__ == '__main__':
     '''======================================================================================================================================='''
 
     '''======================================== Original Influence function =========================================================================='''
-    IS = OrigIF(dataset_name, seed, loss_type, config_name, test_crop)
+    IS = OrigIF(dataset_name, seed, loss_type, config_name, 'dataset/config.json', test_crop, sz_embedding, epoch, 'ResNet', noisy_level)
     basedir = 'MislabelExp_Influential_data'
     os.makedirs(basedir, exist_ok=True)
 
@@ -118,7 +122,9 @@ if __name__ == '__main__':
         ihvp = inverse_hessian_product(IS.model, IS.criterion, v, IS.dl_tr, scale=500, damping=0.01)
 
         '''Step 3: Get influential indices, i.e. grad(test) H^-1 grad(train), save'''
-        influence_values = calc_influential_func_orig(IS=IS, train_features=train_features, inverse_hvp_prod=ihvp)
+        influence_values = calc_influential_func_orig(IS=IS,
+                                                      train_features=train_features,
+                                                      inverse_hvp_prod=ihvp)
         influence_values = np.asarray(influence_values).flatten()
         helpful_indices = np.where(influence_values > 0)[0]  # cache all helpful
         harmful_indices = np.where(influence_values < 0)[0]  # cache all harmful
@@ -128,8 +134,8 @@ if __name__ == '__main__':
         np.save("{}/{}_{}_influence_values_testcls{}_IF_{}".format(basedir, IS.dataset_name, IS.loss_type, 0, noisy_level), influence_values)
 
     # mislabelled indices ground-truth
-    training_sample_by_influence = np.abs(influence_values).argsort()[::-1]  # fixme: descending
-    # training_sample_by_influence = influence_values.argsort()  # fixme: harmful is negative
+    # training_sample_by_influence = np.abs(influence_values).argsort()[::-1]  # fixme: descending
+    training_sample_by_influence = influence_values.argsort()  # fixme: harmful is negative
 
     gt_mislabelled_indices = IS.dl_tr.dataset.noisy_indices
     overlap = np.isin(training_sample_by_influence, gt_mislabelled_indices)
@@ -146,9 +152,9 @@ if __name__ == '__main__':
     plt.plot(cum_overlap, label='random')
     plt.legend()
     plt.tight_layout()
-    plt.show()
-    # plt.savefig('./images/mislabel_{}_{}_alltheta_noisylevel{}_abs.pdf'.format(dataset_name, loss_type, noisy_level),
-    #             bbox_inches='tight')
+    # plt.show()
+    plt.savefig('./images/mislabel_{}_{}_alltheta_noisylevel{}.pdf'.format(dataset_name, loss_type, noisy_level),
+                bbox_inches='tight')
 
 
 
