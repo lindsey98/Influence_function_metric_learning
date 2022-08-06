@@ -590,35 +590,63 @@ def prepare_data_noisy(dataset_transform_config,
     print('Transformation: ', transform_key)
 
     if not test_crop:
-
-        dl_tr_noshuffle = torch.utils.data.DataLoader(
-            dataset=dataset.load_noisy(
-                name=data_name,
-                root=dataset_config['dataset'][data_name]['root'],
-                source=dataset_config['dataset'][data_name]['source'],
-                classes=dataset_config['dataset'][data_name]['classes']['trainval'],
-                transform=transforms.Compose([
-                    RGBAToRGB(),
-                    RGBToBGR() if dataset_config[transform_key]['rgb_to_bgr'] else Identity(),
-                    # transforms.Resize(dataset_config[transform_key]["sz_crop"]),
-                    transforms.Resize(
-                        (dataset_config[transform_key]["sz_crop"], dataset_config[transform_key]["sz_crop"])),
-                    # fixme: bninceptionnet requires a square shape input, otherwise throw an error
-                    transforms.ToTensor(),
-                    ScaleIntensities(*dataset_config[transform_key]["intensity_scale"]),
-                    transforms.Normalize(
-                        mean=dataset_config[transform_key]["mean"],
-                        std=dataset_config[transform_key]["std"],
-                    )
-                ]),
+        if not 'inshop' in data_name:
+            dl_tr_noshuffle = torch.utils.data.DataLoader(
+                dataset=dataset.load_noisy(
+                    name=data_name,
+                    root=dataset_config['dataset'][data_name]['root'],
+                    source=dataset_config['dataset'][data_name]['source'],
+                    classes=dataset_config['dataset'][data_name]['classes']['trainval'],
+                    transform=transforms.Compose([
+                        RGBAToRGB(),
+                        RGBToBGR() if dataset_config[transform_key]['rgb_to_bgr'] else Identity(),
+                        # transforms.Resize(dataset_config[transform_key]["sz_crop"]),
+                        transforms.Resize(
+                            (dataset_config[transform_key]["sz_crop"], dataset_config[transform_key]["sz_crop"])),
+                        # fixme: bninceptionnet requires a square shape input, otherwise throw an error
+                        transforms.ToTensor(),
+                        ScaleIntensities(*dataset_config[transform_key]["intensity_scale"]),
+                        transforms.Normalize(
+                            mean=dataset_config[transform_key]["mean"],
+                            std=dataset_config[transform_key]["std"],
+                        )
+                    ]),
                 seed=seed,
                 mislabel_percentage=mislabel_percentage,
             ),
             num_workers=0,
             shuffle=False,
             batch_size=batch_size,
-        )
-
+            )
+        else:
+            dl_tr_noshuffle = torch.utils.data.DataLoader(
+                dataset=dataset.load_noisy_inshop(
+                    name=data_name,
+                    root=dataset_config['dataset'][data_name]['root'],
+                    source=dataset_config['dataset'][data_name]['source'],
+                    classes=dataset_config['dataset'][data_name]['classes']['trainval'],
+                    transform=transforms.Compose([
+                        RGBAToRGB(),
+                        RGBToBGR() if dataset_config[transform_key]['rgb_to_bgr'] else Identity(),
+                        # transforms.Resize(dataset_config[transform_key]["sz_crop"]),
+                        transforms.Resize(
+                            (dataset_config[transform_key]["sz_crop"], dataset_config[transform_key]["sz_crop"])),
+                        # fixme: bninceptionnet requires a square shape input, otherwise throw an error
+                        transforms.ToTensor(),
+                        ScaleIntensities(*dataset_config[transform_key]["intensity_scale"]),
+                        transforms.Normalize(
+                            mean=dataset_config[transform_key]["mean"],
+                            std=dataset_config[transform_key]["std"],
+                        )
+                    ]),
+                seed=seed,
+                dset_type='train',
+                mislabel_percentage=mislabel_percentage,
+            ),
+            num_workers=0,
+            shuffle=False,
+            batch_size=batch_size,
+            )
 
         if not 'inshop' in data_name:
             # use this dataloader if you want to visualize (without resizing and cropping)

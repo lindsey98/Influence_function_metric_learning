@@ -66,10 +66,10 @@ class BaseInfluenceFunction():
 
         else:
             self.dl_tr, self.dl_ev = prepare_data(dataset_transform_config=data_transform_config,
-                                                  data_name=dataset_name,
-                                                  config_name=self.config_name,
-                                                  batch_size=1,
-                                                  test_crop=test_crop)
+                                                      data_name=dataset_name,
+                                                      config_name=self.config_name,
+                                                      batch_size=1,
+                                                      test_crop=test_crop)
 
         self.dl_tr_clean, _ = prepare_data(dataset_transform_config=data_transform_config,
                                            data_name=dataset_name.split('_noisy')[0],
@@ -492,7 +492,8 @@ class EIF(BaseInfluenceFunction):
                 deltaD, deltaL, theta_new = self.get_theta_forclasses(all_features, wrong_cls, confused_classes,
                                                                       steps=steps,
                                                                       descent=False)
-                deltaL_deltaD.append(deltaL / (deltaD + 1e-8))
+                # deltaL_deltaD.append(deltaL / (deltaD + 1e-8))
+                deltaL_deltaD.append(deltaL * deltaD)
                 theta_list = torch.cat([theta_list, theta_new.detach().cpu().unsqueeze(0)], dim=0)
 
             elif kk == 1:
@@ -500,7 +501,8 @@ class EIF(BaseInfluenceFunction):
                 deltaD, deltaL, theta_new = self.get_theta_forclasses(all_features, wrong_cls, confused_classes,
                                                                       steps=steps,
                                                                       descent=True)
-                deltaL_deltaD.append(deltaL / (deltaD + 1e-8))
+                # deltaL_deltaD.append(deltaL / (deltaD + 1e-8))
+                deltaL_deltaD.append(deltaL * deltaD)
                 theta_list = torch.cat([theta_list, theta_new.detach().cpu().unsqueeze(0)], dim=0)
 
             else:
@@ -512,7 +514,8 @@ class EIF(BaseInfluenceFunction):
                                                                                             theta_orig=theta_orig,
                                                                                             inter_dist_orig=inter_dist_orig
                                                                                             )
-                deltaL_deltaD.append(deltaL / (deltaD + 1e-8))
+                # deltaL_deltaD.append(deltaL / (deltaD + 1e-8))
+                deltaL_deltaD.append(deltaL * deltaD)
                 theta_list = torch.cat([theta_list, theta_new.detach().cpu().unsqueeze(0)], dim=0)
                 break
 

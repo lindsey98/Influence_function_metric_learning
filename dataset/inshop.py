@@ -186,14 +186,14 @@ class InShop(BaseDatasetMod):
                     self.ys.append(y)
                     self.I.append(ii)
 
-class InShopNoisy(BaseDatasetModNoisy):
+class InShopNoisy(BaseDatasetMod):
     """
     For the In-Shop Clothes Retrieval dataset, we use the predefined
     25, 882 training images of 3,997 classes for training. The test
     set is partitioned into a query set (14,218 images of 3,985 classes)
     and a gallery set (12, 612 images of 3, 985 classes)
     """
-    def __init__(self, root, source, classes, transform, dset_type='train', seed=0, mislabel_percentage=0.1):
+    def __init__(self, root, source, classes, transform, dset_type='train', seed=0, mislabel_percentage=0.01):
         BaseDatasetMod.__init__(self, root, source, classes, transform)
 
         with open(
