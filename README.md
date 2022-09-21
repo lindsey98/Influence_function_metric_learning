@@ -53,7 +53,7 @@ python train_noisydata.py --dataset [cub_noisy|cars_noisy|inshop_noisy] \
 --config [config/cub_SoftTriple.json|config/cars_SoftTriple.json|config/inshop_SoftTriple.json]
 ```
 
-- DML training experiment (Table 1): comparing <img src="https://render.githubusercontent.com/render/math?math=\Delta d(p)"> or <img src="https://render.githubusercontent.com/render/math?math=\Delta d(G_p)">
+- DML training experiment (Table 1): comparing <img src="https://render.githubusercontent.com/render/math?math=\triangle d(p)"> or <img src="https://render.githubusercontent.com/render/math?math=\triangle d(G_p)">
   
   &nbsp;&nbsp;&nbsp;See experiments/EIF_group_confusion.py, experiments/IF_group_confusion.py, experiments/EIF_pair_confusion.py, experiments/IF_pair_confusion.py
 
