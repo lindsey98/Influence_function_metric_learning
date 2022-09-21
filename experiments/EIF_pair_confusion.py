@@ -8,15 +8,15 @@ os.environ['CUDA_VISIBLE_DEVICES'] = "1, 0"
 if __name__ == '__main__':
 
     sz_embedding = 512; epoch = 40; test_crop = False; data_transform_config = 'dataset/config.json'; model_arch = 'ResNet'
-    # loss_type = 'ProxyNCA_prob_orig'; dataset_name = 'cub';  config_name = 'cub_ProxyNCA_prob_orig'; seed = 0
+    loss_type = 'ProxyNCA_prob_orig'; dataset_name = 'cub';  config_name = 'cub_ProxyNCA_prob_orig'; seed = 0
     # loss_type = 'ProxyNCA_prob_orig'; dataset_name = 'cars'; config_name = 'cars_ProxyNCA_prob_orig'; seed = 3
-    loss_type = 'ProxyNCA_prob_orig'; dataset_name = 'inshop'; config_name = 'inshop_ProxyNCA_prob_orig'; seed = 4
+    # loss_type = 'ProxyNCA_prob_orig'; dataset_name = 'inshop'; config_name = 'inshop_ProxyNCA_prob_orig'; seed = 4
 
     # loss_type = 'SoftTriple'; dataset_name = 'cub'; config_name = 'cub_SoftTriple'; seed = 3
     # loss_type = 'SoftTriple'; dataset_name = 'cars'; config_name = 'cars_SoftTriple'; seed = 4
     # loss_type = 'SoftTriple'; dataset_name = 'inshop'; config_name = 'inshop_SoftTriple'; seed = 3
 
-    IS = EIF(dataset_name, seed, loss_type, config_name, data_transform_config, test_crop, sz_embedding, epoch, model_arch)
+    IS = EIF(dataset_name, seed, loss_type, config_name, data_transform_config, test_crop, sz_embedding, epoch, model_arch, 0.1)
 
     '''Analyze confusing features for all confusion classes'''
     '''Step 1: Get all wrong pairs'''
@@ -30,27 +30,25 @@ if __name__ == '__main__':
     base_dir = 'Confuse_pair_influential_data/{}'.format(IS.dataset_name)
     os.makedirs(base_dir, exist_ok=True)
 
-    '''Step 2: Save influential samples indices for 50 pairs'''
-    # all_features = IS.get_test_features()
-    # for kk in range(min(len(wrong_indices), 100)):
-    #     wrong_ind = wrong_indices[kk]
-    #     confuse_ind = confuse_indices[kk]
-    #     if os.path.exists('./{}/{}_helpful_indices_{}_{}.npy'.format(base_dir, loss_type, wrong_ind, confuse_ind)):
-    #         print('skip')
-    #         continue
-    #     mean_deltaL_deltaD = IS.MC_estimate_forpair([wrong_ind, confuse_ind], num_thetas=1, steps=50)
-    #
-    #     influence_values = np.asarray(mean_deltaL_deltaD)
-    #     helpful_indices = np.where(influence_values < 0)[0]
-    #     harmful_indices = np.where(influence_values > 0)[0]
-    #     np.save('./{}/{}_helpful_indices_{}_{}'.format(base_dir, loss_type, wrong_ind, confuse_ind), helpful_indices)
-    #     np.save('./{}/{}_harmful_indices_{}_{}'.format(base_dir, loss_type, wrong_ind, confuse_ind), harmful_indices)
-    # exit()
+    '''Step 2: Save influential samples indices for 100 pairs'''
+    all_features = IS.get_test_features()
+    for kk in range(min(len(wrong_indices), 100)):
+        wrong_ind = wrong_indices[kk]
+        confuse_ind = confuse_indices[kk]
+        if os.path.exists('./{}/{}_helpful_indices_{}_{}.npy'.format(base_dir, loss_type, wrong_ind, confuse_ind)):
+            print('skip')
+            continue
+        mean_deltaL_deltaD = IS.MC_estimate_forpair([wrong_ind, confuse_ind], num_thetas=1, steps=50)
+
+        influence_values = np.asarray(mean_deltaL_deltaD)
+        helpful_indices = np.where(influence_values < 0)[0]
+        harmful_indices = np.where(influence_values > 0)[0]
+        np.save('./{}/{}_helpful_indices_{}_{}'.format(base_dir, loss_type, wrong_ind, confuse_ind), helpful_indices)
+        np.save('./{}/{}_harmful_indices_{}_{}'.format(base_dir, loss_type, wrong_ind, confuse_ind), harmful_indices)
 
     '''Step 3: Train the model for every pair'''
     # Run in shell
-    # for kk in tqdm(range(min(len(wrong_indices), 50))):
-    for kk in tqdm(range(50, min(len(wrong_indices), 100))):
+    for kk in tqdm(range(min(len(wrong_indices), 100))):
         wrong_ind = wrong_indices[kk]
         confuse_ind = confuse_indices[kk]
         torch.cuda.empty_cache()
@@ -86,8 +84,7 @@ if __name__ == '__main__':
     result_log_file = 'Confuse_pair_influential_data/{}_{}_pairs.txt'.format(IS.dataset_name, loss_type)
     IS.model = IS._load_model()  # reload the original weights
     new_features = IS.get_test_features()
-    # for kk in range(min(len(wrong_indices), 50)):
-    for kk in tqdm(range(50, min(len(wrong_indices), 100))):
+    for kk in range(min(len(wrong_indices), 100)):
         wrong_ind = wrong_indices[kk]
         confuse_ind = confuse_indices[kk]
         # Skip written models

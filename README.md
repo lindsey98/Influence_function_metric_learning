@@ -14,6 +14,8 @@ pip install -r requirements.txt
 
 [In-shop Clothes Retrieval](https://mmlab.ie.cuhk.edu.hk/projects/DeepFashion/InShopRetrieval.html)\[3\]
 
+Put them under mnt/datasets/
+
 ## Training details
 - We follow the train-test split provided by the original datasets
 - We use the same hyperparameters specified in [Proxy-NCA++](https://github.com/euwern/proxynca_pp), except for In-Shop we reduce the batch size to 32 due to the limit of our GPU resources.
@@ -33,6 +35,7 @@ python train.py --dataset [cub|cars|inshop] \
 --seed [0|1|2|3|4] \
 --config [config/cub_SoftTriple.json|config/cars_SoftTriple.json|config/inshop_SoftTriple.json]
 ```
+
 - Training the models with mislabelled data
   - Training the DML models with Proxy-NCA++ loss or with SoftTriple loss
 ```
@@ -50,19 +53,7 @@ python train_noisydata.py --dataset [cub_noisy|cars_noisy|inshop_noisy] \
 --config [config/cub_SoftTriple.json|config/cars_SoftTriple.json|config/inshop_SoftTriple.json]
 ```
 
-- Implementation of EIF and IF
-
-  &nbsp;&nbsp;&nbsp;See Influence_function/
-
-- Plot the figure for the generalization errors
-
-  &nbsp;&nbsp;&nbsp;See experiments/intro_fig.py
-
-- Runtime evaluation
-
-  &nbsp;&nbsp;&nbsp;See experiments/runtime_evaluation.py
-
-- Table 1: comparing <img src="https://render.githubusercontent.com/render/math?math=\triangle d(p)"> or <img src="https://render.githubusercontent.com/render/math?math=\triangle d(G_p)">
+- DML training experiment (Table 1): comparing <img src="https://render.githubusercontent.com/render/math?math=\Delta d(p)"> or <img src="https://render.githubusercontent.com/render/math?math=\Delta d(G_p)">
   
   &nbsp;&nbsp;&nbsp;See experiments/EIF_group_confusion.py, experiments/IF_group_confusion.py, experiments/EIF_pair_confusion.py, experiments/IF_pair_confusion.py
 
@@ -70,9 +61,12 @@ python train_noisydata.py --dataset [cub_noisy|cars_noisy|inshop_noisy] \
 
   &nbsp;&nbsp;&nbsp;See experiments/EIFvsIF_mislabel_evaluation.py
 
-- Sample relabelling recommendation evaluation
+- Field study 
 
   &nbsp;&nbsp;&nbsp;See experiments/sample_recommendation_evaluation.py
+
+- Implementation of EIF
+  &nbsp;&nbsp;&nbsp; See Influence_function/influence_function.py
 
 ## Results
 - All trained models: https://drive.google.com/drive/folders/1yKR8BWPxM5MtUwjHzU7k-Mbzse73Ij_t?usp=sharing

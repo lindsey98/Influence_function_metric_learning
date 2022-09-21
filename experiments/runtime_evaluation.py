@@ -12,7 +12,7 @@ if __name__ == '__main__':
     # dataset_name = 'cars'; config_name = 'cars'; seed = 3
     dataset_name = 'inshop'; config_name = 'inshop'; seed = 4
 
-    IS = EIF(dataset_name, seed, loss_type, config_name, test_crop)
+    IS = EIF(dataset_name, seed, loss_type, config_name,'dataset/config.json', test_crop, sz_embedding, epoch, 'ResNet', 0.1)
     # pairs = [[97, 4885],
     #         [109, 4837],
     #         [122, 402],

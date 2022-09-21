@@ -21,7 +21,7 @@ if __name__ == '__main__':
     # dataset_name = 'cars'; config_name = 'cars_ProxyNCA_prob_orig'; seed = 3
     dataset_name = 'inshop'; config_name = 'inshop_ProxyNCA_prob_orig'; seed = 4
 
-    IS = EIF(dataset_name, seed, loss_type, config_name, 'dataset/config.json', test_crop, sz_embedding, epoch, 'ResNet')
+    IS = EIF(dataset_name, seed, loss_type, config_name, 'dataset/config.json', test_crop, sz_embedding, epoch, 'ResNet', 0.1)
 
     relabel_dict = []
     unique_labels, unique_counts = torch.unique(IS.train_label, return_counts=True)

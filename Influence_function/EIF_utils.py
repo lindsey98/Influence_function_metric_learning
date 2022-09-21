@@ -6,6 +6,20 @@ import numpy as np
 import torch.nn.functional as F
 import math
 
+@torch.no_grad()
+def calc_loss_train_indices(model, dataset, criterion, indices):
+    '''
+        Calculate all training losses
+    '''
+    l = []
+    model.eval()
+    for ind in indices:
+        x, t, _= dataset[ind]
+        x, t = torch.unsqueeze(x, 0).cuda(), torch.tensor([t]).cuda()
+        m = model(x)
+        l_this = criterion(m, None, t)
+        l.append(l_this.detach().cpu().item())
+    return l
 
 @torch.no_grad()
 def calc_loss_train(model, dl, criterion, indices=None):

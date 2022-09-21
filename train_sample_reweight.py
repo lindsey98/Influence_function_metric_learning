@@ -138,11 +138,11 @@ if __name__ == '__main__':
                                                                args.loss_type,
                                                                int(args.helpful_weight), int(args.harmful_weight))
 
-        if os.path.exists(train_results_fn):
-            with open(train_results_fn, 'r') as f:
-                train_results = json.load(f)
-            args.lr_steps = train_results['lr_steps']
-            best_epoch = train_results['best_epoch']
+        # if os.path.exists(train_results_fn):
+        #     with open(train_results_fn, 'r') as f:
+        #         train_results = json.load(f)
+        #     args.lr_steps = train_results['lr_steps']
+        #     best_epoch = train_results['best_epoch']
 
     train_transform = dataset.utils.make_transform(
                 **dataset_config[transform_key])

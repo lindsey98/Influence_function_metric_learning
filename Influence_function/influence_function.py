@@ -481,7 +481,7 @@ class EIF(BaseInfluenceFunction):
 
         wrong_cls = class_pairs[0][0]  # FIXME: look at pairs associated with top-1 wrong class
         confused_classes = [x[1] for x in class_pairs]
-        inter_dist_orig, _ = grad_confusion(self.model, all_features, wrong_cls, confused_classes,
+        inter_dist_orig, v_init = grad_confusion(self.model, all_features, wrong_cls, confused_classes,
                                             self.testing_nn_label, self.testing_label,
                                             self.testing_nn_indices)  # original D
 
@@ -523,6 +523,45 @@ class EIF(BaseInfluenceFunction):
         self.model.module[-1].weight.data = theta_orig
         mean_deltaL_deltaD = np.mean(np.stack(deltaL_deltaD), axis=0)
         return mean_deltaL_deltaD
+
+    def MC_estimate_forclasses_invert(self, class_pairs, train_features, lr=0.001):
+        '''
+            Estimate deltaL/deltaD for group of confusion pairs
+            :param class_pairs: wrong_cls and confusion_classes
+            :param steps: # newton steps
+            :param num_thetas: # theta used for estimation
+            :returns avg(deltaL/deltaD)
+        '''
+        theta_orig = self.model.module[-1].weight.data  # original theta
+        torch.cuda.empty_cache()
+        all_features = self.get_test_features()  # test features (N, 2048)
+        deltaL_deltaD = []
+
+        wrong_cls = class_pairs[0][0]  # FIXME: look at pairs associated with top-1 wrong class
+        confused_classes = [x[1] for x in class_pairs]
+        torch.cuda.empty_cache()
+
+        inter_dist_orig, _ = grad_confusion(self.model, all_features, wrong_cls, confused_classes,
+                                             self.testing_nn_label, self.testing_label,
+                                             self.testing_nn_indices)  # original D
+        gradalltrain = grad_loss(self.model, self.criterion, train_features, self.train_label)
+
+        for i in tqdm(range(len(train_features))):
+            L_orig = calc_loss_train_indices(self.model, self.dl_tr.dataset, self.criterion, [i])[0]
+            grad1train = gradalltrain[i][0]
+            theta_new = theta_orig - lr * grad1train.to(theta_orig.device)  # gradient descent
+
+            self.model.module[-1].weight.data = theta_new # update theta
+            inter_dist_curr, _ = grad_confusion(self.model, all_features, wrong_cls, confused_classes,
+                                                self.testing_nn_label, self.testing_label,
+                                                self.testing_nn_indices)  # current D
+            L_new = calc_loss_train_indices(self.model, self.dl_tr.dataset, self.criterion, [i])[0]
+
+            self.model.module[-1].weight.data = theta_orig
+            deltaD, deltaL = inter_dist_curr - inter_dist_orig, L_new - L_orig
+            deltaL_deltaD.append(deltaL * deltaD)
+
+        return deltaL_deltaD
 
     def MC_estimate_forpair(self, pair, steps, num_thetas=2):
         '''

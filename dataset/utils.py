@@ -600,9 +600,9 @@ def prepare_data_noisy(dataset_transform_config,
                     transform=transforms.Compose([
                         RGBAToRGB(),
                         RGBToBGR() if dataset_config[transform_key]['rgb_to_bgr'] else Identity(),
-                        # transforms.Resize(dataset_config[transform_key]["sz_crop"]),
-                        transforms.Resize(
-                            (dataset_config[transform_key]["sz_crop"], dataset_config[transform_key]["sz_crop"])),
+                        transforms.Resize(dataset_config[transform_key]["sz_crop"]),
+                        # transforms.Resize(
+                        #     (dataset_config[transform_key]["sz_crop"], dataset_config[transform_key]["sz_crop"])),
                         # fixme: bninceptionnet requires a square shape input, otherwise throw an error
                         transforms.ToTensor(),
                         ScaleIntensities(*dataset_config[transform_key]["intensity_scale"]),
@@ -628,9 +628,9 @@ def prepare_data_noisy(dataset_transform_config,
                     transform=transforms.Compose([
                         RGBAToRGB(),
                         RGBToBGR() if dataset_config[transform_key]['rgb_to_bgr'] else Identity(),
-                        # transforms.Resize(dataset_config[transform_key]["sz_crop"]),
-                        transforms.Resize(
-                            (dataset_config[transform_key]["sz_crop"], dataset_config[transform_key]["sz_crop"])),
+                        transforms.Resize(dataset_config[transform_key]["sz_crop"]),
+                        # transforms.Resize(
+                        #     (dataset_config[transform_key]["sz_crop"], dataset_config[transform_key]["sz_crop"])),
                         # fixme: bninceptionnet requires a square shape input, otherwise throw an error
                         transforms.ToTensor(),
                         ScaleIntensities(*dataset_config[transform_key]["intensity_scale"]),
@@ -659,8 +659,8 @@ def prepare_data_noisy(dataset_transform_config,
                     transform=transforms.Compose([
                         RGBAToRGB(),
                         RGBToBGR() if dataset_config[transform_key]['rgb_to_bgr'] else Identity(),
-                        # transforms.Resize(dataset_config[transform_key]["sz_crop"]),
-                        transforms.Resize((dataset_config[transform_key]["sz_crop"], dataset_config[transform_key]["sz_crop"])),
+                        transforms.Resize(dataset_config[transform_key]["sz_crop"]),
+                        # transforms.Resize((dataset_config[transform_key]["sz_crop"], dataset_config[transform_key]["sz_crop"])),
                         transforms.ToTensor(),
                         ScaleIntensities(*dataset_config[transform_key]["intensity_scale"]),
                         transforms.Normalize(
@@ -683,8 +683,8 @@ def prepare_data_noisy(dataset_transform_config,
                     transform=transforms.Compose([
                         RGBAToRGB(),
                         RGBToBGR() if dataset_config[transform_key]['rgb_to_bgr'] else Identity(),
-                        # transforms.Resize(dataset_config[transform_key]["sz_crop"]),
-                        transforms.Resize((dataset_config[transform_key]["sz_crop"], dataset_config[transform_key]["sz_crop"])),
+                        transforms.Resize(dataset_config[transform_key]["sz_crop"]),
+                        # transforms.Resize((dataset_config[transform_key]["sz_crop"], dataset_config[transform_key]["sz_crop"])),
                         transforms.ToTensor(),
                         ScaleIntensities(*dataset_config[transform_key]["intensity_scale"]),
                         transforms.Normalize(
