@@ -86,7 +86,7 @@ python train_noisydata.py --dataset [cub_noisy|cars_noisy|inshop_noisy] \
   &nbsp;&nbsp;&nbsp; See Influence_function/influence_function.py
 
 ## Results
-- All trained models: https://drive.google.com/drive/folders/1yKR8BWPxM5MtUwjHzU7k-Mbzse73Ij_t?usp=sharing
+- All trained models: https://drive.google.com/drive/folders/1uzy3J78iwKZMCx_k5yESDLbcLl9RADDb?usp=sharing
 - For the detailed statistics of Table 1, please see https://docs.google.com/spreadsheets/d/1f4OXVLO2Mu2CHrBVm72a2ztTHx5nNG92dczTNNw7io4/edit?usp=sharing
 
 ## References
