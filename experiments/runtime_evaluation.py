@@ -34,7 +34,7 @@ if __name__ == '__main__':
         print(pair)
         '''============ Our Empirical Influence function =================='''
         start_time = time.time()
-        mean_deltaD_deltaL = IS.MC_estimate_forpair(pair, steps=1, num_thetas=1)
+        mean_deltaD_deltaL = IS.EIF_for_pairs_confusion(pair, steps=1, num_thetas=1)
         influence_values_EIF = np.asarray(mean_deltaD_deltaL)
         print('EIF runtime:', time.time() - start_time)
 

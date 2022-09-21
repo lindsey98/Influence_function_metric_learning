@@ -38,7 +38,7 @@ if __name__ == '__main__':
         if os.path.exists('./{}/{}_helpful_indices_{}_{}.npy'.format(base_dir, loss_type, wrong_ind, confuse_ind)):
             print('skip')
             continue
-        mean_deltaL_deltaD = IS.MC_estimate_forpair([wrong_ind, confuse_ind], num_thetas=1, steps=50)
+        mean_deltaL_deltaD = IS.EIF_for_pairs_confusion([wrong_ind, confuse_ind], num_thetas=1, steps=50)
 
         influence_values = np.asarray(mean_deltaL_deltaD)
         helpful_indices = np.where(influence_values < 0)[0]

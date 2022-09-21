@@ -42,8 +42,8 @@ if __name__ == '__main__':
             print('skip')
             continue
         torch.cuda.empty_cache()
-        influence_values = IS.influence_func_forpairs(train_features=train_features, test_features=test_features,
-                                                      wrong_indices=[wrong_ind], confuse_indices=[confuse_ind])
+        influence_values = IS.IF_for_pairs_confusion(train_features=train_features, test_features=test_features,
+                                                     wrong_indices=[wrong_ind], confuse_indices=[confuse_ind])
 
         helpful_indices = np.where(influence_values > 0)[0]  # cache all helpful
         harmful_indices = np.where(influence_values < 0)[0]  # cache all harmful

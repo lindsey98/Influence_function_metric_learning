@@ -41,8 +41,8 @@ if __name__ == '__main__':
         except FileNotFoundError:
             train_features = IS_IF.get_train_features()
             test_features = IS_IF.get_test_features()  # (N, 2048)
-            influence_values_IF = IS_IF.influence_func_forpairs(train_features=train_features, test_features=test_features,
-                                                                wrong_indices=[wrong_ind], confuse_indices=[confuse_ind])
+            influence_values_IF = IS_IF.IF_for_pairs_confusion(train_features=train_features, test_features=test_features,
+                                                               wrong_indices=[wrong_ind], confuse_indices=[confuse_ind])
             influence_values_IF = np.asarray(influence_values_IF).flatten()
             np.save('./{}/{}_influence_values_{}_{}'.format(
                     'Confuse_pair_influential_data_baselines/{}'.format(IS_IF.dataset_name),
@@ -57,7 +57,7 @@ if __name__ == '__main__':
                     'Confuse_pair_influential_data/{}'.format(IS_EIF.dataset_name),
                     IS_EIF.loss_type, wrong_ind, confuse_ind))
         except FileNotFoundError:
-            mean_deltaL_deltaD_EIF = IS_EIF.MC_estimate_forpair([wrong_ind, confuse_ind], num_thetas=1, steps=50)
+            mean_deltaL_deltaD_EIF = IS_EIF.EIF_for_pairs_confusion([wrong_ind, confuse_ind], num_thetas=1, steps=50)
             influence_values_EIF = np.asarray(mean_deltaL_deltaD_EIF)
             np.save('./{}/{}_influence_values_{}_{}'.format(
                     'Confuse_pair_influential_data/{}'.format(IS_EIF.dataset_name),

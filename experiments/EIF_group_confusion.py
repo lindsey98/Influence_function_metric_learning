@@ -25,7 +25,7 @@ if __name__ == '__main__':
             print('skip')
             continue
         '''Step 1: Get deltaD_deltaL'''
-        mean_deltaL_deltaD = IS.MC_estimate_forclasses(confusion_class_pairs[pair_idx], num_thetas=1, steps=50)
+        mean_deltaL_deltaD = IS.EIF_for_groups_confusion(confusion_class_pairs[pair_idx], num_thetas=1, steps=50)
 
         '''Step 2: Calc influence functions'''
         influence_values = np.asarray(mean_deltaL_deltaD)
