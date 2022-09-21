@@ -1,5 +1,5 @@
 
-Debugging and Explaining Metric Learning Approach: An Influence Function Perspective
+Debugging and Explaining Metric Learning Approach: An Influence Function Perspective (NeurIPS 2022)
 ==============================================================================
 
 ## Introduction
@@ -88,6 +88,8 @@ python train_noisydata.py --dataset [cub_noisy|cars_noisy|inshop_noisy] \
 ## Results
 - All trained models: https://drive.google.com/drive/folders/1uzy3J78iwKZMCx_k5yESDLbcLl9RADDb?usp=sharing
 - For the detailed statistics of Table 1, please see https://docs.google.com/spreadsheets/d/1f4OXVLO2Mu2CHrBVm72a2ztTHx5nNG92dczTNNw7io4/edit?usp=sharing
+
+## Please consider cite our paper
 
 ## References
 [1] Wah, C., Branson, S., Welinder, P., Perona, P., & Belongie, S. (2011). The caltech-ucsd birds-200-2011 dataset.
