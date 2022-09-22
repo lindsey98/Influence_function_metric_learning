@@ -6,13 +6,13 @@ import os
 import torch
 import numpy as np
 import matplotlib
-matplotlib.use('agg', force=True)
 import time
 import argparse
 import json
 from tqdm import tqdm
 from torch.utils.data import Dataset, DataLoader
 import random
+matplotlib.use('agg', force=True)
 
 os.environ["CUDA_VISIBLE_DEVICES"]="1, 0"
 

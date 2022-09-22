@@ -2,7 +2,9 @@ scikit-learn
 matplotlib
 scipy
 tqdm
-faiss-cpu
 h5py
 torchcam
 rembg
+numpy
+argparse
+Pillow

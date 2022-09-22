@@ -3,22 +3,22 @@ Debugging and Explaining Metric Learning Approach: An Influence Function Perspec
 ==============================================================================
 
 ## Introduction
-Deep metric learning (DML) learns a generalizable embedding space of a dataset,
-where semantically similar samples are mapped closer.
+Deep metric learning (DML) learns a generalizable embedding space of a dataset, where semantically similar samples are mapped closer.
 Recently, the record-breaking methodologies have been generally evolving from pairwise-based approaches to proxy-based approaches.
 However, many recent works begin to achieve only marginal improvements on the classical datasets.
 Thus, the explanation approaches of DML are in need for understanding
-**why the trained model can confuse the dissimilar samples and cannot recognize the similar samples**.
+**why the trained model can confuse the dissimilar samples?**.
 
-To answer the above question, we conduct extensive experiments by running 2 comparable state-of-the-art DML approaches.
-The observation leads us to design an influence function based explanation framework to investigate the existing datasets, consisting of:
+The question motivates us to design an influence function based explanation framework to investigate the existing datasets, consisting of:
 - [x] Scalable training-sample attribution:
     - We propose empirical influence function to identify what training samples contribute to the generalization errors, and quantify how much contribution they make to the errors.
 - [x] Dataset relabelling recommendation:
     - We further aim to identify the potentially ``buggy'' training samples with mistaken labels and generate their relabelling recommendation.
 
 ## Requirements
-Install torch, torchvision compatible with your CUDA, see here: https://pytorch.org/get-started/previous-versions/
+- Step 1: Install torch, torchvision compatible with your CUDA, see here: [https://pytorch.org/get-started/previous-versions/](https://pytorch.org/get-started/previous-versions/)
+- Step 2: Install faiss compatible with your CUDA, see here: [https://github.com/facebookresearch/faiss/blob/main/INSTALL.md](https://github.com/facebookresearch/faiss/blob/main/INSTALL.md)
+- Step 3: 
 ```
 pip install -r requirements.txt
 ```
@@ -37,6 +37,22 @@ Put them under mnt/datasets/
 - We use the same hyperparameters specified in [Proxy-NCA++](https://github.com/euwern/proxynca_pp), except for In-Shop we reduce the batch size to 32 due to the limit of our GPU resources.
 
 ## Project Structure
+```
+|__ config/: training config json files
+|__ dataset/: define dataloader
+|__ mnt/datasets/
+   |__ CARS_196/
+   |__ CUB200_2011/
+   |__ inshop/
+|__ evaluation/: evaluation script for recall@k, NMI etc.
+|__ experiments/: scripts for experiments
+|__ Influence_function/: implementation of IF and EIF
+|__ train.py: normal training script
+|__ train_noisy_data.py: noisy data trianing script
+|__ train_sample_reweight.py: re-weighted training script
+```
+
+## Instructions
 - Training the original models
   - Training the DML models with Proxy-NCA++ loss or with SoftTriple loss
 ```
@@ -80,10 +96,6 @@ python train_noisydata.py --dataset [cub_noisy|cars_noisy|inshop_noisy] \
 - Field study 
 
   &nbsp;&nbsp;&nbsp;See experiments/sample_recommendation_evaluation.py
-
-- Implementation of EIF
-
-  &nbsp;&nbsp;&nbsp; See Influence_function/influence_function.py
 
 ## Results
 - All trained models: https://drive.google.com/drive/folders/1uzy3J78iwKZMCx_k5yESDLbcLl9RADDb?usp=sharing

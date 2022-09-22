@@ -3,10 +3,6 @@ import torch
 from similarity import pairwise_distance
 import torch.nn.functional as F
 import sklearn.preprocessing
-import logging
-from scipy.optimize import linear_sum_assignment
-import utils
-from tqdm import tqdm
 
 def masked_softmax(A, dim, t=1.0):
     '''

@@ -1,15 +1,7 @@
-import faiss
-import numpy as np
-import torch
-import torchvision
 import loss
 from networks import Feat_resnet50_max_n, bninception
 from utils import get_wrong_indices
 import torch.nn as nn
-import os
-import matplotlib.pyplot as plt
-from torchvision.transforms.functional import normalize, resize, to_pil_image
-from torchvision.io.image import read_image
 from Influence_function.EIF_utils import *
 from Influence_function.IF_utils import *
 import pickle
