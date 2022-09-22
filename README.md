@@ -15,6 +15,8 @@ The question motivates us to design an influence function based explanation fram
 - [x] Dataset relabelling recommendation:
     - We further aim to identify the potentially ``buggy'' training samples with mistaken labels and generate their relabelling recommendation.
 
+Link to our [website](https://sites.google.com/view/empirical-influence-function/), [paper]()
+
 ## Requirements
 - Step 1: Install torch, torchvision compatible with your CUDA, see here: [https://pytorch.org/get-started/previous-versions/](https://pytorch.org/get-started/previous-versions/)
 - Step 2: Install faiss compatible with your CUDA, see here: [https://github.com/facebookresearch/faiss/blob/main/INSTALL.md](https://github.com/facebookresearch/faiss/blob/main/INSTALL.md)
