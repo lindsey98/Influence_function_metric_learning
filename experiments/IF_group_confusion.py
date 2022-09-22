@@ -15,9 +15,11 @@ if __name__ == '__main__':
     # loss_type = 'SoftTriple'; dataset_name = 'cars'; config_name = 'cars_SoftTriple'; seed = 4
     # loss_type = 'SoftTriple'; dataset_name = 'inshop'; config_name = 'inshop_SoftTriple'; seed = 3
 
-    IS = OrigIF(dataset_name, seed, loss_type, config_name, 'dataset/config.json', test_crop, sz_embedding, epoch, 'ResNet', 0.1)
+    IS = OrigIF(dataset_name=dataset_name, seed=seed, loss_type=loss_type,
+                config_name=config_name, data_transform_config='dataset/config.json', test_crop=test_crop,
+                sz_embedding=sz_embedding, epoch=epoch, model_arch='ResNet', mislabel_percentage=.1)
 
-    '''Step 1: Get grad(test)'''
+    '''Get IF helpful and harmful'''
     train_features = IS.get_train_features()
     test_features = IS.get_test_features()  # (N, 2048)
     confusion_class_pairs = IS.get_confusion_class_pairs(topk_cls=topk_cls)
@@ -27,15 +29,8 @@ if __name__ == '__main__':
         if os.path.exists("Influential_data_baselines/{}_{}_helpful_testcls{}.npy".format(IS.dataset_name, IS.loss_type, pair_idx)):
             print('skip')
             continue
-        inter_dist, v = grad_confusion(IS.model, test_features, wrong_cls, confused_classes,
-                                       IS.testing_nn_label, IS.testing_label, IS.testing_nn_indices)  # dD/dtheta
 
-        '''Step 2: Get H^-1 grad(test)'''
-        ihvp = inverse_hessian_product(IS.model, IS.criterion, v, IS.dl_tr, scale=500, damping=0.01)
-
-        '''Step 3: Get influential indices, i.e. grad(test) H^-1 grad(train), save'''
-        influence_values = calc_influential_func_orig(IS=IS, train_features=train_features, inverse_hvp_prod=ihvp)
-        influence_values = np.asarray(influence_values).flatten()
+        influence_values = IS.IF_for_groups_confusion(train_features, test_features, wrong_cls, confused_classes)
         training_sample_by_influence = influence_values.argsort()  # ascending
 
         helpful_indices = np.where(influence_values > 0)[0]  # cache all helpful

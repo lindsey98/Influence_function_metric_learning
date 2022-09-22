@@ -16,7 +16,9 @@ if __name__ == '__main__':
     # loss_type = 'SoftTriple'; dataset_name = 'cars'; config_name = 'cars_SoftTriple'; seed = 4
     # loss_type = 'SoftTriple'; dataset_name = 'inshop'; config_name = 'inshop_SoftTriple'; seed = 3
 
-    IS = EIF(dataset_name, seed, loss_type, config_name, data_transform_config, test_crop, sz_embedding, epoch, model_arch, 0.1)
+    IS = EIF(dataset_name=dataset_name, seed=seed, loss_type=loss_type, config_name=config_name,
+             data_transform_config=data_transform_config, test_crop=test_crop, sz_embedding=sz_embedding,
+             epoch=epoch, model_arch=model_arch, mislabel_percentage=0.1)
 
     '''Analyze confusing features for all confusion classes'''
     '''Step 1: Get all wrong pairs'''
@@ -80,7 +82,7 @@ if __name__ == '__main__':
                                                                    '{}_reweight_{}'.format(dataset_name, loss_type)))
 
 
-    '''Step 4: Sanity check: Whether the confusion pairs are pulled far apart, Whether the confusion samples is pulled closer to correct neighbor'''
+    '''Compute confusion distance before vs after'''
     result_log_file = 'Confuse_pair_influential_data/{}_{}_pairs.txt'.format(IS.dataset_name, loss_type)
     IS.model = IS._load_model()  # reload the original weights
     new_features = IS.get_test_features()

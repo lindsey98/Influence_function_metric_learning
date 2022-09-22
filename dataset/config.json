@@ -3,8 +3,8 @@
         "cub": {
             "classes": {
                 "train": "range(0, 50)",
-                "val": "range(50,100)",
-                "trainval":"range(0,100)",
+                "val": "range(50, 100)",
+                "trainval":"range(0, 100)",
                 "eval": "range(100, 200)"
             },
             "source": "str('mnt/datasets/CUB_200_2011')",
@@ -14,8 +14,8 @@
         "cub_noisy": {
             "classes": {
                 "train": "range(0, 50)",
-                "val": "range(50,100)",
-                "trainval":"range(0,100)",
+                "val": "range(50, 100)",
+                "trainval":"range(0, 100)",
                 "eval": "range(100, 200)"
             },
             "source": "str('mnt/datasets/CUB_200_2011')",
@@ -25,7 +25,7 @@
         "cars": {
             "classes": {
                 "train": "range(0, 49)",
-                "val": "range(49,98)",
+                "val": "range(49, 98)",
                 "trainval": "range(0, 98)",
                 "eval": "range(98, 196)"
             },
@@ -36,7 +36,7 @@
         "cars_noisy": {
             "classes": {
                 "train": "range(0, 49)",
-                "val": "range(49,98)",
+                "val": "range(49, 98)",
                 "trainval": "range(0, 98)",
                 "eval": "range(98, 196)"
             },

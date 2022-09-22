@@ -15,8 +15,8 @@ if __name__ == '__main__':
     # loss_type = 'ProxyNCA_prob_orig'; dataset_name = 'cars'; config_name = 'cars_ProxyNCA_prob_orig'; seed = 3
     loss_type = 'ProxyNCA_prob_orig'; dataset_name = 'inshop'; config_name = 'inshop_ProxyNCA_prob_orig'; seed = 4
 
-    IS_IF = OrigIF(dataset_name, seed, loss_type, config_name, 'dataset/config.json', test_crop, sz_embedding, epoch, 'ResNet')
-    IS_EIF = EIF(dataset_name, seed, loss_type, config_name, 'dataset/config.json', test_crop, sz_embedding, epoch, 'ResNet')
+    IS_IF = OrigIF(dataset_name, seed, loss_type, config_name, 'dataset/config.json', test_crop, sz_embedding, epoch, 'ResNet', 0.1)
+    IS_EIF = EIF(dataset_name, seed, loss_type, config_name, 'dataset/config.json', test_crop, sz_embedding, epoch, 'ResNet', 0.1)
 
     '''Given a confusion pair, find its top 5 harmful training identified by EIF and IF'''
     '''Step 1: Get all wrong pairs'''
@@ -26,7 +26,6 @@ if __name__ == '__main__':
     confuse_indices = test_nn_indices.flatten()[wrong_indices]
     print(len(confuse_indices))
     assert len(wrong_indices) == len(confuse_indices)
-
 
     for kk in range(50):
         wrong_ind = wrong_indices[kk]

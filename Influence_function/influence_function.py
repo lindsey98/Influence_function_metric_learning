@@ -291,7 +291,7 @@ class EIF(BaseInfluenceFunction):
     def __int__(self, dataset_name, seed, loss_type, config_name, data_transform_config='dataset/config.json',
                 test_crop=False, sz_embedding=512, epoch=40, model_arch='ResNet', mislabel_percentage=0.1):
 
-        super(EIF, self).__init__(dataset_name, seed, loss_type, config_name, data_transform_config=data_transform_config,
+        super(EIF, self).__init__(dataset_name=dataset_name, seed=seed, loss_type=loss_type, config_name=config_name, data_transform_config=data_transform_config,
                                   test_crop=test_crop, sz_embedding=sz_embedding, epoch=epoch, model_arch=model_arch,
                                   mislabel_percentage=mislabel_percentage)
 
@@ -493,20 +493,6 @@ class EIF(BaseInfluenceFunction):
                 deltaL_deltaD.append(deltaL * deltaD)
                 theta_list = torch.cat([theta_list, theta_new.detach().cpu().unsqueeze(0)], dim=0)
 
-            # else:
-            #     '''If more thetas are needed'''
-            #     deltaD, deltaL, theta_new = self.get_theta_orthogonalization_forclasses(prev_thetas=theta_list,
-            #                                                                                 all_features=all_features,
-            #                                                                                 wrong_cls=wrong_cls,
-            #                                                                                 confuse_classes=confused_classes,
-            #                                                                                 theta_orig=theta_orig,
-            #                                                                                 inter_dist_orig=inter_dist_orig
-            #                                                                                 )
-            #     # deltaL_deltaD.append(deltaL / (deltaD + 1e-8))
-            #     deltaL_deltaD.append(deltaL * deltaD)
-            #     theta_list = torch.cat([theta_list, theta_new.detach().cpu().unsqueeze(0)], dim=0)
-            #     break
-
         # Take average deltaD_deltaL
         self.model.module[-1].weight.data = theta_orig
         mean_deltaL_deltaD = np.mean(np.stack(deltaL_deltaD), axis=0)
@@ -545,19 +531,6 @@ class EIF(BaseInfluenceFunction):
                                                                            descent=True, steps=steps)
                 deltaL_deltaD.append(deltaL / (deltaD + 1e-8))
                 theta_list = torch.cat([theta_list, theta_new.detach().cpu().unsqueeze(0)], dim=0)
-            #
-            # else:
-            #     '''If more thetas are needed'''
-            #     deltaD, deltaL, theta_new = self.get_theta_orthogonalization_forpair(prev_thetas=theta_list,
-            #                                                                              all_features=all_features,
-            #                                                                              wrong_indices=[pairidx1],
-            #                                                                              confuse_indices=[pairidx2],
-            #                                                                              theta_orig=theta_orig,
-            #                                                                              inter_dist_orig=inter_dist_orig
-            #                                                                              )
-            #     theta_list = torch.cat([theta_list, theta_new.detach().cpu().unsqueeze(0)], dim=0)
-            #     deltaL_deltaD.append(deltaL / (deltaD + 1e-8))
-            #     break
 
         # Take average deltaD_deltaL
         self.model.module[-1].weight.data = theta_orig
@@ -569,7 +542,7 @@ class EIF(BaseInfluenceFunction):
 class OrigIF(BaseInfluenceFunction):
     def __int__(self, dataset_name, seed, loss_type, config_name, data_transform_config='dataset/config.json',
                 test_crop=False, sz_embedding=512, epoch=40, model_arch='ResNet', mislabel_percentage=0.1):
-        super(BaseInfluenceFunction, self).__init__(dataset_name, seed, loss_type, config_name, data_transform_config=data_transform_config,
+        super(BaseInfluenceFunction, self).__init__(dataset_name=dataset_name, seed=seed, loss_type=loss_type, config_name=config_name, data_transform_config=data_transform_config,
                                                     test_crop=test_crop, sz_embedding=sz_embedding, epoch=epoch, model_arch=model_arch,
                                                     mislabel_percentage=mislabel_percentage)
 
@@ -583,6 +556,15 @@ class OrigIF(BaseInfluenceFunction):
             :returns influence_values: training influences (N_train, )
         '''
         inter_dist_pair, v = grad_confusion_pair(self.model, test_features, wrong_indices, confuse_indices)
+        ihvp = inverse_hessian_product(self.model, self.criterion, v, self.dl_tr, scale=500, damping=0.01)
+        influence_values = calc_influential_func_orig(IS=self, train_features=train_features, inverse_hvp_prod=ihvp)
+        influence_values = np.asarray(influence_values).flatten()
+
+        return influence_values
+
+    def IF_for_groups_confusion(self, train_features, test_features, wrong_cls, confused_classes):
+        inter_dist, v = grad_confusion(self.model, test_features, wrong_cls, confused_classes,
+                                       self.testing_nn_label, self.testing_label, self.testing_nn_indices)  # dD/dtheta
         ihvp = inverse_hessian_product(self.model, self.criterion, v, self.dl_tr, scale=500, damping=0.01)
         influence_values = calc_influential_func_orig(IS=self, train_features=train_features, inverse_hvp_prod=ihvp)
         influence_values = np.asarray(influence_values).flatten()

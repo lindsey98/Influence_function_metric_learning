@@ -16,7 +16,9 @@ if __name__ == '__main__':
     # loss_type = 'SoftTriple'; dataset_name = 'cars'; config_name = 'cars_SoftTriple'; seed = 4
     # loss_type = 'SoftTriple'; dataset_name = 'inshop'; config_name = 'inshop_SoftTriple'; seed = 3
 
-    IS = EIF(dataset_name, seed, loss_type, config_name, data_transform_config, test_crop, sz_embedding, epoch, model_arch, 0.1)
+    IS = EIF(dataset_name=dataset_name, seed=seed, loss_type=loss_type,
+             config_name=config_name, data_transform_config=data_transform_config,
+             test_crop=test_crop, sz_embedding=sz_embedding, epoch=epoch, model_arch=model_arch, mislabel_percentage=0.1)
 
     '''Find influential training samples'''
     confusion_class_pairs = IS.get_confusion_class_pairs(topk_cls=topk_cls)

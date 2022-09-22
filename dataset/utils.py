@@ -115,6 +115,7 @@ class BatchSampler(torch.utils.data.sampler.Sampler):
                 self.dataset.resel_random_classes()
         if len(batch) > 0 and not self.drop_last:
             yield batch
+
     def __len__(self):
         if self.drop_last:
             return len(self.sampler) // self.batch_size
@@ -142,7 +143,6 @@ class RandomBatchSampler(torch.utils.data.sampler.Sampler):
         self.sel_class = sel_class
         self.random_classes = torch.randperm(len(self.class_list))[:self.sel_class]
 
-
     def __iter__(self):
         batch = []
         bc = 0
@@ -164,6 +164,7 @@ class RandomBatchSampler(torch.utils.data.sampler.Sampler):
                 self.random_classes = torch.randperm(len(self.class_list))[:self.sel_class]
         if len(batch) > 0 and not self.drop_last:
             yield batch
+
     def __len__(self):
         if self.drop_last:
             return len(self.labels) // self.batch_size
@@ -447,8 +448,8 @@ def prepare_data(dataset_transform_config='dataset/config.json',
                 transform=transforms.Compose([
                     RGBAToRGB(),
                     RGBToBGR() if dataset_config[transform_key]['rgb_to_bgr'] else Identity(),
-                    # transforms.Resize(dataset_config[transform_key]["sz_crop"]),
-                    transforms.Resize((dataset_config[transform_key]["sz_crop"], dataset_config[transform_key]["sz_crop"])), # fixme: bninceptionnet requires a square shape input, otherwise throw an error
+                    transforms.Resize(dataset_config[transform_key]["sz_crop"]),
+                    # transforms.Resize((dataset_config[transform_key]["sz_crop"], dataset_config[transform_key]["sz_crop"])), # fixme: bninceptionnet requires a square shape input, otherwise throw an error
                     transforms.ToTensor(),
                     ScaleIntensities(*dataset_config[transform_key]["intensity_scale"]),
                     transforms.Normalize(
@@ -473,8 +474,8 @@ def prepare_data(dataset_transform_config='dataset/config.json',
                     transform=transforms.Compose([
                         RGBAToRGB(),
                         RGBToBGR() if dataset_config[transform_key]['rgb_to_bgr'] else Identity(),
-                        # transforms.Resize(dataset_config[transform_key]["sz_crop"]),
-                        transforms.Resize((dataset_config[transform_key]["sz_crop"], dataset_config[transform_key]["sz_crop"])),
+                        transforms.Resize(dataset_config[transform_key]["sz_crop"]),
+                        # transforms.Resize((dataset_config[transform_key]["sz_crop"], dataset_config[transform_key]["sz_crop"])),
                         transforms.ToTensor(),
                         ScaleIntensities(*dataset_config[transform_key]["intensity_scale"]),
                         transforms.Normalize(
@@ -497,8 +498,8 @@ def prepare_data(dataset_transform_config='dataset/config.json',
                     transform=transforms.Compose([
                         RGBAToRGB(),
                         RGBToBGR() if dataset_config[transform_key]['rgb_to_bgr'] else Identity(),
-                        # transforms.Resize(dataset_config[transform_key]["sz_crop"]),
-                        transforms.Resize((dataset_config[transform_key]["sz_crop"], dataset_config[transform_key]["sz_crop"])),
+                        transforms.Resize(dataset_config[transform_key]["sz_crop"]),
+                        # transforms.Resize((dataset_config[transform_key]["sz_crop"], dataset_config[transform_key]["sz_crop"])),
                         transforms.ToTensor(),
                         ScaleIntensities(*dataset_config[transform_key]["intensity_scale"]),
                         transforms.Normalize(
@@ -589,34 +590,41 @@ def prepare_data_noisy(dataset_transform_config,
         transform_key = config['transform_key']
     print('Transformation: ', transform_key)
 
-    if not test_crop:
-        if not 'inshop' in data_name:
+    if 'inshop' in data_name:
+        if test_crop:
             dl_tr_noshuffle = torch.utils.data.DataLoader(
-                dataset=dataset.load_noisy(
+                dataset=dataset.load_noisy_inshop(
                     name=data_name,
                     root=dataset_config['dataset'][data_name]['root'],
                     source=dataset_config['dataset'][data_name]['source'],
                     classes=dataset_config['dataset'][data_name]['classes']['trainval'],
-                    transform=transforms.Compose([
-                        RGBAToRGB(),
-                        RGBToBGR() if dataset_config[transform_key]['rgb_to_bgr'] else Identity(),
-                        transforms.Resize(dataset_config[transform_key]["sz_crop"]),
-                        # transforms.Resize(
-                        #     (dataset_config[transform_key]["sz_crop"], dataset_config[transform_key]["sz_crop"])),
-                        # fixme: bninceptionnet requires a square shape input, otherwise throw an error
-                        transforms.ToTensor(),
-                        ScaleIntensities(*dataset_config[transform_key]["intensity_scale"]),
-                        transforms.Normalize(
-                            mean=dataset_config[transform_key]["mean"],
-                            std=dataset_config[transform_key]["std"],
-                        )
-                    ]),
-                seed=seed,
-                mislabel_percentage=mislabel_percentage,
-            ),
-            num_workers=0,
-            shuffle=False,
-            batch_size=batch_size,
+                    transform=dataset.utils.make_transform(
+                        **dataset_config[transform_key],
+                        is_train=False
+                    ),
+                    seed=seed,
+                    dset_type='train',
+                    mislabel_percentage=mislabel_percentage,
+                ),
+                num_workers=0,
+                shuffle=False,
+                batch_size=batch_size,
+            )
+            dl_ev = torch.utils.data.DataLoader(
+                dataset.load_inshop(
+                    name=data_name.split('_noisy')[0],
+                    root=dataset_config['dataset'][data_name]['root'],
+                    source=dataset_config['dataset'][data_name]['source'],
+                    classes=dataset_config['dataset'][data_name]['classes']['eval'],
+                    transform=dataset.utils.make_transform(
+                        **dataset_config[transform_key],
+                        is_train=False
+                    ),
+                    dset_type='all'
+                ),
+                batch_size=batch_size,
+                shuffle=False,
+                num_workers=0,
             )
         else:
             dl_tr_noshuffle = torch.utils.data.DataLoader(
@@ -647,33 +655,6 @@ def prepare_data_noisy(dataset_transform_config,
             shuffle=False,
             batch_size=batch_size,
             )
-
-        if not 'inshop' in data_name:
-            # use this dataloader if you want to visualize (without resizing and cropping)
-            dl_ev = torch.utils.data.DataLoader(
-                dataset.load(
-                    name=data_name.split('_noisy')[0],
-                    root=dataset_config['dataset'][data_name]['root'],
-                    source=dataset_config['dataset'][data_name]['source'],
-                    classes=dataset_config['dataset'][data_name]['classes']['eval'],
-                    transform=transforms.Compose([
-                        RGBAToRGB(),
-                        RGBToBGR() if dataset_config[transform_key]['rgb_to_bgr'] else Identity(),
-                        transforms.Resize(dataset_config[transform_key]["sz_crop"]),
-                        # transforms.Resize((dataset_config[transform_key]["sz_crop"], dataset_config[transform_key]["sz_crop"])),
-                        transforms.ToTensor(),
-                        ScaleIntensities(*dataset_config[transform_key]["intensity_scale"]),
-                        transforms.Normalize(
-                            mean=dataset_config[transform_key]["mean"],
-                            std=dataset_config[transform_key]["std"],
-                        )
-                    ])
-                ),
-                batch_size=batch_size,
-                shuffle=False,
-                num_workers=0,
-            )
-        else: # inshop
             dl_ev = torch.utils.data.DataLoader(
                 dataset.load_inshop(
                     name=data_name.split('_noisy')[0],
@@ -700,25 +681,24 @@ def prepare_data_noisy(dataset_transform_config,
             )
 
     else:
-        dl_tr_noshuffle = torch.utils.data.DataLoader(
-            dataset=dataset.load_noisy(
-                name=data_name,
-                root=dataset_config['dataset'][data_name]['root'],
-                source=dataset_config['dataset'][data_name]['source'],
-                classes=dataset_config['dataset'][data_name]['classes']['trainval'],
-                transform=dataset.utils.make_transform(
-                    **dataset_config[transform_key],
-                    is_train=False
+        if test_crop:
+            dl_tr_noshuffle = torch.utils.data.DataLoader(
+                dataset=dataset.load_noisy(
+                    name=data_name,
+                    root=dataset_config['dataset'][data_name]['root'],
+                    source=dataset_config['dataset'][data_name]['source'],
+                    classes=dataset_config['dataset'][data_name]['classes']['trainval'],
+                    transform=dataset.utils.make_transform(
+                        **dataset_config[transform_key],
+                        is_train=False
+                    ),
+                    seed=seed,
+                    mislabel_percentage=mislabel_percentage,
                 ),
-                seed=seed,
-                mislabel_percentage=mislabel_percentage,
-            ),
-            num_workers=0,
-            shuffle=False,
-            batch_size=batch_size,
-        )
-
-        if not 'inshop' in data_name:
+                num_workers=0,
+                shuffle=False,
+                batch_size=batch_size,
+            )
             dl_ev = torch.utils.data.DataLoader(
                 dataset.load(
                     name=data_name.split('_noisy')[0],
@@ -735,21 +715,57 @@ def prepare_data_noisy(dataset_transform_config,
                 num_workers=0,
             )
         else:
+            dl_tr_noshuffle = torch.utils.data.DataLoader(
+                dataset=dataset.load_noisy(
+                    name=data_name,
+                    root=dataset_config['dataset'][data_name]['root'],
+                    source=dataset_config['dataset'][data_name]['source'],
+                    classes=dataset_config['dataset'][data_name]['classes']['trainval'],
+                    transform=transforms.Compose([
+                        RGBAToRGB(),
+                        RGBToBGR() if dataset_config[transform_key]['rgb_to_bgr'] else Identity(),
+                        transforms.Resize(dataset_config[transform_key]["sz_crop"]),
+                        # transforms.Resize(
+                        #     (dataset_config[transform_key]["sz_crop"], dataset_config[transform_key]["sz_crop"])),
+                        # fixme: bninceptionnet requires a square shape input, otherwise throw an error
+                        transforms.ToTensor(),
+                        ScaleIntensities(*dataset_config[transform_key]["intensity_scale"]),
+                        transforms.Normalize(
+                            mean=dataset_config[transform_key]["mean"],
+                            std=dataset_config[transform_key]["std"],
+                        )
+                    ]),
+                seed=seed,
+                mislabel_percentage=mislabel_percentage,
+            ),
+            num_workers=0,
+            shuffle=False,
+            batch_size=batch_size,
+            )
+
             dl_ev = torch.utils.data.DataLoader(
-                dataset.load_inshop(
+                dataset.load(
                     name=data_name.split('_noisy')[0],
                     root=dataset_config['dataset'][data_name]['root'],
                     source=dataset_config['dataset'][data_name]['source'],
                     classes=dataset_config['dataset'][data_name]['classes']['eval'],
-                    transform=dataset.utils.make_transform(
-                        **dataset_config[transform_key],
-                        is_train=False
-                    ),
-                    dset_type='all'
+                    transform=transforms.Compose([
+                        RGBAToRGB(),
+                        RGBToBGR() if dataset_config[transform_key]['rgb_to_bgr'] else Identity(),
+                        transforms.Resize(dataset_config[transform_key]["sz_crop"]),
+                        # transforms.Resize((dataset_config[transform_key]["sz_crop"], dataset_config[transform_key]["sz_crop"])),
+                        transforms.ToTensor(),
+                        ScaleIntensities(*dataset_config[transform_key]["intensity_scale"]),
+                        transforms.Normalize(
+                            mean=dataset_config[transform_key]["mean"],
+                            std=dataset_config[transform_key]["std"],
+                        )
+                    ])
                 ),
                 batch_size=batch_size,
                 shuffle=False,
                 num_workers=0,
             )
+
 
     return dl_tr_noshuffle, dl_ev

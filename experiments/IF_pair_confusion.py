@@ -18,7 +18,9 @@ if __name__ == '__main__':
     # loss_type = 'SoftTriple'; dataset_name = 'cars'; config_name = 'cars_SoftTriple'; seed = 4
     # loss_type = 'SoftTriple'; dataset_name = 'inshop'; config_name = 'inshop_SoftTriple'; seed = 3
 
-    IS = OrigIF(dataset_name, seed, loss_type, config_name, 'dataset/config.json', test_crop, sz_embedding, epoch, 'ResNet', 0.1)
+    IS = OrigIF(dataset_name=dataset_name, seed=seed, loss_type=loss_type,
+                config_name=config_name, data_transform_config='dataset/config.json', test_crop=test_crop,
+                sz_embedding=sz_embedding, epoch=epoch, model_arch='ResNet', mislabel_percentage=0.1)
 
     '''Analyze confusing features for all confusion classes'''
     '''Step 1: Get all wrong pairs'''
@@ -81,7 +83,7 @@ if __name__ == '__main__':
                                                                    '{}_reweight_{}'.format(dataset_name, loss_type)))
 
 
-    '''Step 4: Sanity check: Whether the confusion pairs are pulled far apart, Whether the confusion samples is pulled closer to correct neighbor'''
+    '''Compute confusion distance before vs after'''
     result_log_file = 'Confuse_pair_influential_data/{}_{}_pairs_baseline.txt'.format(IS.dataset_name, loss_type)
     IS.model = IS._load_model()  # reload the original weights
     new_features = IS.get_test_features()

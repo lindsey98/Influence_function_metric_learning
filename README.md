@@ -34,7 +34,7 @@ Put them under mnt/datasets/
 
 ## Training details
 - We follow the train-test split provided by the original datasets
-- We use the same hyperparameters specified in [Proxy-NCA++](https://github.com/euwern/proxynca_pp), except for In-Shop we reduce the batch size to 32 due to the limit of our GPU resources.
+- We use the same hyperparameters specified in [Proxy-NCA++](https://github.com/euwern/proxynca_pp), except for In-Shop we reduce the batch size to 32*3 due to the limit of our GPU resources.
 
 ## Project Structure
 ```

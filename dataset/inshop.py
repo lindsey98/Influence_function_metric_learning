@@ -90,7 +90,7 @@ class InShop(BaseDatasetMod):
         self.or_ys['train'] = list(
             map(lambda x: idx_to_class[x], self.or_ys['train']))
 
-        # TODO: I change query, gallery labels to be incremental from training labels
+        # TODO: I change query labels to be incremental from training labels
         idx_to_class = {idx: i + len(set(self.or_ys['train'])) for i, idx in enumerate(
             sorted(set(self.or_ys['query']))
         )}
