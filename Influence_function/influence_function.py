@@ -393,68 +393,6 @@ class EIF(BaseInfluenceFunction):
         self.model.module[-1].weight.data = theta_orig
         return deltaD, deltaL, theta
 
-    # def get_theta_orthogonalization_forclasses(self, prev_thetas,
-    #                                            all_features,
-    #                                            wrong_cls, confuse_classes,
-    #                                            theta_orig,
-    #                                            inter_dist_orig):
-    #     '''
-    #         Get the third theta' by taking the avg of the theta_max, theta_min
-    #         :param prev_thetas: theta_max and theta_min
-    #         :param all_features: testing features
-    #         :param wrong_cls: top wrong class
-    #         :param confuse_classes: classes that are confused with the top wrong class
-    #         :param theta_orig: theta
-    #         :param inter_dist_orig: d(theta, confusion pair)
-    #         :returns theta', deltaL/deltaD
-    #     '''
-    #     deltaL_deltaD = []
-    #     new_theta = torch.mean(prev_thetas, dim=0)  # middle direction
-    #     new_theta = new_theta.cuda()
-    #     model_copy = self._load_model()
-    #     model_copy.module[-1].weight.data = new_theta
-    #     inter_dist, _ = grad_confusion(model_copy, all_features, wrong_cls, confuse_classes,
-    #                                    self.testing_nn_label, self.testing_label, self.testing_nn_indices)
-    #     model_copy.module[-1].weight.data = theta_orig
-    #
-    #     grad_loss = self.get_grad_loss_train_all(theta_orig, new_theta)
-    #     deltaD = inter_dist - inter_dist_orig  # scalar
-    #     l_prev = grad_loss['l_prev']; l_cur = grad_loss['l_cur']
-    #     deltaL = np.stack(l_cur) - np.stack(l_prev)  # (N, )
-    #     deltaL_deltaD.append(deltaL / (deltaD + 1e-8))
-    #     # revise back the weights
-    #     self.model.module[-1].weight.data = theta_orig
-    #     return deltaD, deltaL, new_theta
-    # def get_theta_orthogonalization_forpair(self, prev_thetas,
-    #                                         all_features, wrong_indices, confuse_indices,
-    #                                         theta_orig,
-    #                                         inter_dist_orig):
-    #     '''
-    #         Get the third theta' by taking the avg of the theta_max, theta_min
-    #         :param prev_thetas: theta_max and theta_min
-    #         :param all_features: testing features
-    #         :param wrong_indices: confuse pairs indices
-    #         :param confuse_indices: confuse pairs indices
-    #         :param theta_orig: theta
-    #         :param inter_dist_orig: d(theta, confusion pair)
-    #         :returns theta', deltaL/deltaD
-    #     '''
-    #     deltaL_deltaD = []
-    #     new_theta = torch.mean(prev_thetas, dim=0)  # middle direction
-    #     new_theta = new_theta.cuda()
-    #     model_copy = self._load_model()
-    #     model_copy.module[-1].weight.data = new_theta
-    #     inter_dist, _ = grad_confusion_pair(model_copy, all_features, wrong_indices, confuse_indices)
-    #     model_copy.module[-1].weight.data = theta_orig
-    #
-    #     grad_loss = self.get_grad_loss_train_all(theta_orig, new_theta)
-    #     deltaD = inter_dist - inter_dist_orig  # scalar
-    #     l_prev = grad_loss['l_prev']; l_cur = grad_loss['l_cur']
-    #     deltaL = np.stack(l_cur) - np.stack(l_prev)  # (N, )
-    #     deltaL_deltaD.append(deltaL / (deltaD + 1e-8))
-    #     # revise back the weights
-    #     self.model.module[-1].weight.data = theta_orig
-    #     return deltaD, deltaL, new_theta
 
     def EIF_for_groups_confusion(self, class_pairs, steps, num_thetas=2):
         '''
