@@ -288,8 +288,8 @@ class BaseInfluenceFunction():
             pickle.dump(relabel_dict, handle)
 
 class EIF(BaseInfluenceFunction):
-    def __int__(self, dataset_name, seed, loss_type, config_name, data_transform_config='dataset/config.json',
-                test_crop=False, sz_embedding=512, epoch=40, model_arch='ResNet', mislabel_percentage=0.1):
+    def __int__(self, dataset_name, seed, loss_type, config_name, data_transform_config,
+                test_crop, sz_embedding, epoch, model_arch, mislabel_percentage):
 
         super(EIF, self).__init__(dataset_name=dataset_name, seed=seed, loss_type=loss_type, config_name=config_name, data_transform_config=data_transform_config,
                                   test_crop=test_crop, sz_embedding=sz_embedding, epoch=epoch, model_arch=model_arch,
@@ -478,8 +478,8 @@ class EIF(BaseInfluenceFunction):
 
 
 class OrigIF(BaseInfluenceFunction):
-    def __int__(self, dataset_name, seed, loss_type, config_name, data_transform_config='dataset/config.json',
-                test_crop=False, sz_embedding=512, epoch=40, model_arch='ResNet', mislabel_percentage=0.1):
+    def __int__(self, dataset_name, seed, loss_type, config_name, data_transform_config,
+                test_crop, sz_embedding, epoch, model_arch, mislabel_percentage):
         super(BaseInfluenceFunction, self).__init__(dataset_name=dataset_name, seed=seed, loss_type=loss_type, config_name=config_name, data_transform_config=data_transform_config,
                                                     test_crop=test_crop, sz_embedding=sz_embedding, epoch=epoch, model_arch=model_arch,
                                                     mislabel_percentage=mislabel_percentage)

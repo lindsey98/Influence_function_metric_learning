@@ -13,7 +13,7 @@ import random
 from tqdm import tqdm
 from torch.utils.data import Dataset, DataLoader
 
-os.environ["CUDA_VISIBLE_DEVICES"]="1,0"
+os.environ["CUDA_VISIBLE_DEVICES"]="1"
 
 parser = argparse.ArgumentParser(description='Training ProxyNCA++')
 parser.add_argument('--epochs', default = 40, type=int, dest = 'nb_epochs')
@@ -228,6 +228,8 @@ if __name__ == '__main__':
         num_workers = args.nb_workers,
     )
 
+    print(len(tr_dataset.noisy_indices))
+    print(len(tr_dataset.noisy_indices)/len(tr_dataset))
 
     print("===")
     '''Model'''
