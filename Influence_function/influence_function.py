@@ -415,19 +415,19 @@ class EIF(BaseInfluenceFunction):
 
             if kk == 0:
                 ''' first theta is the steepest ascent direction '''
-                deltaD, deltaL, theta_new = self.theta_for_groups_confusion(all_features, wrong_cls, confused_classes,
+                deltaD, deltaL, theta_new = self.theta_for_groups_confusion(all_features,
+                                                                            wrong_cls, confused_classes,
                                                                             steps=steps,
                                                                             descent=False)
-                # deltaL_deltaD.append(deltaL / (deltaD + 1e-8))
                 deltaL_deltaD.append(deltaL * deltaD)
                 theta_list = torch.cat([theta_list, theta_new.detach().cpu().unsqueeze(0)], dim=0)
 
             elif kk == 1:
                 '''second theta is the steepest descent direction'''
-                deltaD, deltaL, theta_new = self.theta_for_groups_confusion(all_features, wrong_cls, confused_classes,
+                deltaD, deltaL, theta_new = self.theta_for_groups_confusion(all_features,
+                                                                            wrong_cls, confused_classes,
                                                                             steps=steps,
                                                                             descent=True)
-                # deltaL_deltaD.append(deltaL / (deltaD + 1e-8))
                 deltaL_deltaD.append(deltaL * deltaD)
                 theta_list = torch.cat([theta_list, theta_new.detach().cpu().unsqueeze(0)], dim=0)
 
@@ -460,14 +460,14 @@ class EIF(BaseInfluenceFunction):
                 ''' first theta is the steepest ascent direction '''
                 deltaD, deltaL, theta_new = self.theta_for_pairs_confusion(all_features, [pairidx1], [pairidx2],
                                                                            descent=False, steps=steps)
-                deltaL_deltaD.append(deltaL / (deltaD + 1e-8))
+                deltaL_deltaD.append(deltaL * deltaD)
                 theta_list = torch.cat([theta_list, theta_new.detach().cpu().unsqueeze(0)], dim=0)
 
             elif kk == 1:
                 '''second theta is the steepest descent direction'''
                 deltaD, deltaL, theta_new = self.theta_for_pairs_confusion(all_features, [pairidx1], [pairidx2],
                                                                            descent=True, steps=steps)
-                deltaL_deltaD.append(deltaL / (deltaD + 1e-8))
+                deltaL_deltaD.append(deltaL * deltaD)
                 theta_list = torch.cat([theta_list, theta_new.detach().cpu().unsqueeze(0)], dim=0)
 
         # Take average deltaD_deltaL

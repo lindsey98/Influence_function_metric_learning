@@ -13,8 +13,6 @@ import random
 from tqdm import tqdm
 from torch.utils.data import Dataset, DataLoader
 
-os.environ["CUDA_VISIBLE_DEVICES"]="1"
-
 parser = argparse.ArgumentParser(description='Training ProxyNCA++')
 parser.add_argument('--epochs', default = 40, type=int, dest = 'nb_epochs')
 parser.add_argument('--log-filename', default = 'example')

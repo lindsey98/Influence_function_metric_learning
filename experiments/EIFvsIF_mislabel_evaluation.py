@@ -18,16 +18,14 @@ if __name__ == '__main__':
     # loss_type = 'ProxyNCA_prob_orig_noisy_{}'.format(noisy_level); dataset_name = 'inshop_noisy'; config_name = 'inshop_ProxyNCA_prob_orig'; seed = 4
 
     # loss_type = 'SoftTriple_noisy_{}'.format(noisy_level); dataset_name = 'cub_noisy';  config_name = 'cub_SoftTriple'; seed = 3
-    loss_type = 'SoftTriple_noisy_{}'.format(noisy_level); dataset_name = 'cars_noisy';  config_name = 'cars_SoftTriple'; seed = 4
-    # loss_type = 'SoftTriple_noisy_{}'.format(noisy_level); dataset_name = 'inshop_noisy';  config_name = 'inshop_SoftTriple'; seed = 3
+    # loss_type = 'SoftTriple_noisy_{}'.format(noisy_level); dataset_name = 'cars_noisy';  config_name = 'cars_SoftTriple'; seed = 4
+    loss_type = 'SoftTriple_noisy_{}'.format(noisy_level); dataset_name = 'inshop_noisy';  config_name = 'inshop_SoftTriple'; seed = 3
 
     '''============================================= Our Empirical Influence function =============================================================='''
     IS = EIF(dataset_name, seed, loss_type, config_name, 'dataset/config.json', test_crop, sz_embedding, epoch, 'ResNet', noisy_level)
     basedir = 'MislabelExp_Influential_data'
     os.makedirs(basedir, exist_ok=True)
 
-    train_features = IS.get_train_features()
-    training_loss_grad = grad_loss(IS.model, IS.criterion, train_features, IS.train_label)
     num_thetas = 1
     '''Mislabelled data detection'''
     if os.path.exists("{}/{}_{}_helpful_testcls{}_SIF_theta{}_{}_step50.npy".format(basedir, IS.dataset_name, IS.loss_type, 0, num_thetas, noisy_level)):

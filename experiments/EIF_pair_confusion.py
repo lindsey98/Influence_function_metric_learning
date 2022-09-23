@@ -3,20 +3,28 @@ import os
 from Influence_function.influence_function import EIF
 from Influence_function.EIF_utils import *
 from evaluation import assign_by_euclidian_at_k_indices
-os.environ['CUDA_VISIBLE_DEVICES'] = "1, 0"
+import argparse
+os.environ['CUDA_VISIBLE_DEVICES'] = "0"
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='Running EIF on confusion pairs')
+    parser.add_argument('--dataset', default='cub')
+    parser.add_argument('--loss-type', default='SoftTriple', type=str)
+    parser.add_argument('--seed', default=3, type=int)
 
-    sz_embedding = 512; epoch = 40; test_crop = False; data_transform_config = 'dataset/config.json'; model_arch = 'ResNet'
     # loss_type = 'ProxyNCA_prob_orig'; dataset_name = 'cub';  config_name = 'cub_ProxyNCA_prob_orig'; seed = 0
     # loss_type = 'ProxyNCA_prob_orig'; dataset_name = 'cars'; config_name = 'cars_ProxyNCA_prob_orig'; seed = 3
     # loss_type = 'ProxyNCA_prob_orig'; dataset_name = 'inshop'; config_name = 'inshop_ProxyNCA_prob_orig'; seed = 4
 
-    loss_type = 'SoftTriple'; dataset_name = 'cub'; config_name = 'cub_SoftTriple'; seed = 3
+    # loss_type = 'SoftTriple'; dataset_name = 'cub'; config_name = 'cub_SoftTriple'; seed = 3
     # loss_type = 'SoftTriple'; dataset_name = 'cars'; config_name = 'cars_SoftTriple'; seed = 4
     # loss_type = 'SoftTriple'; dataset_name = 'inshop'; config_name = 'inshop_SoftTriple'; seed = 3
+    args = parser.parse_args()
 
-    IS = EIF(dataset_name=dataset_name, seed=seed, loss_type=loss_type, config_name=config_name,
+    sz_embedding = 512; epoch = 40; test_crop = False; topk_cls = 30; data_transform_config = 'dataset/config.json'; model_arch = 'ResNet'
+    config_name = args.dataset + '_' + args.loss_type
+
+    IS = EIF(dataset_name=args.dataset, seed=args.seed, loss_type=args.loss_type, config_name=config_name,
              data_transform_config=data_transform_config, test_crop=test_crop, sz_embedding=sz_embedding,
              epoch=epoch, model_arch=model_arch, mislabel_percentage=0.1)
 
@@ -37,7 +45,7 @@ if __name__ == '__main__':
     for kk in range(min(len(wrong_indices), 100)):
         wrong_ind = wrong_indices[kk]
         confuse_ind = confuse_indices[kk]
-        if os.path.exists('./{}/{}_helpful_indices_{}_{}.npy'.format(base_dir, loss_type, wrong_ind, confuse_ind)):
+        if os.path.exists('./{}/{}_helpful_indices_{}_{}.npy'.format(base_dir, args.loss_type, wrong_ind, confuse_ind)):
             print('skip')
             continue
         mean_deltaL_deltaD = IS.EIF_for_pairs_confusion([wrong_ind, confuse_ind], num_thetas=1, steps=50)
@@ -45,8 +53,8 @@ if __name__ == '__main__':
         influence_values = np.asarray(mean_deltaL_deltaD)
         helpful_indices = np.where(influence_values < 0)[0]
         harmful_indices = np.where(influence_values > 0)[0]
-        np.save('./{}/{}_helpful_indices_{}_{}'.format(base_dir, loss_type, wrong_ind, confuse_ind), helpful_indices)
-        np.save('./{}/{}_harmful_indices_{}_{}'.format(base_dir, loss_type, wrong_ind, confuse_ind), harmful_indices)
+        np.save('./{}/{}_helpful_indices_{}_{}'.format(base_dir, args.loss_type, wrong_ind, confuse_ind), helpful_indices)
+        np.save('./{}/{}_harmful_indices_{}_{}'.format(base_dir, args.loss_type, wrong_ind, confuse_ind), harmful_indices)
 
     '''Step 3: Train the model for every pair'''
     # Run in shell
@@ -56,13 +64,13 @@ if __name__ == '__main__':
         torch.cuda.empty_cache()
 
         new_weight_path = 'models/dvi_data_{}_{}_loss{}_{}_{}/ResNet_512_Model/Epoch_{}/{}_{}_trainval_{}_{}.pth'.format(
-            dataset_name,
-            seed,
-            '{}_confusion_{}_{}_Allsamples'.format(loss_type, wrong_ind, confuse_ind),
+            args.dataset,
+            args.seed,
+            '{}_confusion_{}_{}_Allsamples'.format(args.loss_type, wrong_ind, confuse_ind),
             2, 0,
-            1, dataset_name,
-            dataset_name,
-            512, seed)  # reload weights as new
+            1, args.dataset,
+            args.dataset,
+            512, args.seed)  # reload weights as new
         if os.path.exists(new_weight_path):
             continue
 
@@ -74,16 +82,16 @@ if __name__ == '__main__':
                         --model_dir {} \
                         --helpful_weight 2 --harmful_weight 0 \
                         --seed {} --config config/{}.json".format(IS.dataset_name,
-                                                                   loss_type, wrong_ind, confuse_ind,
-                                                                   base_dir, loss_type, wrong_ind, confuse_ind,
-                                                                   base_dir, loss_type, wrong_ind, confuse_ind,
+                                                                   args.loss_type, wrong_ind, confuse_ind,
+                                                                   base_dir, args.loss_type, wrong_ind, confuse_ind,
+                                                                   base_dir, args.loss_type, wrong_ind, confuse_ind,
                                                                    IS.model_dir,
                                                                    IS.seed,
-                                                                   '{}_reweight_{}'.format(dataset_name, loss_type)))
+                                                                   '{}_reweight_{}'.format(args.dataset, args.loss_type)))
 
 
     '''Compute confusion distance before vs after'''
-    result_log_file = 'Confuse_pair_influential_data/{}_{}_pairs.txt'.format(IS.dataset_name, loss_type)
+    result_log_file = 'Confuse_pair_influential_data/{}_{}_pairs.txt'.format(IS.dataset_name, args.loss_type)
     IS.model = IS._load_model()  # reload the original weights
     new_features = IS.get_test_features()
     for kk in range(min(len(wrong_indices), 100)):
@@ -101,13 +109,13 @@ if __name__ == '__main__':
                 continue
 
         new_weight_path = 'models/dvi_data_{}_{}_loss{}_{}_{}/ResNet_512_Model/Epoch_{}/{}_{}_trainval_{}_{}.pth'.format(
-                           dataset_name,
-                           seed,
-                           '{}_confusion_{}_{}_Allsamples'.format(loss_type, wrong_ind, confuse_ind),
+                           args.dataset,
+                           args.seed,
+                           '{}_confusion_{}_{}_Allsamples'.format(args.loss_type, wrong_ind, confuse_ind),
                            2, 0,
-                           1, dataset_name,
-                           dataset_name,
-                           512, seed) # reload weights as new
+                           1, args.dataset,
+                           args.dataset,
+                           512, args.seed) # reload weights as new
 
         IS.model = IS._load_model()  # reload the original weights
         inter_dist_orig, _ = grad_confusion_pair(IS.model, new_features, [wrong_ind], [confuse_ind])
