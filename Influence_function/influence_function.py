@@ -306,6 +306,77 @@ class EIF(BaseInfluenceFunction):
                 pickle.dump(grad_loss, fp)
         return grad_loss
 
+    def get_theta_orthogonalization_forclasses(self, prev_thetas,
+                                               all_features,
+                                               wrong_cls, confuse_classes,
+                                               theta_orig,
+                                               inter_dist_orig):
+        '''
+            Get the third theta' by taking the avg of the theta_max, theta_min
+            :param prev_thetas: theta_max and theta_min
+            :param all_features: testing features
+            :param wrong_cls: top wrong class
+            :param confuse_classes: classes that are confused with the top wrong class
+            :param theta_orig: theta
+            :param inter_dist_orig: d(theta, confusion pair)
+            :returns theta', deltaL/deltaD
+        '''
+        deltaL_deltaD = []
+        new_theta = torch.mean(prev_thetas, dim=0)  # middle direction
+        new_theta = new_theta.cuda()
+        model_copy = self._load_model()
+        model_copy.module[-1].weight.data = new_theta
+        inter_dist, _ = grad_confusion(model_copy, all_features, wrong_cls, confuse_classes,
+                                       self.testing_nn_label, self.testing_label, self.testing_nn_indices)
+        model_copy.module[-1].weight.data = theta_orig
+
+        grad_loss = self.get_grad_loss_train_all(theta_orig, new_theta)
+        deltaD = inter_dist - inter_dist_orig  # scalar
+        l_prev = grad_loss['l_prev']; l_cur = grad_loss['l_cur']
+        deltaL = np.stack(l_cur) - np.stack(l_prev)  # (N, )
+        deltaL_deltaD.append(deltaL / (deltaD + 1e-8))
+        # revise back the weights
+        self.model.module[-1].weight.data = theta_orig
+        return deltaD, deltaL, new_theta
+
+    def theta_for_groups_confusion_gettheta(self, all_features, wrong_cls, confuse_classes,
+                                   steps=1, lr=0.001, descent=False):
+        '''
+            Get theta' by newton step on Avg{d(p)c)}
+            :param all_features: testing features (N_test, 2048)
+            :param wrong_cls: top wrong class
+            :param confuse_classes: classes that are confused with the top wrong class
+            :param steps: # of newton steps
+            :param lr: learning rate
+            :param descent: gradient descent or ascent
+            :returns deltaD, deltaL, theta'
+        '''
+        theta_orig = self.model.module[-1].weight.data
+        torch.cuda.empty_cache(); theta = theta_orig.clone()
+
+        # Record original inter-class distance
+        inter_dist_orig, _ = grad_confusion(self.model, all_features, wrong_cls, confuse_classes,
+                                            self.testing_nn_label, self.testing_label, self.testing_nn_indices)  # dD/dtheta
+        print("Original confusion: ", inter_dist_orig)
+
+        # Optimization
+        for _ in range(steps):
+            inter_dist, v = grad_confusion(self.model, all_features, wrong_cls, confuse_classes, self.testing_nn_label,
+                                           self.testing_label, self.testing_nn_indices)  # dD/dtheta
+            print("Confusion: ", inter_dist)
+            if abs(inter_dist - inter_dist_orig) >= 1.:  # if the distance increases by 1. stop further optimizing
+                break
+            if descent:
+                theta_new = theta - lr * v[0].to(theta.device)  # gradient descent
+            else:
+                theta_new = theta + lr * v[0].to(theta.device)  # gradient ascent
+            theta = theta_new
+            self.model.module[-1].weight.data = theta
+
+        # revise back the weights
+        self.model.module[-1].weight.data = theta_orig
+        return theta
+
     def theta_for_groups_confusion(self, all_features, wrong_cls, confuse_classes,
                                    steps=1, lr=0.001, descent=False):
         '''

@@ -88,6 +88,32 @@ def grad_confusion_pair(model, all_features, wrong_indices, confusion_indices):
 
     return confusion, grad_confusion2params
 
+
+def avg_confusion(cls, confusion_classes,
+                  pred, label, nn_indices):
+    '''
+        get confusion indices
+    '''
+    pred = pred.detach().cpu().numpy()
+    label = label.detach().cpu().numpy()
+    nn_indices = nn_indices.flatten()
+    assert len(pred) == len(label)
+    assert len(pred) == len(nn_indices)
+
+    # Get cls samples indices and confusion_classes samples indices
+    wrong_indices = [[] for _ in range(len(confusion_classes))]  # belong to cls and wrongly predicted
+    confuse_indices = [[] for _ in range(
+        len(confusion_classes))]  # belong to confusion classes and are neighbors of interest_indices
+    pair_counts = 0  # count how many confusion pairs in total
+    for kk, confusion_cls in enumerate(confusion_classes):
+        wrong_as_confusion_cls_indices = np.where((pred == confusion_cls) & (label == cls))[0]
+        wrong_indices[kk] = wrong_as_confusion_cls_indices
+        confuse_indices[kk] = nn_indices[wrong_as_confusion_cls_indices]
+        pair_counts += len(wrong_as_confusion_cls_indices)
+
+    return wrong_indices, confuse_indices
+
+
 def grad_confusion(model, all_features, cls, confusion_classes,
                    pred, label, nn_indices):
     '''
@@ -114,7 +140,8 @@ def grad_confusion(model, all_features, cls, confusion_classes,
     accum_confusion = 0.
     for kk in range(len(confusion_classes)):
         confusion, grad_confusion2params = grad_confusion_pair(model, all_features,
-                                                               wrong_indices[kk], confuse_indices[kk])
+                                                               wrong_indices[kk],
+                                                               confuse_indices[kk])
         accum_grads = [x + y for x, y in zip(accum_grads, grad_confusion2params)] # accumulate gradients
         accum_confusion += confusion # accumulate confusion
 
