@@ -104,6 +104,16 @@ python train_noisydata.py --dataset [cub_noisy|cars_noisy|inshop_noisy] \
 - For the detailed statistics of Table 1, please see https://docs.google.com/spreadsheets/d/1f4OXVLO2Mu2CHrBVm72a2ztTHx5nNG92dczTNNw7io4/edit?usp=sharing
 
 ## Please consider cite our paper
+```bibex
+@article{liu2022debugging,
+  title={Debugging and Explaining Metric Learning Approaches: An Influence Function Based Perspective},
+  author={Liu, Ruofan and Lin, Yun and Yang, Xianglin and Dong, Jin Song},
+  journal={Advances in Neural Information Processing Systems},
+  volume={35},
+  pages={7824--7837},
+  year={2022}
+}
+```
 
 ## References
 [1] Wah, C., Branson, S., Welinder, P., Perona, P., & Belongie, S. (2011). The caltech-ucsd birds-200-2011 dataset.
